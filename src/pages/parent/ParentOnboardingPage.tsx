@@ -1,60 +1,322 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBookOpen } from '@fortawesome/free-solid-svg-icons';
+// src/pages/parent/ParentOnboardingPage.tsx
 
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import StepShell from "../../components/parentOnboarding/StepShell";
+import ChildDetailsStep, { ChildDetails } from "../../components/parentOnboarding/steps/ChildDetailsStep";
+import GoalStep from "../../components/parentOnboarding/steps/GoalStep";
+import ExamTypeStep from "../../components/parentOnboarding/steps/ExamTypeStep";
+import SubjectBoardStep from "../../components/parentOnboarding/steps/SubjectBoardStep";
+import NeedsStep, { NeedClusterSelection } from "../../components/parentOnboarding/steps/NeedsStep";
+import AvailabilityStep, { Availability } from "../../components/parentOnboarding/steps/AvailabilityStep";
+import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
+
+import { rpcParentCreateChildAndPlan } from "../../services/parentOnboarding/parentOnboardingService";
+import { rpcCreateChildInvite, type ChildInviteCreateResult } from "../../services/invitationService";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
+
+const defaultAvailability: Availability = {
+  monday: { sessions: 1, session_pattern: "p45" },
+  tuesday: { sessions: 1, session_pattern: "p45" },
+  wednesday: { sessions: 0, session_pattern: "p45" },
+  thursday: { sessions: 1, session_pattern: "p45" },
+  friday: { sessions: 0, session_pattern: "p45" },
+  saturday: { sessions: 1, session_pattern: "p70" },
+  sunday: { sessions: 0, session_pattern: "p45" },
+};
+
+function normaliseStringArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  return [String(value)];
+}
+
+function normaliseNeedClusters(value: unknown): Array<{ cluster_code: string }> {
+  if (!value) return [];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row: any) => {
+      const code = row?.cluster_code ?? row?.code;
+      if (!code) return null;
+      return { cluster_code: String(code) };
+    })
+    .filter(Boolean) as Array<{ cluster_code: string }>;
+}
+
+function formatSupabaseError(e: any): string {
+  if (!e) return "Failed to build plan";
+  const msg = e.message ?? "Failed to build plan";
+  const details = e.details ? `\n\nDetails: ${e.details}` : "";
+  const hint = e.hint ? `\n\nHint: ${e.hint}` : "";
+  return `${msg}${details}${hint}`;
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Steps:
+ * 0 ChildDetails
+ * 1 Goal
+ * 2 ExamTypes (multi-select)
+ * 3 Subject selection across exam types (owns Back/Continue)
+ * 4 Needs (cluster model)
+ * 5 Availability
+ * 6 Confirm + Submit
+ * 7 Invite child (code/link)
+ */
 export default function ParentOnboardingPage() {
   const navigate = useNavigate();
-  const [childName, setChildName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { refresh, user } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    setTimeout(() => {
-      navigate('/parent');
-    }, 1000);
-  };
+  const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const [child, setChild] = useState<ChildDetails>({
+    first_name: "",
+    last_name: "",
+    preferred_name: "",
+    country: "England",
+    year_group: 11,
+  });
+
+  const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
+  const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
+  const [subjectIds, setSubjectIds] = useState<string[]>([]);
+  const [needClusters, setNeedClusters] = useState<NeedClusterSelection>([]);
+  const [availability, setAvailability] = useState<Availability>(defaultAvailability);
+
+  const payload = useMemo(() => {
+    const subject_ids = normaliseStringArray(subjectIds);
+    const need_clusters = normaliseNeedClusters(needClusters);
+
+    return {
+      child,
+      goal_code: goalCode ?? null,
+      exam_timeline: "6_weeks",
+      subject_ids,
+
+      // backend refuses "needs"
+      need_clusters,
+
+      settings: {
+        availability,
+        urgency: { mode: "exam_date", exam_date: "" },
+      },
+    };
+  }, [child, goalCode, subjectIds, needClusters, availability]);
+
+  const canNext = useMemo(() => {
+    if (step === 0) return !!child.first_name?.trim();
+    if (step === 1) return !!goalCode;
+    if (step === 2) return normaliseStringArray(examTypeIds).length > 0;
+
+    // Step 3 owns navigation
+    if (step === 4) return true;
+
+    if (step === 5) return Object.values(availability).some((d) => (d?.sessions ?? 0) > 0);
+
+    return true;
+  }, [step, child.first_name, goalCode, examTypeIds, availability]);
+
+  function validatePayload(): string | null {
+    if (!payload.child?.first_name?.trim()) return "Please enter your child’s first name.";
+    if (!payload.goal_code) return "Please choose a goal.";
+    if (!Array.isArray(payload.subject_ids) || payload.subject_ids.length === 0) {
+      return "Please select at least one subject (including exam board/spec).";
+    }
+    if (!payload.settings?.availability) return "Availability is missing.";
+    if (!Object.values(payload.settings.availability).some((d: any) => (d?.sessions ?? 0) > 0)) {
+      return "Please add at least one study session to your availability.";
+    }
+    return null;
+  }
+
+  async function resolveLatestChildIdForThisParent(): Promise<string> {
+    if (!user?.id) throw new Error("No user session");
+
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, created_at")
+      .eq("parent_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+    const row = data?.[0];
+    if (!row?.id) throw new Error("Could not find child record to invite");
+    return row.id as string;
+  }
+
+  async function submit() {
+    const validation = validatePayload();
+    if (validation) {
+      setError(validation);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setInvite(null);
+    setCopied(null);
+
+    try {
+      // 1) Create child + plan (existing behaviour)
+      const result: any = await rpcParentCreateChildAndPlan(payload);
+
+      // 2) Refresh auth/profile signals
+      await refresh();
+
+      // 3) Determine which child to invite
+      const childId =
+        result?.child_id ||
+        result?.childId ||
+        result?.child?.id ||
+        (await resolveLatestChildIdForThisParent());
+
+      // 4) Generate invite code + link (DB function already exists)
+      const inviteResult = await rpcCreateChildInvite(childId);
+      if (!inviteResult.ok || !inviteResult.invite) {
+        setError(inviteResult.error ?? "Plan created, but failed to generate invite");
+        setBusy(false);
+        return;
+      }
+
+      setInvite(inviteResult.invite);
+      setStep(7);
+    } catch (e: any) {
+      setError(formatSupabaseError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inviteUrl = useMemo(() => {
+    if (!invite?.invitation_link) return "";
+    // Keep this simple: use current origin
+    return `${window.location.origin}${invite.invitation_link}`;
+  }, [invite]);
 
   return (
-    <div className="min-h-screen bg-neutral-bg p-6">
-      <div className="max-w-2xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="inline-flex w-16 h-16 bg-brand-purple rounded-2xl items-center justify-center mb-4 shadow-lg">
-            <FontAwesomeIcon icon={faBookOpen} className="text-white text-2xl" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Set up your child's revision plan</h1>
-          <p className="text-gray-600">A few steps. You can change things later.</p>
-        </div>
+    <StepShell title="Set up your child’s revision plan" subtitle="A few steps. You can change things later." error={error}>
+      {step === 0 && <ChildDetailsStep value={child} onChange={setChild} />}
 
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="childName" className="block text-sm font-medium text-gray-700 mb-2">
-                Child's name
-              </label>
-              <input
-                id="childName"
-                type="text"
-                required
-                value={childName}
-                onChange={(e) => setChildName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
-                placeholder="Enter your child's name"
-              />
+      {step === 1 && <GoalStep value={goalCode} onChange={setGoalCode} />}
+
+      {step === 2 && (
+        <ExamTypeStep
+          value={examTypeIds}
+          onChange={(ids) => {
+            setExamTypeIds(normaliseStringArray(ids));
+            setSubjectIds([]);
+          }}
+        />
+      )}
+
+      {step === 3 && (
+        <SubjectBoardStep
+          examTypeIds={normaliseStringArray(examTypeIds)}
+          selectedSubjectIds={normaliseStringArray(subjectIds)}
+          onChangeSelectedSubjectIds={(ids) => setSubjectIds(normaliseStringArray(ids))}
+          onBackToExamTypes={() => setStep(2)}
+          onDone={() => setStep(4)}
+        />
+      )}
+
+      {step === 4 && <NeedsStep value={needClusters} onChange={setNeedClusters} />}
+
+      {step === 5 && <AvailabilityStep value={availability} onChange={setAvailability} />}
+
+      {step === 6 && <ConfirmStep payload={payload} busy={busy} onSubmit={submit} />}
+
+      {step === 7 && invite && (
+        <div className="mt-2">
+          <h3 className="text-lg font-semibold">Invite your child</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Send this link to your child. They’ll set a password and land straight in Today.
+          </p>
+
+          <div className="mt-4 rounded-xl border bg-white p-4">
+            <div className="text-xs text-gray-500">Invite link</div>
+            <div className="mt-1 break-all font-medium">{inviteUrl}</div>
+
+            <div className="mt-4 text-xs text-gray-500">Invite code</div>
+            <div className="mt-1 font-mono text-base">{invite.invitation_code}</div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-lg bg-black px-4 py-2 text-sm text-white"
+                onClick={async () => {
+                  const ok = await copyToClipboard(inviteUrl);
+                  setCopied(ok ? "link" : null);
+                  if (!ok) setError("Could not copy link. Please copy it manually.");
+                }}
+              >
+                Copy link
+              </button>
+
+              <button
+                type="button"
+                className="rounded-lg border px-4 py-2 text-sm"
+                onClick={async () => {
+                  const ok = await copyToClipboard(invite.invitation_code);
+                  setCopied(ok ? "code" : null);
+                  if (!ok) setError("Could not copy code. Please copy it manually.");
+                }}
+              >
+                Copy code
+              </button>
+
+              <button
+                type="button"
+                className="rounded-lg border px-4 py-2 text-sm"
+                onClick={() => navigate("/parent", { replace: true })}
+              >
+                Go to dashboard
+              </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-brand-purple text-white py-3 px-6 rounded-xl font-semibold hover:bg-brand-purple-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Setting up...' : 'Continue'}
-            </button>
-          </form>
+            {copied && <div className="mt-3 text-xs text-gray-600">{copied === "link" ? "Link copied." : "Code copied."}</div>}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+
+      {step !== 3 && step < 7 ? (
+        <div className="mt-6 flex items-center justify-between">
+          <button
+            type="button"
+            className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
+            disabled={step === 0 || busy}
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+          >
+            Back
+          </button>
+
+          {step < 6 ? (
+            <button
+              type="button"
+              className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
+              disabled={!canNext || busy}
+              onClick={() => setStep((s) => Math.min(6, s + 1))}
+            >
+              Next
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </StepShell>
   );
 }
