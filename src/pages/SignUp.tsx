@@ -30,16 +30,18 @@ export default function SignUp() {
     setSubmitting(true);
 
     try {
-      const { error } = await withTimeout(signUp(email.trim(), password, fullName.trim() || undefined), 12000);
+      // Assumes your AuthContext has signUp(email, password, fullName?)
+      // If your signUp only accepts (email, password), remove fullName from the call.
+      const result: any = await withTimeout(signUp(email.trim().toLowerCase(), password, fullName.trim()), 8000);
 
-      if (error) {
-        setError(error.message ?? "Sign up failed");
+      if (result?.error) {
+        setError(result.error.message ?? "Sign up failed");
         setSubmitting(false);
         return;
       }
 
-      // Send to HomeGate; it will route parent -> onboarding
-      navigate("/", { replace: true });
+      // After parent signup we go straight into parent onboarding
+      navigate("/parent/onboarding", { replace: true });
     } catch (e: any) {
       setError(e?.message ?? "Sign up failed");
       setSubmitting(false);
@@ -74,10 +76,11 @@ export default function SignUp() {
               <input
                 id="fullName"
                 type="text"
+                required
                 value={fullName}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
-                placeholder="e.g. Hannah Smith"
+                placeholder="Jane Smith"
                 disabled={submitting}
               />
             </div>
@@ -120,7 +123,7 @@ export default function SignUp() {
               disabled={submitting}
               className="w-full bg-brand-purple text-white py-3 px-6 rounded-xl font-semibold hover:bg-brand-purple-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? "Creating account…" : "Sign up"}
+              {submitting ? "Creating account…" : "Create account"}
             </button>
           </form>
 
