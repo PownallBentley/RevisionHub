@@ -8,7 +8,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import "./index.css";
 // src/pages/Main.tsx
 
-import Landing from "./Landing";
+import Landing from "./pages/Landing";
 
 export default function Main() {
   return <Landing />;
