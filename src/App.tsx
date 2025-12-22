@@ -1,6 +1,7 @@
 // src/App.tsx
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import { useAuth } from "./contexts/AuthContext";
 
 // Public pages (DO NOT change these UIs here)
@@ -19,7 +20,15 @@ import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 
 function HomeGate() {
-  const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
+  const { loading, user, isParent, isChild, isUnresolved, parentChildCount, refresh } = useAuth();
+
+  // If we have a session but role flags aren’t ready yet, try a refresh once.
+  useEffect(() => {
+    if (user && isUnresolved) {
+      refresh?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isUnresolved]);
 
   if (loading) {
     return (
@@ -29,19 +38,14 @@ function HomeGate() {
     );
   }
 
-  // Logged out => show Landing
+  // Logged out => Landing
   if (!user) return <Landing />;
 
-  // Logged in but cannot classify yet
+  // Don’t show a debug “resolving” screen — just a calm loader and let refresh settle.
   if (isUnresolved) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-md w-full rounded-xl border p-5">
-          <div className="text-sm font-medium">Signed in, still resolving account type…</div>
-          <div className="mt-2 text-sm text-gray-600">
-            We can see your session, but can’t confirm parent profile or child link yet.
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
+        Finishing sign-in…
       </div>
     );
   }
@@ -57,6 +61,7 @@ function HomeGate() {
     return <Navigate to="/child/today" replace />;
   }
 
+  // Defensive fallback
   return <Navigate to="/login" replace />;
 }
 
@@ -67,16 +72,18 @@ export default function App() {
         {/* Home */}
         <Route path="/" element={<HomeGate />} />
 
-        {/* Public */}
+        {/* Public auth routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
+
+        {/* Child invite signup */}
+        <Route path="/child/signup" element={<ChildSignUp />} />
 
         {/* Parent */}
         <Route path="/parent/onboarding" element={<ParentOnboardingPage />} />
         <Route path="/parent" element={<ParentDashboard />} />
 
         {/* Child */}
-        <Route path="/child/signup" element={<ChildSignUp />} />
         <Route path="/child/today" element={<Today />} />
         <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
         <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
