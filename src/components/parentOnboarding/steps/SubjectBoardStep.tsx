@@ -7,10 +7,18 @@ import {
   type SubjectGroupBoardOption,
 } from "../../../services/parentOnboarding/parentOnboardingService";
 
+export type SelectedSubject = {
+  subject_id: string; // this is the actual subject row id (already tied to exam board)
+  exam_type_id: string;
+  subject_name: string;
+  exam_board_id: string;
+  exam_board_name: string;
+};
+
 type Props = {
   examTypeIds: string[];
-  selectedSubjectIds: string[];
-  onChangeSelectedSubjectIds: (ids: string[]) => void; // ✅ matches ParentOnboardingPage
+  value: SelectedSubject[];
+  onChange: (next: SelectedSubject[]) => void;
 
   onBackToExamTypes: () => void;
   onDone: () => void;
@@ -19,26 +27,20 @@ type Props = {
 type BoardPickContext = {
   exam_type_id: string;
   subject_name: string;
-  icon: string | null;
-  color: string | null;
   boards: SubjectGroupBoardOption[];
 };
 
 function uniq(ids: string[]) {
-  return Array.from(new Set(ids.filter(Boolean)));
+  return Array.from(new Set((ids || []).filter(Boolean).map(String)));
+}
+
+function keyForGroup(examTypeId: string, subjectName: string) {
+  return `${examTypeId}::${subjectName}`;
 }
 
 export default function SubjectBoardStep(props: Props) {
-  // Defensive normalisation (prevents join() / map() on undefined)
   const examTypeIds = Array.isArray(props.examTypeIds) ? props.examTypeIds : [];
-  const selectedSubjectIds = Array.isArray(props.selectedSubjectIds) ? props.selectedSubjectIds : [];
-
-  // Hard guard, but not crashing the whole app with a generic stacktrace
-  if (typeof props.onChangeSelectedSubjectIds !== "function") {
-    throw new Error(
-      "SubjectBoardStep: onChangeSelectedSubjectIds prop is missing or not a function (check ParentOnboardingPage prop name)"
-    );
-  }
+  const value = Array.isArray(props.value) ? props.value : [];
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +48,9 @@ export default function SubjectBoardStep(props: Props) {
   const [groups, setGroups] = useState<SubjectGroupRow[]>([]);
   const [activeExamTypeIndex, setActiveExamTypeIndex] = useState(0);
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCtx, setModalCtx] = useState<BoardPickContext | null>(null);
 
-  // Stable key to avoid re-fetch loops
   const examTypeKey = useMemo(() => uniq(examTypeIds).slice().sort().join("|"), [examTypeIds]);
 
   useEffect(() => {
@@ -68,6 +68,7 @@ export default function SubjectBoardStep(props: Props) {
 
       try {
         const rows = await rpcListSubjectGroupsForExamTypes(ids);
+
         if (cancelled) return;
 
         const safe = (Array.isArray(rows) ? rows : []).map((r) => ({
@@ -90,7 +91,7 @@ export default function SubjectBoardStep(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [examTypeKey]); // ✅ only changes when exam types truly change
+  }, [examTypeKey]);
 
   const activeExamTypeId = examTypeIds[activeExamTypeIndex] ?? null;
 
@@ -99,45 +100,27 @@ export default function SubjectBoardStep(props: Props) {
     return groups.filter((g) => g.exam_type_id === activeExamTypeId);
   }, [groups, activeExamTypeId]);
 
-  // Lookup for selected lozenges
-  const selectedLookup = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        exam_type_id: string;
-        subject_name: string;
-        exam_board_name: string;
-        exam_board_id: string;
-      }
-    >();
-
-    for (const g of groups) {
-      for (const b of g.boards || []) {
-        if (!b?.subject_id) continue;
-        map.set(String(b.subject_id), {
-          exam_type_id: String(g.exam_type_id),
-          subject_name: String(g.subject_name),
-          exam_board_name: String(b.exam_board_name),
-          exam_board_id: String(b.exam_board_id),
-        });
-      }
+  // Fast lookup: which group already has a selection?
+  const selectedByGroup = useMemo(() => {
+    const map = new Map<string, SelectedSubject>();
+    for (const s of value) {
+      if (!s?.subject_id) continue;
+      map.set(keyForGroup(String(s.exam_type_id), String(s.subject_name)), {
+        ...s,
+        subject_id: String(s.subject_id),
+        exam_type_id: String(s.exam_type_id),
+        subject_name: String(s.subject_name),
+        exam_board_id: String(s.exam_board_id),
+        exam_board_name: String(s.exam_board_name),
+      });
     }
-
     return map;
-  }, [groups]);
-
-  // TEMP label fallback (wire to rpc_list_exam_types later if you want)
-  const examTypeLabel = (_examTypeId: string) => {
-    // If you have exam type map available in parent, pass it in later.
-    return "Exam";
-  };
+  }, [value]);
 
   function openBoardModal(group: SubjectGroupRow) {
     setModalCtx({
-      exam_type_id: group.exam_type_id,
-      subject_name: group.subject_name,
-      icon: group.icon ?? null,
-      color: group.color ?? null,
+      exam_type_id: String(group.exam_type_id),
+      subject_name: String(group.subject_name),
       boards: Array.isArray(group.boards) ? group.boards : [],
     });
     setModalOpen(true);
@@ -149,33 +132,33 @@ export default function SubjectBoardStep(props: Props) {
   }
 
   function setSelectionForGroup(ctx: BoardPickContext, chosen: SubjectGroupBoardOption) {
-    // Rule: one board per (exam_type_id + subject_name)
-    const next = new Set(selectedSubjectIds);
+    const next: SelectedSubject[] = (value || []).filter(
+      (s) => keyForGroup(String(s.exam_type_id), String(s.subject_name)) !== keyForGroup(ctx.exam_type_id, ctx.subject_name)
+    );
 
-    // Remove any previous selection for this subject group
-    for (const b of ctx.boards) {
-      if (b?.subject_id) next.delete(String(b.subject_id));
-    }
+    next.push({
+      subject_id: String(chosen.subject_id),
+      exam_type_id: String(ctx.exam_type_id),
+      subject_name: String(ctx.subject_name),
+      exam_board_id: String(chosen.exam_board_id),
+      exam_board_name: String(chosen.exam_board_name),
+    });
 
-    // Add the chosen subject row id
-    next.add(String(chosen.subject_id));
-
-    props.onChangeSelectedSubjectIds(Array.from(next));
+    props.onChange(next);
     closeModal();
   }
 
   function removeSelection(subjectId: string) {
-    props.onChangeSelectedSubjectIds(selectedSubjectIds.filter((id) => id !== subjectId));
+    props.onChange((value || []).filter((s) => String(s.subject_id) !== String(subjectId)));
   }
 
   function isGroupSelected(group: SubjectGroupRow): boolean {
-    const ids = (group.boards || []).map((b) => String(b.subject_id));
-    return ids.some((id) => selectedSubjectIds.includes(id));
+    const k = keyForGroup(String(group.exam_type_id), String(group.subject_name));
+    return selectedByGroup.has(k);
   }
 
   function onContinue() {
     if (examTypeIds.length === 0) return;
-
     const isLast = activeExamTypeIndex >= examTypeIds.length - 1;
     if (isLast) props.onDone();
     else setActiveExamTypeIndex((i) => Math.min(examTypeIds.length - 1, i + 1));
@@ -191,23 +174,12 @@ export default function SubjectBoardStep(props: Props) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">Pick your subjects</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Choose a subject, then pick the exam board.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">Choose a subject, then pick the exam board.</p>
         </div>
-
-        {activeExamTypeId ? (
-          <div className="rounded-xl border bg-white px-3 py-2 text-sm">
-            <div className="text-xs text-gray-500">Selecting for</div>
-            <div className="font-medium">{examTypeLabel(activeExamTypeId)}</div>
-          </div>
-        ) : null}
       </div>
 
       {error ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
       ) : null}
 
       <div className="mt-4">
@@ -217,21 +189,25 @@ export default function SubjectBoardStep(props: Props) {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
             {groupsForActiveExamType.map((g) => {
               const selected = isGroupSelected(g);
+              const k = keyForGroup(String(g.exam_type_id), String(g.subject_name));
+              const picked = selectedByGroup.get(k);
+
               return (
                 <button
                   key={`${g.exam_type_id}:${g.subject_name}`}
                   type="button"
                   onClick={() => openBoardModal(g)}
                   className={[
-                    "rounded-2xl border bg-white p-4 text-left shadow-sm transition",
-                    "hover:shadow-md",
+                    "rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md",
                     selected ? "border-black" : "border-gray-200",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-base font-semibold">{g.subject_name}</div>
-                      <div className="mt-1 text-xs text-gray-500">{(g.boards || []).length} boards</div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {picked ? `Board: ${picked.exam_board_name}` : `${(g.boards || []).length} boards`}
+                      </div>
                     </div>
                     {selected ? (
                       <span className="rounded-full border border-black px-2 py-1 text-xs">Selected</span>
@@ -250,33 +226,23 @@ export default function SubjectBoardStep(props: Props) {
         <div className="text-sm font-medium">Selected</div>
 
         <div className="mt-2 flex flex-wrap gap-2">
-          {selectedSubjectIds.length === 0 ? (
+          {value.length === 0 ? (
             <div className="text-sm text-gray-600">No subjects yet.</div>
           ) : (
-            selectedSubjectIds.map((id) => {
-              const info = selectedLookup.get(String(id));
-              if (!info) return null;
-
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm"
+            value.map((s) => (
+              <div key={s.subject_id} className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm">
+                <span className="font-medium">{s.subject_name}</span>
+                <span className="text-gray-500">·</span>
+                <span className="text-gray-700">{s.exam_board_name}</span>
+                <button
+                  type="button"
+                  className="ml-1 rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
+                  onClick={() => removeSelection(s.subject_id)}
                 >
-                  <span className="text-xs text-gray-500">{examTypeLabel(info.exam_type_id)}</span>
-                  <span className="font-medium">{info.subject_name}</span>
-                  <span className="text-gray-500">·</span>
-                  <span className="text-gray-700">{info.exam_board_name}</span>
-
-                  <button
-                    type="button"
-                    className="ml-1 rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
-                    onClick={() => removeSelection(id)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })
+                  Remove
+                </button>
+              </div>
+            ))
           )}
         </div>
       </div>
@@ -289,7 +255,7 @@ export default function SubjectBoardStep(props: Props) {
         <button
           type="button"
           className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-          disabled={selectedSubjectIds.length === 0}
+          disabled={value.length === 0}
           onClick={onContinue}
         >
           Continue
