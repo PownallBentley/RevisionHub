@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  rpcListSubjectsForExamTypes,
-  type SubjectPick,
+  listSubjectsForExamTypes,
+  type Subject,
 } from "../../../services/referenceData/referenceDataService";
 
 export default function SubjectBoardStep(props: {
@@ -19,36 +19,29 @@ export default function SubjectBoardStep(props: {
     onDone,
   } = props;
 
-  const [rows, setRows] = useState<SubjectPick[]>([]);
+  const [rows, setRows] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const selected = useMemo(
-    () => new Set((selectedSubjectIds ?? []).filter(Boolean)),
+    () => new Set(selectedSubjectIds),
     [selectedSubjectIds]
   );
 
   useEffect(() => {
     let mounted = true;
 
-    async function load() {
+    (async () => {
       setLoading(true);
-      setError(null);
-
       try {
-        const data = await rpcListSubjectsForExamTypes(examTypeIds);
-        if (!mounted) return;
-        setRows(data);
-      } catch (e: any) {
-        if (!mounted) return;
-        setRows([]);
-        setError(e?.message ?? "Failed to load subjects");
+        const data = await listSubjectsForExamTypes(examTypeIds);
+        if (mounted) setRows(data);
+      } catch {
+        if (mounted) setRows([]);
       } finally {
         if (mounted) setLoading(false);
       }
-    }
+    })();
 
-    load();
     return () => {
       mounted = false;
     };
@@ -56,33 +49,16 @@ export default function SubjectBoardStep(props: {
 
   function toggle(id: string) {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    next.has(id) ? next.delete(id) : next.add(id);
     onChangeSelectedSubjectIds(Array.from(next));
   }
 
-  const canContinue = (selectedSubjectIds ?? []).length > 0;
-
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Pick subjects</h2>
-        <p className="text-sm text-gray-600 mt-1">Choose the subject and exam board.</p>
-      </div>
+      <h2 className="text-lg font-semibold">Pick subjects</h2>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Loading subjects…
-        </div>
-      ) : error ? (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-line">
-          <div className="font-medium">Couldn’t load subjects</div>
-          <div className="mt-1">{error}</div>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No subjects returned for the selected exam type(s). Seed <code className="font-mono">subjects</code>.
-        </div>
+        <p className="text-sm text-gray-600">Loading…</p>
       ) : (
         <div className="space-y-3">
           {rows.map((r) => {
@@ -92,49 +68,29 @@ export default function SubjectBoardStep(props: {
                 key={r.subject_id}
                 type="button"
                 onClick={() => toggle(r.subject_id)}
-                className={[
-                  "w-full rounded-2xl border px-5 py-4 text-left transition",
-                  isOn ? "border-brand-purple bg-brand-purple/5" : "border-gray-200 hover:bg-gray-50",
-                ].join(" ")}
+                className={`w-full rounded-2xl border px-5 py-4 text-left ${
+                  isOn
+                    ? "border-brand-purple bg-brand-purple/5"
+                    : "border-gray-200"
+                }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {r.subject_name}
-                      <span className="text-gray-600 font-normal"> • {r.exam_board_name}</span>
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">{isOn ? "Selected" : "Tap to select"}</p>
-                  </div>
-
-                  <span
-                    className={[
-                      "mt-1 inline-flex h-5 w-5 rounded border items-center justify-center",
-                      isOn ? "border-brand-purple" : "border-gray-300",
-                    ].join(" ")}
-                  >
-                    {isOn ? <span className="h-3 w-3 rounded bg-brand-purple" /> : null}
-                  </span>
-                </div>
+                <p className="font-medium">
+                  {r.subject_name} • {r.exam_board_name}
+                </p>
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="pt-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBackToExamTypes}
-          className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-        >
+      <div className="flex justify-between pt-4">
+        <button onClick={onBackToExamTypes} className="border px-4 py-2 rounded-lg">
           Back
         </button>
-
         <button
-          type="button"
           onClick={onDone}
-          disabled={!canContinue}
-          className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
+          disabled={selected.size === 0}
+          className="bg-black text-white px-4 py-2 rounded-lg disabled:opacity-40"
         >
           Continue
         </button>
