@@ -146,4 +146,60 @@ export type SubjectGroupBoardOption = {
   exam_board_name: string;
 };
 
-export type SubjectGr
+export type SubjectGroupRow = {
+  exam_type_id: string;
+  subject_name: string;
+  icon: string | null;
+  color: string | null;
+  boards: SubjectGroupBoardOption[];
+};
+
+/**
+ * Grouped subjects:
+ * One row per (exam_type_id + subject_name), with boards[] inside.
+ *
+ * RPC: public.rpc_list_subject_groups_for_exam_types(p_exam_type_ids uuid[])
+ * Returns:
+ * - exam_type_id uuid
+ * - subject_name text
+ * - icon text
+ * - color text
+ * - boards jsonb (array of { exam_board_id, exam_board_name, subject_id })
+ */
+export async function rpcListSubjectGroupsForExamTypes(examTypeIds: string[]): Promise<SubjectGroupRow[]> {
+  const { data, error } = await supabase.rpc("rpc_list_subject_groups_for_exam_types", {
+    p_exam_type_ids: examTypeIds,
+  });
+
+  if (error) throw normaliseSupabaseError(error);
+
+  const rows = Array.isArray(data) ? data : [];
+
+  return rows.map((r: any) => {
+    const boardsRaw = Array.isArray(r.boards) ? r.boards : [];
+
+    // De-dupe boards by exam_board_id (protects UI from duplicated subject rows / bad seeds)
+    const seen = new Set<string>();
+    const boards: SubjectGroupBoardOption[] = [];
+
+    for (const b of boardsRaw) {
+      const exam_board_id = asString(b?.exam_board_id);
+      const subject_id = asString(b?.subject_id);
+      const exam_board_name = asString(b?.exam_board_name);
+
+      if (!exam_board_id || !subject_id || !exam_board_name) continue;
+      if (seen.has(exam_board_id)) continue;
+
+      seen.add(exam_board_id);
+      boards.push({ subject_id, exam_board_id, exam_board_name });
+    }
+
+    return {
+      exam_type_id: asString(r.exam_type_id),
+      subject_name: asString(r.subject_name),
+      icon: r.icon ? asString(r.icon) : null,
+      color: r.color ? asString(r.color) : null,
+      boards,
+    };
+  });
+}
