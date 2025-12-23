@@ -30,10 +30,16 @@ export type SubjectGroupBoardOption = {
 
 export type SubjectGroupRow = {
   exam_type_id: string;
-  subject_code: string;
+
+  // NOTE:
+  // The new RPC returns ONE row per (exam_type_id + subject_name) and does NOT return subject_code.
+  // If you still want subject_code later, we can add it back deliberately (but it’s not required for the UI).
   subject_name: string;
+
   icon: string | null;
   color: string | null;
+
+  // boards is returned from Postgres as jsonb; Supabase surfaces it as an array of objects.
   boards: SubjectGroupBoardOption[];
 };
 
@@ -61,7 +67,16 @@ export async function rpcParentCreateChildAndPlan(payload: ParentCreateChildAndP
 }
 
 /**
- * Grouped subjects: one row per subject_code, with boards[] inside.
+ * Grouped subjects:
+ * One row per (exam_type_id + subject_name), with boards[] inside.
+ *
+ * RPC: public.rpc_list_subject_groups_for_exam_types(p_exam_type_ids uuid[])
+ * Returns:
+ * - exam_type_id uuid
+ * - subject_name text
+ * - icon text
+ * - color text
+ * - boards jsonb (array of { exam_board_id, exam_board_name, subject_id })
  */
 export async function rpcListSubjectGroupsForExamTypes(examTypeIds: string[]): Promise<SubjectGroupRow[]> {
   const { data, error } = await supabase.rpc("rpc_list_subject_groups_for_exam_types", {
@@ -71,12 +86,21 @@ export async function rpcListSubjectGroupsForExamTypes(examTypeIds: string[]): P
   if (error) throw normaliseSupabaseError(error);
 
   const rows = Array.isArray(data) ? data : [];
+
   return rows.map((r: any) => ({
     exam_type_id: String(r.exam_type_id),
-    subject_code: String(r.subject_code),
     subject_name: String(r.subject_name),
     icon: r.icon ? String(r.icon) : null,
     color: r.color ? String(r.color) : null,
-    boards: Array.isArray(r.boards) ? r.boards : [],
+    boards: Array.isArray(r.boards)
+      ? r.boards
+          .map((b: any) => ({
+            subject_id: String(b.subject_id),
+            exam_board_id: String(b.exam_board_id),
+            exam_board_name: String(b.exam_board_name),
+          }))
+          // guard against any weird nulls
+          .filter((b: any) => b.subject_id && b.exam_board_id && b.exam_board_name)
+      : [],
   })) as SubjectGroupRow[];
 }
