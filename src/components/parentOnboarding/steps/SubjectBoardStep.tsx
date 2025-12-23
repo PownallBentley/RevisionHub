@@ -5,11 +5,12 @@ import { supabase } from "../../../lib/supabase";
 
 export type SubjectSelection = {
   exam_type_id: string;
+  exam_type_name: string; // for lozenges
   subject_code: string;
   subject_name: string;
   exam_board_id: string;
   exam_board_name: string;
-  subject_id: string;
+  subject_id: string; // actual public.subjects.id (board-specific)
 };
 
 type SubjectRow = {
@@ -25,7 +26,7 @@ type SubjectRow = {
 
 type ExamTypeMeta = {
   id: string;
-  name: string; // e.g. "GCSE", "IGCSE"
+  name: string; // e.g. GCSE, IGCSE
 };
 
 function normalise(s: string) {
@@ -37,15 +38,14 @@ function groupKey(r: SubjectRow) {
 }
 
 export default function SubjectBoardStep(props: {
-  // This step displays ONE exam type at a time (GCSE first, then IGCSE, etc.)
   examType: ExamTypeMeta;
 
-  // All selections across all exam types (for breadcrumbs/lozenges)
+  // selections across ALL exam types (for lozenges)
   value: SubjectSelection[];
   onChange: (next: SubjectSelection[]) => void;
 
   onBack: () => void;
-  onContinue: () => Promise<void> | void; // may advance to next exam type or to Needs step
+  onContinue: () => Promise<void> | void;
 }) {
   const { examType, value, onChange, onBack, onContinue } = props;
 
@@ -56,25 +56,20 @@ export default function SubjectBoardStep(props: {
   const [query, setQuery] = useState("");
   const [activeSubjectKey, setActiveSubjectKey] = useState<string | null>(null);
 
-  // Load subjects for this single exam type
   useEffect(() => {
     let mounted = true;
 
     async function load() {
       setLoading(true);
       try {
-        // Prefer RPC if you’ve standardised it
         const { data, error } = await supabase.rpc("rpc_list_subjects_for_exam_types", {
           p_exam_type_ids: [examType.id],
         });
 
         if (!mounted) return;
 
-        if (error || !Array.isArray(data)) {
-          setRows([]);
-        } else {
-          setRows(data as SubjectRow[]);
-        }
+        if (error || !Array.isArray(data)) setRows([]);
+        else setRows(data as SubjectRow[]);
       } catch {
         if (mounted) setRows([]);
       } finally {
@@ -88,7 +83,6 @@ export default function SubjectBoardStep(props: {
     };
   }, [examType.id]);
 
-  // Group board-specific rows into one subject card
   const grouped = useMemo(() => {
     const map = new Map<
       string,
@@ -125,25 +119,21 @@ export default function SubjectBoardStep(props: {
       });
     }
 
-    // sort boards within each subject
     for (const v of map.values()) {
       v.boards.sort((a, b) => a.exam_board_name.localeCompare(b.exam_board_name));
     }
 
-    // turn into array + sort subjects
     const arr = Array.from(map.entries()).map(([key, v]) => ({ key, ...v }));
     arr.sort((a, b) => a.subject_name.localeCompare(b.subject_name));
     return arr;
   }, [rows]);
 
-  // Filter by search query
   const visibleSubjects = useMemo(() => {
     const q = normalise(query);
     if (!q) return grouped;
     return grouped.filter((s) => normalise(s.subject_name).includes(q));
   }, [grouped, query]);
 
-  // Selections for the current exam type
   const selectionsForThisExamType = useMemo(() => {
     return (value ?? []).filter((v) => v.exam_type_id === examType.id);
   }, [value, examType.id]);
@@ -157,19 +147,23 @@ export default function SubjectBoardStep(props: {
     );
   }
 
-  function upsertSelection(subjectKey: string, choice: { subject_id: string; exam_board_id: string; exam_board_name: string }) {
+  function upsertSelection(
+    subjectKey: string,
+    choice: { subject_id: string; exam_board_id: string; exam_board_name: string }
+  ) {
     const subject = grouped.find((g) => g.key === subjectKey);
     if (!subject) return;
 
     const next: SubjectSelection[] = [];
     for (const v of value ?? []) {
-      // remove any existing selection for this exam_type + subject_code
+      // remove existing selection for this exam_type + subject_code
       if (v.exam_type_id === subject.exam_type_id && v.subject_code === subject.subject_code) continue;
       next.push(v);
     }
 
     next.push({
       exam_type_id: subject.exam_type_id,
+      exam_type_name: examType.name,
       subject_code: subject.subject_code,
       subject_name: subject.subject_name,
       exam_board_id: choice.exam_board_id,
@@ -185,7 +179,6 @@ export default function SubjectBoardStep(props: {
   }
 
   const activeSubject = activeSubjectKey ? grouped.find((g) => g.key === activeSubjectKey) : null;
-
   const canContinue = selectionsForThisExamType.length > 0;
 
   async function handleContinue() {
@@ -202,12 +195,9 @@ export default function SubjectBoardStep(props: {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">Pick subjects for {examType.name}</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Choose each subject, then pick the exam board.
-        </p>
+        <p className="text-sm text-gray-600 mt-1">Choose each subject, then pick the exam board.</p>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <input
           value={query}
@@ -218,7 +208,6 @@ export default function SubjectBoardStep(props: {
         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">⌕</div>
       </div>
 
-      {/* Subject cards */}
       {loading ? (
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
           Loading subjects…
@@ -249,7 +238,6 @@ export default function SubjectBoardStep(props: {
                       className="h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
                       style={{ backgroundColor: s.color ?? "#7C3AED" }}
                     >
-                      {/* simple initial fallback */}
                       {(s.subject_name ?? "S").slice(0, 1).toUpperCase()}
                     </div>
 
@@ -276,7 +264,6 @@ export default function SubjectBoardStep(props: {
         </div>
       )}
 
-      {/* Lozenges */}
       <div className="pt-2">
         <div className="text-sm text-gray-700 mb-2">Your subjects:</div>
         {(value ?? []).length === 0 ? (
@@ -288,10 +275,7 @@ export default function SubjectBoardStep(props: {
                 key={sel.subject_id}
                 className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2 text-sm text-gray-800"
               >
-                <span className="text-gray-600">{/* exam type label */}</span>
-                <span className="font-medium">
-                  {sel.exam_type_id === examType.id ? examType.name : "—"}
-                </span>
+                <span className="font-medium">{sel.exam_type_name}</span>
                 <span className="text-gray-400">•</span>
                 <span>{sel.exam_board_name}</span>
                 <span className="text-gray-400">•</span>
@@ -311,7 +295,6 @@ export default function SubjectBoardStep(props: {
         )}
       </div>
 
-      {/* Footer buttons */}
       <div className="pt-4 flex items-center justify-between">
         <button
           type="button"
@@ -332,57 +315,32 @@ export default function SubjectBoardStep(props: {
         </button>
       </div>
 
-      {/* Modal */}
       {activeSubject ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setActiveSubjectKey(null)}
-          />
+          <div className="absolute inset-0 bg-black/30" onClick={() => setActiveSubjectKey(null)} />
           <div className="relative w-full max-w-xl rounded-2xl bg-white shadow-2xl p-6">
             <div className="mb-4">
               <div className="text-lg font-semibold text-gray-900">
                 Choose an exam board for {activeSubject.subject_name}
               </div>
-              <div className="text-sm text-gray-600 mt-1">
-                You can always change this later.
-              </div>
+              <div className="text-sm text-gray-600 mt-1">You can always change this later.</div>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              {activeSubject.boards
-                .filter((b) => normalise(b.exam_board_name) !== "not sure yet")
-                .map((b) => (
-                  <button
-                    key={b.exam_board_id}
-                    type="button"
-                    onClick={() => {
-                      upsertSelection(activeSubject.key, b);
-                      setActiveSubjectKey(null);
-                    }}
-                    className="rounded-full border border-gray-200 bg-gray-50 px-5 py-3 text-sm hover:bg-gray-100"
-                  >
-                    {b.exam_board_name}
-                  </button>
-                ))}
-            </div>
-
-            {/* "I'm not sure" pinned at bottom */}
-            {activeSubject.boards.some((b) => normalise(b.exam_board_name) === "not sure yet") ? (
-              <div className="mt-5 pt-5 border-t border-gray-100">
+              {activeSubject.boards.map((b) => (
                 <button
+                  key={b.exam_board_id}
                   type="button"
                   onClick={() => {
-                    const ns = activeSubject.boards.find((b) => normalise(b.exam_board_name) === "not sure yet")!;
-                    upsertSelection(activeSubject.key, ns);
+                    upsertSelection(activeSubject.key, b);
                     setActiveSubjectKey(null);
                   }}
-                  className="w-full rounded-full bg-gray-100 px-5 py-3 text-sm font-medium hover:bg-gray-200"
+                  className="rounded-full border border-gray-200 bg-gray-50 px-5 py-3 text-sm hover:bg-gray-100"
                 >
-                  I’m not sure
+                  {b.exam_board_name}
                 </button>
-              </div>
-            ) : null}
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
