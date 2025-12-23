@@ -1,18 +1,24 @@
-// src/components/parentOnboarding/steps/GoalStep.tsx
-
 import { useEffect, useState } from "react";
-import { supabase } from "../../../lib/supabase";
+import {
+  listGoals,
+  type Goal,
+} from "../../../services/referenceData/referenceDataService";
 
-type GoalRow = {
-  code: string;
-  name: string;
-  description: string | null;
-};
-
-const fallbackGoals: GoalRow[] = [
-  { code: "pass_exam", name: "Pass the exam", description: "Focus on coverage and confidence." },
-  { code: "improve_grade", name: "Improve the grade", description: "Target weaker areas and practise exam style." },
-  { code: "reduce_anxiety", name: "Reduce anxiety", description: "Short, structured sessions to build momentum." },
+const fallbackGoals: Goal[] = [
+  {
+    id: "00000000-0000-0000-0000-000000000001",
+    code: "pass_exam",
+    name: "Pass the exam",
+    description: "Focus on coverage and confidence.",
+    sort_order: 100,
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000002",
+    code: "improve_grade",
+    name: "Improve the grade",
+    description: "Target weaker areas and practise exam style.",
+    sort_order: 200,
+  },
 ];
 
 export default function GoalStep(props: {
@@ -21,35 +27,23 @@ export default function GoalStep(props: {
 }) {
   const { value, onChange } = props;
 
-  const [goals, setGoals] = useState<GoalRow[]>(fallbackGoals);
+  const [goals, setGoals] = useState<Goal[]>(fallbackGoals);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    async function load() {
-      setLoading(true);
+    (async () => {
       try {
-        const { data, error } = await supabase
-          .from("goals")
-          .select("code, name, description")
-          .order("name", { ascending: true });
-
-        if (!mounted) return;
-
-        if (!error && Array.isArray(data) && data.length > 0) {
-          setGoals(data as GoalRow[]);
-        } else {
-          setGoals(fallbackGoals);
-        }
+        const data = await listGoals();
+        if (mounted && data.length > 0) setGoals(data);
       } catch {
-        if (mounted) setGoals(fallbackGoals);
+        /* fallback stays */
       } finally {
         if (mounted) setLoading(false);
       }
-    }
+    })();
 
-    load();
     return () => {
       mounted = false;
     };
@@ -57,47 +51,31 @@ export default function GoalStep(props: {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">What’s the goal?</h2>
-        <p className="text-sm text-gray-600 mt-1">Pick the outcome that matters most right now.</p>
-      </div>
+      <h2 className="text-lg font-semibold">What’s the goal?</h2>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Loading goals…
-        </div>
+        <p className="text-sm text-gray-600">Loading…</p>
       ) : (
         <div className="space-y-3">
           {goals.map((g) => {
             const selected = value === g.code;
             return (
               <button
-                key={g.code}
+                key={g.id}
                 type="button"
                 onClick={() => onChange(g.code)}
-                className={[
-                  "w-full text-left rounded-2xl border px-5 py-4 transition",
+                className={`w-full rounded-2xl border px-5 py-4 text-left ${
                   selected
                     ? "border-brand-purple bg-brand-purple/5"
-                    : "border-gray-200 hover:bg-gray-50",
-                ].join(" ")}
+                    : "border-gray-200"
+                }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-gray-900">{g.name}</p>
-                    {g.description ? (
-                      <p className="text-sm text-gray-600 mt-1">{g.description}</p>
-                    ) : null}
-                  </div>
-                  <div
-                    className={[
-                      "mt-1 h-5 w-5 rounded-full border flex items-center justify-center",
-                      selected ? "border-brand-purple" : "border-gray-300",
-                    ].join(" ")}
-                  >
-                    {selected ? <div className="h-3 w-3 rounded-full bg-brand-purple" /> : null}
-                  </div>
-                </div>
+                <p className="font-medium">{g.name}</p>
+                {g.description && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {g.description}
+                  </p>
+                )}
               </button>
             );
           })}
