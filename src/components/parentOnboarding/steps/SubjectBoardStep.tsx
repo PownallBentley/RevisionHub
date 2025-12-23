@@ -1,14 +1,8 @@
-// src/components/parentOnboarding/steps/SubjectBoardStep.tsx
-
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../../lib/supabase";
-
-type SubjectRow = {
-  id: string;
-  subject_name: string;
-  exam_type_id: string;
-  board_name: string | null;
-};
+import {
+  rpcListSubjectsForExamTypes,
+  type SubjectPick,
+} from "../../../services/referenceData/referenceDataService";
 
 export default function SubjectBoardStep(props: {
   examTypeIds: string[];
@@ -25,38 +19,30 @@ export default function SubjectBoardStep(props: {
     onDone,
   } = props;
 
-  const [rows, setRows] = useState<SubjectRow[]>([]);
+  const [rows, setRows] = useState<SubjectPick[]>([]);
   const [loading, setLoading] = useState(true);
-  const selected = useMemo(() => new Set((selectedSubjectIds ?? []).filter(Boolean)), [selectedSubjectIds]);
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = useMemo(
+    () => new Set((selectedSubjectIds ?? []).filter(Boolean)),
+    [selectedSubjectIds]
+  );
 
   useEffect(() => {
     let mounted = true;
 
     async function load() {
       setLoading(true);
-
-      if (!examTypeIds || examTypeIds.length === 0) {
-        setRows([]);
-        setLoading(false);
-        return;
-      }
+      setError(null);
 
       try {
-        const { data, error } = await supabase
-          .from("subjects")
-          .select("id, subject_name, exam_type_id, board_name")
-          .in("exam_type_id", examTypeIds)
-          .order("subject_name", { ascending: true });
-
+        const data = await rpcListSubjectsForExamTypes(examTypeIds);
         if (!mounted) return;
-
-        if (!error && Array.isArray(data)) {
-          setRows(data as SubjectRow[]);
-        } else {
-          setRows([]);
-        }
-      } catch {
-        if (mounted) setRows([]);
+        setRows(data);
+      } catch (e: any) {
+        if (!mounted) return;
+        setRows([]);
+        setError(e?.message ?? "Failed to load subjects");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -81,28 +67,31 @@ export default function SubjectBoardStep(props: {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">Pick subjects</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Choose the subject (and board/spec where available).
-        </p>
+        <p className="text-sm text-gray-600 mt-1">Choose the subject and exam board.</p>
       </div>
 
       {loading ? (
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
           Loading subjects…
         </div>
+      ) : error ? (
+        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-line">
+          <div className="font-medium">Couldn’t load subjects</div>
+          <div className="mt-1">{error}</div>
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          No subjects found for the selected exam type(s). Check the <code className="font-mono">subjects</code> table.
+          No subjects returned for the selected exam type(s). Seed <code className="font-mono">subjects</code>.
         </div>
       ) : (
         <div className="space-y-3">
           {rows.map((r) => {
-            const isOn = selected.has(r.id);
+            const isOn = selected.has(r.subject_id);
             return (
               <button
-                key={r.id}
+                key={r.subject_id}
                 type="button"
-                onClick={() => toggle(r.id)}
+                onClick={() => toggle(r.subject_id)}
                 className={[
                   "w-full rounded-2xl border px-5 py-4 text-left transition",
                   isOn ? "border-brand-purple bg-brand-purple/5" : "border-gray-200 hover:bg-gray-50",
@@ -112,11 +101,9 @@ export default function SubjectBoardStep(props: {
                   <div>
                     <p className="font-medium text-gray-900">
                       {r.subject_name}
-                      {r.board_name ? <span className="text-gray-600 font-normal"> • {r.board_name}</span> : null}
+                      <span className="text-gray-600 font-normal"> • {r.exam_board_name}</span>
                     </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {isOn ? "Selected" : "Tap to select"}
-                    </p>
+                    <p className="text-sm text-gray-600 mt-1">{isOn ? "Selected" : "Tap to select"}</p>
                   </div>
 
                   <span
