@@ -1,390 +1,416 @@
 // src/components/parentOnboarding/steps/SubjectBoardStep.tsx
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../../lib/supabase";
+import { rpcListExamTypes } from "../../../services/parentOnboarding/parentOnboardingService"; // if you already have this
 import {
   rpcListSubjectGroupsForExamTypes,
+  type SubjectBoardOption,
   type SubjectGroupRow,
-  type SubjectGroupBoardOption,
 } from "../../../services/parentOnboarding/parentOnboardingService";
 
-type ExamTypeRow = { id: string; name: string; code: string };
+type Props = {
+  examTypeIds: string[];
+  selectedSubjectIds: string[];
+  onChangeSelectedSubjectIds: (ids: string[]) => void;
 
-export type SelectedSubject = {
+  onBackToExamTypes: () => void;
+  onDone: () => void;
+};
+
+type ExamTypeRow = { id: string; code: string; name: string; sort_order: number };
+
+type SelectionMeta = {
+  subject_id: string;
   exam_type_id: string;
   exam_type_name: string;
-  subject_code: string;
   subject_name: string;
-
-  // chosen board/spec row (this is what backend needs)
-  subject_id: string;
-
   exam_board_id: string | null;
   exam_board_name: string | null;
 };
 
-function keyFor(group: { exam_type_id: string; subject_code: string }) {
-  return `${group.exam_type_id}::${group.subject_code}`;
+function uniqStrings(arr: string[]) {
+  return Array.from(new Set(arr));
 }
 
-function chipLabel(s: SelectedSubject) {
-  const board = s.exam_board_name ? s.exam_board_name : "Not sure";
-  return `${s.exam_type_name} • ${board} • ${s.subject_name}`;
+function makeSubjectKey(examTypeId: string, subjectName: string) {
+  return `${examTypeId}::${subjectName}`.toLowerCase();
 }
 
-function Modal(props: {
-  open: boolean;
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  if (!props.open) return null;
+export default function SubjectBoardStep(props: Props) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30" onClick={props.onClose} />
-      <div className="absolute left-1/2 top-1/2 w-[92%] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white shadow-xl border border-gray-100 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{props.title}</h3>
-            {props.subtitle ? <p className="text-sm text-gray-600 mt-1">{props.subtitle}</p> : null}
-          </div>
-          <button
-            type="button"
-            onClick={props.onClose}
-            className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
-          >
-            Close
-          </button>
-        </div>
-        <div className="mt-5">{props.children}</div>
-      </div>
-    </div>
-  );
-}
-
-export default function SubjectBoardStep(props: {
-  examTypeIds: string[];
-  value: SelectedSubject[];
-  onChange: (next: SelectedSubject[]) => void;
-
-  onBackToExamTypes: () => void;
-  onDone: () => void;
-}) {
-  const { examTypeIds, value, onChange, onBackToExamTypes, onDone } = props;
-
-  const [examTypes, setExamTypes] = useState<Record<string, ExamTypeRow>>({});
-  const [cursor, setCursor] = useState(0);
-
+  const [examTypes, setExamTypes] = useState<ExamTypeRow[]>([]);
   const [rows, setRows] = useState<SubjectGroupRow[]>([]);
-  const [loading, setLoading] = useState(true);
 
+  const orderedExamTypeIds = useMemo(() => uniqStrings(props.examTypeIds), [props.examTypeIds]);
+
+  // Which exam type screen are we on?
+  const [activeExamTypeIndex, setActiveExamTypeIndex] = useState(0);
+
+  const activeExamTypeId = orderedExamTypeIds[activeExamTypeIndex] ?? "";
+  const activeExamType = useMemo(
+    () => examTypes.find((e) => e.id === activeExamTypeId),
+    [examTypes, activeExamTypeId]
+  );
+
+  // Search
   const [query, setQuery] = useState("");
 
-  // modal state
-  const [activeGroup, setActiveGroup] = useState<SubjectGroupRow | null>(null);
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalSubject, setModalSubject] = useState<SubjectGroupRow | null>(null);
 
-  // Load exam type names once (for chip labels + heading)
+  // We keep metadata locally so we can render lozenges cleanly.
+  // Source of truth for payload remains: selectedSubjectIds (string[])
+  const [selectionMetaBySubjectId, setSelectionMetaBySubjectId] = useState<Record<string, SelectionMeta>>({});
+
+  // Load supporting data
   useEffect(() => {
-    let mounted = true;
-
-    async function loadExamTypes() {
-      const { data, error } = await supabase
-        .from("exam_types")
-        .select("id, name, code")
-        .order("sort_order", { ascending: true });
-
-      if (!mounted) return;
-
-      if (!error && Array.isArray(data)) {
-        const map: Record<string, ExamTypeRow> = {};
-        (data as any[]).forEach((r) => {
-          map[String(r.id)] = { id: String(r.id), name: String(r.name), code: String(r.code) };
-        });
-        setExamTypes(map);
-      } else {
-        setExamTypes({});
-      }
-    }
-
-    loadExamTypes();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // Ensure cursor stays in range if examTypeIds changes
-  useEffect(() => {
-    setCursor(0);
-  }, [examTypeIds.join("|")]);
-
-  const currentExamTypeId = examTypeIds?.[cursor] ?? null;
-  const currentExamTypeName =
-    (currentExamTypeId && examTypes[currentExamTypeId]?.name) || "Selected exam";
-
-  // Load grouped subjects for the current exam type only (faster + simpler UI)
-  useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
 
     async function load() {
-      if (!currentExamTypeId) {
-        setRows([]);
-        setLoading(false);
-        return;
-      }
+      if (!orderedExamTypeIds.length) return;
 
       setLoading(true);
+      setError(null);
       try {
-        const data = await rpcListSubjectGroupsForExamTypes([currentExamTypeId]);
-        if (!mounted) return;
-        setRows(data);
-      } catch {
-        if (mounted) setRows([]);
+        // exam types (for breadcrumb labels)
+        const examTypeRows = await rpcListExamTypes();
+        if (cancelled) return;
+
+        const sorted = [...(examTypeRows as ExamTypeRow[])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+        setExamTypes(sorted);
+
+        // grouped subjects
+        const subjectGroups = await rpcListSubjectGroupsForExamTypes(orderedExamTypeIds);
+        if (cancelled) return;
+
+        setRows(subjectGroups);
+
+        // rebuild selection meta from selectedSubjectIds using the newly loaded rows
+        const meta: Record<string, SelectionMeta> = {};
+        for (const g of subjectGroups) {
+          const et = sorted.find((x) => x.id === g.exam_type_id);
+          for (const b of g.boards ?? []) {
+            if (props.selectedSubjectIds.includes(b.subject_id)) {
+              meta[b.subject_id] = {
+                subject_id: b.subject_id,
+                exam_type_id: g.exam_type_id,
+                exam_type_name: et?.name ?? "Exam",
+                subject_name: g.subject_name,
+                exam_board_id: b.exam_board_id ?? null,
+                exam_board_name: b.exam_board_name ?? null,
+              };
+            }
+          }
+        }
+        setSelectionMetaBySubjectId(meta);
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load subjects");
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     }
 
     load();
     return () => {
-      mounted = false;
+      cancelled = true;
     };
-  }, [currentExamTypeId]);
+  }, [orderedExamTypeIds.join("|")]);
 
-  const filtered = useMemo(() => {
+  // Rows for active exam type
+  const activeSubjects = useMemo(() => {
+    const all = rows.filter((r) => r.exam_type_id === activeExamTypeId);
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.subject_name.toLowerCase().includes(q));
-  }, [rows, query]);
+    if (!q) return all;
 
-  const selectedByKey = useMemo(() => {
-    const map = new Map<string, SelectedSubject>();
-    (value ?? []).forEach((s) => {
-      map.set(keyFor({ exam_type_id: s.exam_type_id, subject_code: s.subject_code }), s);
+    return all.filter((r) => r.subject_name.toLowerCase().includes(q));
+  }, [rows, activeExamTypeId, query]);
+
+  // For a given subject (group), what’s currently selected (if any)?
+  const selectedSubjectIdForGroup = (g: SubjectGroupRow): string | null => {
+    for (const b of g.boards ?? []) {
+      if (props.selectedSubjectIds.includes(b.subject_id)) return b.subject_id;
+    }
+    return null;
+  };
+
+  const selectedBoardNameForGroup = (g: SubjectGroupRow): string | null => {
+    const sid = selectedSubjectIdForGroup(g);
+    if (!sid) return null;
+    const meta = selectionMetaBySubjectId[sid];
+    return meta?.exam_board_name ?? null;
+  };
+
+  const openBoardModal = (g: SubjectGroupRow) => {
+    setModalSubject(g);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setModalSubject(null);
+  };
+
+  // Selecting a board means: ensure only ONE subject_id is selected for that subject_name within this exam type.
+  const selectBoard = (g: SubjectGroupRow, option: SubjectBoardOption | null) => {
+    const currentlySelectedIds = [...props.selectedSubjectIds];
+
+    // Remove any existing selection for this subject group (across its boards)
+    const boardSubjectIds = new Set((g.boards ?? []).map((b) => b.subject_id));
+    const nextIds = currentlySelectedIds.filter((id) => !boardSubjectIds.has(id));
+
+    // If they picked a board, add it
+    if (option?.subject_id) nextIds.push(option.subject_id);
+
+    props.onChangeSelectedSubjectIds(uniqStrings(nextIds));
+
+    // Update lozenge meta
+    const etName = activeExamType?.name ?? "Exam";
+    setSelectionMetaBySubjectId((prev) => {
+      const copy = { ...prev };
+
+      // clear meta for removed ones
+      for (const b of g.boards ?? []) {
+        delete copy[b.subject_id];
+      }
+
+      // set meta for new one
+      if (option?.subject_id) {
+        copy[option.subject_id] = {
+          subject_id: option.subject_id,
+          exam_type_id: g.exam_type_id,
+          exam_type_name: etName,
+          subject_name: g.subject_name,
+          exam_board_id: option.exam_board_id ?? null,
+          exam_board_name: option.exam_board_name ?? null,
+        };
+      } else {
+        // "I'm not sure" means we still select one deterministic subject_id? No.
+        // It means: user has NOT committed to a board yet, so we keep no subject_id selected.
+      }
+
+      return copy;
     });
-    return map;
-  }, [JSON.stringify(value ?? [])]);
 
-  function removeSelection(exam_type_id: string, subject_code: string) {
-    const k = keyFor({ exam_type_id, subject_code });
-    const next = (value ?? []).filter(
-      (s) => keyFor({ exam_type_id: s.exam_type_id, subject_code: s.subject_code }) !== k
-    );
-    onChange(next);
-  }
+    closeModal();
+  };
 
-  function openBoardPicker(group: SubjectGroupRow) {
-    setActiveGroup(group);
-  }
+  const removeSelection = (subjectId: string) => {
+    props.onChangeSelectedSubjectIds(props.selectedSubjectIds.filter((id) => id !== subjectId));
+    setSelectionMetaBySubjectId((prev) => {
+      const copy = { ...prev };
+      delete copy[subjectId];
+      return copy;
+    });
+  };
 
-  function chooseBoard(group: SubjectGroupRow, board: SubjectGroupBoardOption | null) {
-    const examTypeName = examTypes[group.exam_type_id]?.name ?? "Exam";
+  // Screen gating: allow continue only if at least 1 subject chosen overall,
+  // and for this exam type: allow continue even with zero (if they only picked GCSE and want none, but that’s odd).
+  // Practically: require at least 1 overall before leaving the whole step (final exam type).
+  const canContinueThisExamType = useMemo(() => {
+    // If there are multiple exam types, we let them proceed through screens even if one exam type has 0,
+    // but final exit requires at least one overall (ParentOnboarding validates that too).
+    return true;
+  }, [props.selectedSubjectIds.join("|"), activeExamTypeId]);
 
-    const nextItem: SelectedSubject = {
-      exam_type_id: group.exam_type_id,
-      exam_type_name: examTypeName,
-      subject_code: group.subject_code,
-      subject_name: group.subject_name,
-
-      // If "not sure", still pick a deterministic subject_id so planning can proceed.
-      // We use the first board row as the default row, but label board as null.
-      subject_id: board?.subject_id ?? group.boards?.[0]?.subject_id ?? "",
-
-      exam_board_id: board?.exam_board_id ?? null,
-      exam_board_name: board?.exam_board_name ?? null,
-    };
-
-    // Replace any prior selection for this (exam_type_id, subject_code)
-    const k = keyFor(group);
-    const kept = (value ?? []).filter(
-      (s) => keyFor({ exam_type_id: s.exam_type_id, subject_code: s.subject_code }) !== k
-    );
-
-    onChange([...kept, nextItem]);
-    setActiveGroup(null);
-  }
-
-  const currentExamSelectedCount = useMemo(() => {
-    return (value ?? []).filter((s) => s.exam_type_id === currentExamTypeId).length;
-  }, [JSON.stringify(value ?? []), currentExamTypeId]);
-
-  const canContinueThisExam = currentExamSelectedCount > 0;
-
-  function handleContinue() {
-    // Move to next selected exam type (GCSE -> IGCSE), else done.
-    if (cursor < (examTypeIds?.length ?? 0) - 1) {
-      setCursor((c) => c + 1);
+  const continueNext = () => {
+    // Move to next exam type screen, or finish step
+    if (activeExamTypeIndex < orderedExamTypeIds.length - 1) {
+      setActiveExamTypeIndex((i) => i + 1);
       setQuery("");
-      setActiveGroup(null);
       return;
     }
-    onDone();
-  }
+    props.onDone();
+  };
+
+  const back = () => {
+    if (activeExamTypeIndex > 0) {
+      setActiveExamTypeIndex((i) => i - 1);
+      setQuery("");
+      return;
+    }
+    props.onBackToExamTypes();
+  };
+
+  // Lozenges (sorted by exam type, then subject name)
+  const lozenges = useMemo(() => {
+    const metas = Object.values(selectionMetaBySubjectId);
+    const bySort = metas.sort((a, b) => {
+      const etA = examTypes.find((x) => x.id === a.exam_type_id)?.sort_order ?? 999;
+      const etB = examTypes.find((x) => x.id === b.exam_type_id)?.sort_order ?? 999;
+      if (etA !== etB) return etA - etB;
+      return a.subject_name.localeCompare(b.subject_name);
+    });
+    return bySort;
+  }, [selectionMetaBySubjectId, examTypes]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">
-          Pick subjects for {currentExamTypeName}
+    <div className="w-full">
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">
+          {activeExamType?.name ? `Choose subjects for ${activeExamType.name}` : "Choose your subjects"}
         </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Tap a subject, then choose the exam board. You can change this later.
-        </p>
+        <p className="mt-1 text-sm text-gray-600">Tap a subject, then pick the exam board.</p>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="w-full">
-          <div className="relative">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full rounded-full border border-gray-200 bg-white px-5 py-3 pr-12 outline-none focus:ring-2 focus:ring-brand-purple focus:border-transparent"
-              placeholder="Search for a subject"
-            />
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">⌕</div>
-          </div>
+      <div className="mb-5">
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search for a subject"
+            className="w-full rounded-full border bg-white px-5 py-3 pr-12 text-sm shadow-sm outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">⌕</div>
         </div>
       </div>
 
-      {loading ? (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-          Loading subjects…
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          No subjects found.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((g) => {
-            const sel = selectedByKey.get(keyFor(g));
-            const selected = !!sel;
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
+      )}
 
-            const badgeLetter = (g.subject_name?.trim()?.[0] ?? "S").toUpperCase();
-            const badgeStyle = {
-              backgroundColor: g.color ?? "#7C3AED",
-            } as any;
+      <div className="min-h-[240px]">
+        {loading ? (
+          <div className="rounded-xl border bg-white p-5 text-sm text-gray-600">Loading subjects…</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {activeSubjects.map((g) => {
+              const boardName = selectedBoardNameForGroup(g);
+              const selected = !!selectedSubjectIdForGroup(g);
 
-            return (
-              <button
-                key={keyFor(g)}
-                type="button"
-                onClick={() => openBoardPicker(g)}
-                className={[
-                  "rounded-2xl border p-5 text-left transition shadow-sm",
-                  selected ? "border-brand-purple bg-brand-purple/5" : "border-gray-200 hover:bg-gray-50",
-                ].join(" ")}
-              >
-                <div className="flex items-center justify-between gap-4">
+              return (
+                <button
+                  key={makeSubjectKey(g.exam_type_id, g.subject_name)}
+                  type="button"
+                  onClick={() => openBoardModal(g)}
+                  className={`flex w-full items-center justify-between rounded-2xl border bg-white px-5 py-4 text-left shadow-sm transition
+                    ${selected ? "border-blue-300 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"}`}
+                >
                   <div className="flex items-center gap-4">
                     <div
-                      className="h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold"
-                      style={badgeStyle}
+                      className="flex h-11 w-11 items-center justify-center rounded-full text-white"
+                      style={{ backgroundColor: g.color || "#7C3AED" }}
+                      aria-hidden
                     >
-                      {badgeLetter}
+                      {(g.subject_name?.[0] ?? "S").toUpperCase()}
                     </div>
+
                     <div>
-                      <div className="font-medium text-gray-900">{g.subject_name}</div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        {sel
-                          ? `Board: ${sel.exam_board_name ?? "Not sure"}`
-                          : "Tap to choose board"}
+                      <div className="text-base font-semibold text-gray-900">{g.subject_name}</div>
+                      <div className="mt-0.5 text-sm text-gray-600">
+                        {boardName ? `Board: ${boardName}` : "Tap to choose board"}
                       </div>
                     </div>
                   </div>
 
-                  <div
-                    className={[
-                      "h-6 w-6 rounded border flex items-center justify-center",
-                      selected ? "border-brand-purple" : "border-gray-300",
-                    ].join(" ")}
-                  >
-                    {selected ? <div className="h-4 w-4 rounded bg-brand-purple" /> : null}
+                  <div className="ml-4 flex items-center gap-3">
+                    <div
+                      className={`h-5 w-5 rounded border ${selected ? "border-blue-600 bg-blue-600" : "border-gray-300"}`}
+                    >
+                      {selected ? <div className="h-full w-full text-center text-xs leading-5 text-white">✓</div> : null}
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                </button>
+              );
+            })}
 
-      {/* Chips / lozenges */}
-      <div className="pt-2">
-        <div className="text-sm text-gray-700 mb-2">Your subjects:</div>
-        <div className="flex flex-wrap gap-2">
-          {(value ?? [])
-            .sort((a, b) => (a.exam_type_name + a.subject_name).localeCompare(b.exam_type_name + b.subject_name))
-            .map((s) => (
-              <span
-                key={`${s.exam_type_id}:${s.subject_code}`}
-                className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2 text-sm text-gray-800"
+            {!loading && activeSubjects.length === 0 ? (
+              <div className="col-span-full rounded-xl border bg-white p-6 text-sm text-gray-600">No subjects found.</div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* Lozenges */}
+      <div className="mt-8">
+        <div className="text-sm font-medium text-gray-700">Your subjects:</div>
+
+        <div className="mt-2 flex flex-wrap gap-2">
+          {lozenges.length === 0 ? (
+            <div className="text-sm text-gray-500">None selected yet.</div>
+          ) : (
+            lozenges.map((m) => (
+              <div
+                key={m.subject_id}
+                className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2 text-sm text-gray-800"
               >
-                {chipLabel(s)}
+                <span className="font-medium">{m.exam_type_name}</span>
+                <span className="text-gray-400">•</span>
+                <span>{m.exam_board_name ?? "Board: not set"}</span>
+                <span className="text-gray-400">•</span>
+                <span>{m.subject_name}</span>
                 <button
                   type="button"
-                  onClick={() => removeSelection(s.exam_type_id, s.subject_code)}
-                  className="h-5 w-5 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  aria-label="Remove"
+                  onClick={() => removeSelection(m.subject_id)}
+                  className="ml-1 rounded-full px-2 text-gray-500 hover:bg-gray-200"
+                  aria-label={`Remove ${m.subject_name}`}
                 >
                   ×
                 </button>
-              </span>
-            ))}
-          {(value ?? []).length === 0 ? (
-            <span className="text-sm text-gray-500">None selected yet.</span>
-          ) : null}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Footer buttons */}
-      <div className="pt-4 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBackToExamTypes}
-          className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-        >
+      {/* Footer buttons (Step 3 owns nav) */}
+      <div className="mt-8 flex items-center justify-between">
+        <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={back}>
           Back
         </button>
 
         <button
           type="button"
-          onClick={handleContinue}
-          disabled={!canContinueThisExam}
-          className="rounded-full bg-blue-600 px-10 py-3 text-sm text-white font-semibold disabled:opacity-40"
+          className="rounded-full bg-blue-600 px-10 py-3 text-sm font-medium text-white disabled:opacity-40"
+          disabled={!canContinueThisExamType}
+          onClick={continueNext}
         >
           Continue
         </button>
       </div>
 
-      {/* Board modal */}
-      <Modal
-        open={!!activeGroup}
-        title={activeGroup ? `Choose an exam board for ${activeGroup.subject_name}` : ""}
-        subtitle="You can always add or change this later."
-        onClose={() => setActiveGroup(null)}
-      >
-        <div className="flex flex-wrap gap-3">
-          {(activeGroup?.boards ?? []).map((b) => (
-            <button
-              key={b.exam_board_id}
-              type="button"
-              onClick={() => activeGroup && chooseBoard(activeGroup, b)}
-              className="rounded-full border border-gray-200 bg-gray-50 px-6 py-3 text-sm hover:bg-gray-100"
-            >
-              {b.exam_board_name}
-            </button>
-          ))}
+      {/* Modal */}
+      {modalOpen && modalSubject ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-2xl font-semibold text-gray-900">
+                  Choose an exam board for {modalSubject.subject_name}
+                </div>
+                <div className="mt-1 text-sm text-gray-600">You can always add or change this later.</div>
+              </div>
 
-          <button
-            type="button"
-            onClick={() => activeGroup && chooseBoard(activeGroup, null)}
-            className="rounded-full border border-gray-200 bg-gray-50 px-6 py-3 text-sm hover:bg-gray-100"
-          >
-            I’m not sure
-          </button>
+              <button type="button" className="rounded-xl border px-4 py-2 text-sm" onClick={closeModal}>
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {(modalSubject.boards ?? []).map((b) => (
+                <button
+                  key={b.exam_board_id}
+                  type="button"
+                  onClick={() => selectBoard(modalSubject, b)}
+                  className="rounded-full border bg-white px-6 py-3 text-sm shadow-sm hover:border-gray-300"
+                >
+                  {b.exam_board_name}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => selectBoard(modalSubject, null)}
+                className="rounded-full border bg-gray-50 px-6 py-3 text-sm shadow-sm hover:border-gray-300"
+              >
+                I’m not sure
+              </button>
+            </div>
+          </div>
         </div>
-      </Modal>
+      ) : null}
     </div>
   );
 }
