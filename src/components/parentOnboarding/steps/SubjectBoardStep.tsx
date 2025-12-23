@@ -7,31 +7,27 @@ import {
   type SubjectGroupBoardOption,
 } from "../../../services/parentOnboarding/parentOnboardingService";
 
+/**
+ * ParentOnboardingPage expects:
+ *   value={selectedSubjects}
+ *   onChange={setSelectedSubjects}
+ */
 export type SelectedSubject = {
-  subject_id: string;
-  exam_type_id?: string;
-  subject_name?: string;
-  exam_board_id?: string;
-  exam_board_name?: string;
+  subject_id: string; // the selected subject row id (board-specific row)
+  exam_type_id: string;
+  subject_name: string;
+  exam_board_id: string;
+  exam_board_name: string;
 };
 
-type BaseProps = {
+type Props = {
   examTypeIds: string[];
+  value: SelectedSubject[];
+  onChange: (next: SelectedSubject[]) => void;
+
   onBackToExamTypes: () => void;
   onDone: () => void;
 };
-
-type IdModeProps = BaseProps & {
-  selectedSubjectIds: string[];
-  onChangeSelectedSubjectIds: (ids: string[]) => void;
-};
-
-type StructuredModeProps = BaseProps & {
-  value: SelectedSubject[];
-  onChange: (items: SelectedSubject[]) => void;
-};
-
-type Props = IdModeProps | StructuredModeProps;
 
 type BoardPickContext = {
   exam_type_id: string;
@@ -45,19 +41,24 @@ function uniq(ids: string[]) {
   return Array.from(new Set((ids || []).filter(Boolean).map(String)));
 }
 
-function isIdMode(p: Props): p is IdModeProps {
-  return (p as any).onChangeSelectedSubjectIds && (p as any).selectedSubjectIds;
+function normaliseNotSureLabel(name: string) {
+  const raw = (name || "").trim();
+  const n = raw.toLowerCase();
+
+  const isNotSure =
+    n === "not sure" ||
+    n === "not sure yet" ||
+    n === "i'm not sure" ||
+    n === "im not sure" ||
+    n === "i am not sure" ||
+    n.includes("not sure");
+
+  return { isNotSure, label: isNotSure ? "I’m not sure" : raw };
 }
 
 export default function SubjectBoardStep(props: Props) {
   const examTypeIds = Array.isArray(props.examTypeIds) ? props.examTypeIds : [];
-
-  // ---- Selection plumbing (supports either prop style) ----
-  const selectedSubjectIds: string[] = useMemo(() => {
-    if (isIdMode(props)) return Array.isArray(props.selectedSubjectIds) ? props.selectedSubjectIds : [];
-    const v = Array.isArray((props as StructuredModeProps).value) ? (props as StructuredModeProps).value : [];
-    return v.map((s) => String(s.subject_id)).filter(Boolean);
-  }, [props]);
+  const selected = Array.isArray(props.value) ? props.value : [];
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,11 +66,9 @@ export default function SubjectBoardStep(props: Props) {
   const [groups, setGroups] = useState<SubjectGroupRow[]>([]);
   const [activeExamTypeIndex, setActiveExamTypeIndex] = useState(0);
 
-  // Search + active picker
-  const [query, setQuery] = useState("");
-  const [activeCtx, setActiveCtx] = useState<BoardPickContext | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalCtx, setModalCtx] = useState<BoardPickContext | null>(null);
 
-  // Stable key to avoid re-fetch loops
   const examTypeKey = useMemo(() => uniq(examTypeIds).slice().sort().join("|"), [examTypeIds]);
 
   useEffect(() => {
@@ -77,10 +76,9 @@ export default function SubjectBoardStep(props: Props) {
 
     async function load() {
       const ids = uniq(examTypeIds);
+
       if (ids.length === 0) {
         setGroups([]);
-        setActiveExamTypeIndex(0);
-        setActiveCtx(null);
         return;
       }
 
@@ -98,7 +96,6 @@ export default function SubjectBoardStep(props: Props) {
 
         setGroups(safe);
         setActiveExamTypeIndex(0);
-        setActiveCtx(null);
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load subjects");
@@ -121,135 +118,97 @@ export default function SubjectBoardStep(props: Props) {
     return groups.filter((g) => String(g.exam_type_id) === String(activeExamTypeId));
   }, [groups, activeExamTypeId]);
 
-  const filteredGroups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return groupsForActiveExamType;
-    return groupsForActiveExamType.filter((g) => String(g.subject_name).toLowerCase().includes(q));
-  }, [groupsForActiveExamType, query]);
-
-  // Lookup for subject_id -> display info (used to build SelectedSubject objects if parent wants structured mode)
-  const selectedLookup = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        exam_type_id: string;
-        subject_name: string;
-        exam_board_name: string;
-        exam_board_id: string;
-      }
-    >();
-
-    for (const g of groups) {
-      for (const b of (g as any).boards || []) {
-        if (!b?.subject_id) continue;
-        map.set(String(b.subject_id), {
-          exam_type_id: String(g.exam_type_id),
-          subject_name: String(g.subject_name),
-          exam_board_name: String(b.exam_board_name),
-          exam_board_id: String(b.exam_board_id),
-        });
-      }
+  // For quick lookup: selected subject by (exam_type_id + subject_name)
+  const selectedByGroupKey = useMemo(() => {
+    const map = new Map<string, SelectedSubject>();
+    for (const s of selected) {
+      const key = `${String(s.exam_type_id)}|${String(s.subject_name)}`;
+      map.set(key, s);
     }
-
     return map;
-  }, [groups]);
+  }, [selected]);
 
-  function emitSelection(nextIds: string[]) {
-    const ids = uniq(nextIds);
-
-    if (isIdMode(props)) {
-      props.onChangeSelectedSubjectIds(ids);
-      return;
-    }
-
-    // Structured mode: rebuild objects from lookup (best-effort)
-    const items: SelectedSubject[] = ids.map((id) => {
-      const info = selectedLookup.get(String(id));
-      return {
-        subject_id: String(id),
-        exam_type_id: info?.exam_type_id,
-        subject_name: info?.subject_name,
-        exam_board_id: info?.exam_board_id,
-        exam_board_name: info?.exam_board_name,
-      };
-    });
-
-    (props as StructuredModeProps).onChange(items);
-  }
-
-  function isGroupSelected(group: SubjectGroupRow): boolean {
-    const ids = ((group as any).boards || []).map((b: any) => String(b.subject_id));
-    return ids.some((id: string) => selectedSubjectIds.includes(id));
-  }
-
-  function getSelectedIdForGroup(group: SubjectGroupRow): string | null {
-    const ids = ((group as any).boards || []).map((b: any) => String(b.subject_id));
-    const found = ids.find((id: string) => selectedSubjectIds.includes(id));
-    return found ?? null;
-  }
-
-  function openBoardPicker(group: SubjectGroupRow) {
-    setActiveCtx({
+  function openBoardModal(group: SubjectGroupRow) {
+    setModalCtx({
       exam_type_id: String(group.exam_type_id),
       subject_name: String(group.subject_name),
       icon: (group as any).icon ?? null,
       color: (group as any).color ?? null,
       boards: Array.isArray((group as any).boards) ? (group as any).boards : [],
     });
+    setModalOpen(true);
   }
 
-  function clearActivePicker() {
-    setActiveCtx(null);
+  function closeModal() {
+    setModalOpen(false);
+    setModalCtx(null);
   }
 
-  function setSelectionForActive(chosen: SubjectGroupBoardOption) {
-    if (!activeCtx) return;
+  function isGroupSelected(group: SubjectGroupRow): boolean {
+    const key = `${String(group.exam_type_id)}|${String(group.subject_name)}`;
+    return selectedByGroupKey.has(key);
+  }
 
-    // Rule: one board per (exam_type_id + subject_name)
-    const next = new Set(selectedSubjectIds);
+  function removeSelection(examTypeId: string, subjectName: string) {
+    const key = `${String(examTypeId)}|${String(subjectName)}`;
+    const next = selected.filter((s) => `${String(s.exam_type_id)}|${String(s.subject_name)}` !== key);
+    props.onChange(next);
+  }
 
-    // Remove any previous selection for this subject group
-    for (const b of activeCtx.boards || []) {
-      if (b?.subject_id) next.delete(String(b.subject_id));
+  function setSelectionForGroup(ctx: BoardPickContext, chosen: SubjectGroupBoardOption) {
+    // One choice per (exam_type_id + subject_name)
+    const groupKey = `${String(ctx.exam_type_id)}|${String(ctx.subject_name)}`;
+
+    const next: SelectedSubject[] = selected.filter(
+      (s) => `${String(s.exam_type_id)}|${String(s.subject_name)}` !== groupKey
+    );
+
+    const subject_id = String((chosen as any).subject_id ?? "");
+    const exam_board_id = String((chosen as any).exam_board_id ?? "");
+    const exam_board_name_raw = String((chosen as any).exam_board_name ?? "");
+
+    if (!subject_id || !exam_board_id || !exam_board_name_raw) {
+      // If the backend didn't give us a valid selectable row, don't pretend we selected anything.
+      // Just close the modal.
+      closeModal();
+      return;
     }
 
-    // Add chosen
-    next.add(String(chosen.subject_id));
+    const normalised = normaliseNotSureLabel(exam_board_name_raw);
 
-    emitSelection(Array.from(next));
-    clearActivePicker();
-  }
+    next.push({
+      subject_id,
+      exam_type_id: String(ctx.exam_type_id),
+      subject_name: String(ctx.subject_name),
+      exam_board_id,
+      exam_board_name: normalised.label,
+    });
 
-  function removeSelection(subjectId: string) {
-    emitSelection(selectedSubjectIds.filter((id) => id !== subjectId));
+    props.onChange(next);
+    closeModal();
   }
 
   function onContinue() {
     if (examTypeIds.length === 0) return;
-
     const isLast = activeExamTypeIndex >= examTypeIds.length - 1;
     if (isLast) props.onDone();
-    else {
-      setActiveExamTypeIndex((i) => Math.min(examTypeIds.length - 1, i + 1));
-      setQuery("");
-      setActiveCtx(null);
-    }
+    else setActiveExamTypeIndex((i) => Math.min(examTypeIds.length - 1, i + 1));
   }
 
   function onBack() {
     if (activeExamTypeIndex === 0) props.onBackToExamTypes();
-    else {
-      setActiveExamTypeIndex((i) => Math.max(0, i - 1));
-      setQuery("");
-      setActiveCtx(null);
-    }
+    else setActiveExamTypeIndex((i) => Math.max(0, i - 1));
   }
 
-  // TEMP label fallback. If you already have an exam type name map in parent, pass it in later.
-  const examTypeLabel = (_examTypeId: string) => "Exam";
+  // Simple label placeholder (wire in your exam type name map later)
+  function examTypeLabel(_examTypeId: string) {
+    return "Exam";
+  }
 
-  // ---- Rendering helpers ----
-  const activeGroupKey = activeCtx ? `${activeCtx.exam_type_id}:${activeCtx.subject_name}` : null;
+  const selectedForActiveExamType = useMemo(() => {
+    if (!activeExamTypeId) return [];
+    return selected.filter((s) => String(s.exam_type_id) === String(activeExamTypeId));
+  }, [selected, activeExamTypeId]);
 
   return (
     <div className="mt-2">
@@ -260,189 +219,92 @@ export default function SubjectBoardStep(props: Props) {
         </div>
 
         {activeExamTypeId ? (
-          <div className="rounded-2xl border bg-white px-3 py-2 text-sm">
+          <div className="rounded-xl border bg-white px-3 py-2 text-sm">
             <div className="text-xs text-gray-500">Selecting for</div>
-            <div className="font-medium">{examTypeLabel(String(activeExamTypeId))}</div>
+            <div className="font-medium">{examTypeLabel(activeExamTypeId)}</div>
           </div>
         ) : null}
       </div>
 
       {error ? (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
       ) : null}
 
-      {/* Search bar */}
-      <div className="mt-4">
-        <div className="rounded-2xl border bg-white px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for a subject"
-              className="w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Subjects list */}
       <div className="mt-4">
         {loading ? (
-          <div className="rounded-2xl border bg-white p-4 text-sm text-gray-600 shadow-sm">Loading subjects…</div>
+          <div className="rounded-xl border bg-white p-4 text-sm text-gray-600">Loading subjects…</div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {filteredGroups.map((g) => {
-              const key = `${g.exam_type_id}:${g.subject_name}`;
-              const selected = isGroupSelected(g);
-              const selectedId = getSelectedIdForGroup(g);
-              const selectedInfo = selectedId ? selectedLookup.get(String(selectedId)) : null;
-              const isActive = activeGroupKey === key;
+          // Bigger, clearer cards: fewer columns + larger min height
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groupsForActiveExamType.map((g) => {
+              const selectedFlag = isGroupSelected(g);
+              const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
 
               return (
-                <div key={key} className="rounded-2xl border bg-white shadow-sm">
-                  {/* Row */}
-                  <button
-                    type="button"
-                    onClick={() => openBoardPicker(g)}
-                    className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-4 text-left hover:bg-gray-50"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      {/* Icon dot (colour if available) */}
-                      <div
-                        className="h-9 w-9 rounded-full border flex items-center justify-center text-xs font-semibold"
-                        style={{
-                          backgroundColor: (g as any).color ? String((g as any).color) : undefined,
-                          borderColor: (g as any).color ? String((g as any).color) : undefined,
-                        }}
-                      >
-                        {/* If you have real icons later, swap this out */}
-                        <span className="text-gray-700">{String(g.subject_name).slice(0, 1).toUpperCase()}</span>
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="text-base font-semibold leading-snug">{g.subject_name}</div>
-                        <div className="mt-1 text-xs text-gray-500">
-                          {Array.isArray((g as any).boards) ? (g as any).boards.length : 0} boards
-                          {selectedInfo?.exam_board_name ? (
-                            <>
-                              <span className="mx-2 text-gray-300">•</span>
-                              <span className="text-gray-700">{selectedInfo.exam_board_name}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
+                <button
+                  key={`${String(g.exam_type_id)}:${String(g.subject_name)}`}
+                  type="button"
+                  onClick={() => openBoardModal(g)}
+                  className={[
+                    "rounded-2xl border bg-white text-left shadow-sm transition",
+                    "hover:shadow-md",
+                    selectedFlag ? "border-black" : "border-gray-200",
+                    "p-5",
+                    "min-h-[104px]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-semibold">{String(g.subject_name)}</div>
+                      <div className="mt-1 text-sm text-gray-600">{boardsCount} boards</div>
                     </div>
 
-                    {/* Checkbox feel */}
-                    <div className="shrink-0">
-                      <div
-                        className={[
-                          "h-6 w-6 rounded-md border flex items-center justify-center",
-                          selected ? "border-black bg-black" : "border-gray-300 bg-white",
-                        ].join(" ")}
-                      >
-                        {selected ? <span className="text-white text-sm leading-none">✓</span> : null}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Inline board picker panel (matches your original design behaviour) */}
-                  {isActive && activeCtx ? (
-                    <div className="border-t px-4 pb-4">
-                      <div className="mt-4 rounded-2xl border bg-white p-4">
-                        <div className="text-base font-semibold">Choose an exam board for {activeCtx.subject_name}</div>
-                        <div className="mt-1 text-sm text-gray-600">
-                          You can always add it later if you’re not sure.
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {(activeCtx.boards || []).map((b) => {
-                            const isChosen = selectedSubjectIds.includes(String(b.subject_id));
-                            return (
-                              <button
-                                key={String(b.exam_board_id)}
-                                type="button"
-                                onClick={() => setSelectionForActive(b)}
-                                className={[
-                                  "rounded-full border px-4 py-2 text-sm",
-                                  isChosen ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50",
-                                ].join(" ")}
-                              >
-                                {b.exam_board_name}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => clearActivePicker()}
-                            className="rounded-full border bg-white px-4 py-2 text-sm hover:bg-gray-50"
-                          >
-                            I’m not sure
-                          </button>
-
-                          {selectedId ? (
-                            <button
-                              type="button"
-                              onClick={() => removeSelection(String(selectedId))}
-                              className="rounded-full border bg-white px-4 py-2 text-sm hover:bg-gray-50"
-                            >
-                              Remove selection
-                            </button>
-                          ) : null}
-                        </div>
-
-                        {(activeCtx.boards || []).length === 0 ? (
-                          <div className="mt-4 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
-                            No exam boards found for this subject.
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+                    {selectedFlag ? (
+                      <span className="rounded-full border border-black px-3 py-1 text-xs font-medium">
+                        Selected
+                      </span>
+                    ) : (
+                      <span className="rounded-full border px-3 py-1 text-xs text-gray-700">Choose</span>
+                    )}
+                  </div>
+                </button>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* Selected chips (kept, but clearer) */}
       <div className="mt-6">
         <div className="text-sm font-medium">Selected</div>
 
         <div className="mt-2 flex flex-wrap gap-2">
-          {selectedSubjectIds.length === 0 ? (
+          {selectedForActiveExamType.length === 0 ? (
             <div className="text-sm text-gray-600">No subjects yet.</div>
           ) : (
-            selectedSubjectIds.map((id) => {
-              const info = selectedLookup.get(String(id));
-              if (!info) return null;
+            selectedForActiveExamType.map((s) => (
+              <div
+                key={`${s.exam_type_id}|${s.subject_name}`}
+                className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm"
+              >
+                <span className="font-medium">{s.subject_name}</span>
+                <span className="text-gray-500">·</span>
+                <span className="text-gray-700">{s.exam_board_name}</span>
 
-              return (
-                <div key={id} className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm">
-                  <span className="text-xs text-gray-500">{examTypeLabel(info.exam_type_id)}</span>
-                  <span className="font-medium">{info.subject_name}</span>
-                  <span className="text-gray-500">·</span>
-                  <span className="text-gray-700">{info.exam_board_name}</span>
-
-                  <button
-                    type="button"
-                    className="ml-1 rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
-                    onClick={() => removeSelection(String(id))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })
+                <button
+                  type="button"
+                  className="ml-1 rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
+                  onClick={() => removeSelection(s.exam_type_id, s.subject_name)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Nav */}
       <div className="mt-6 flex items-center justify-between">
         <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={onBack}>
           Back
@@ -451,12 +313,82 @@ export default function SubjectBoardStep(props: Props) {
         <button
           type="button"
           className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-          disabled={selectedSubjectIds.length === 0}
+          disabled={selectedForActiveExamType.length === 0}
           onClick={onContinue}
         >
           Continue
         </button>
       </div>
+
+      {/* Modal: choose exam board */}
+      {modalOpen && modalCtx ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-gray-500">Choose exam board</div>
+                <div className="text-lg font-semibold">{modalCtx.subject_name}</div>
+                <div className="mt-1 text-sm text-gray-600">You can always add it later if you’re not sure.</div>
+              </div>
+
+              <button type="button" className="rounded-lg border px-3 py-1 text-sm" onClick={closeModal}>
+                Close
+              </button>
+            </div>
+
+            {(() => {
+              const rawBoards = Array.isArray(modalCtx.boards) ? modalCtx.boards : [];
+
+              // Normalise labels + identify not-sure options
+              const boards = rawBoards
+                .map((b) => {
+                  const name = String((b as any).exam_board_name ?? "");
+                  const n = normaliseNotSureLabel(name);
+                  return { ...b, _label: n.label, _isNotSure: n.isNotSure };
+                })
+                .filter((b) => (b as any).exam_board_id); // guard against junk rows
+
+              const normalBoards = boards.filter((b) => !(b as any)._isNotSure);
+              const notSureBoards = boards.filter((b) => (b as any)._isNotSure);
+
+              // Keep exactly one not-sure option if present in data
+              const notSureOne = notSureBoards.slice(0, 1);
+
+              return (
+                <div className="mt-4 space-y-2">
+                  {normalBoards.map((b: any) => (
+                    <button
+                      key={String(b.exam_board_id)}
+                      type="button"
+                      onClick={() => setSelectionForGroup(modalCtx, b)}
+                      className="w-full rounded-xl border bg-white px-4 py-3 text-left text-sm hover:bg-gray-50"
+                    >
+                      <div className="font-medium">{String(b._label)}</div>
+                    </button>
+                  ))}
+
+                  {notSureOne.map((b: any) => (
+                    <button
+                      key={`not-sure-${String(b.exam_board_id)}`}
+                      type="button"
+                      onClick={() => setSelectionForGroup(modalCtx, b)}
+                      className="w-full rounded-xl border bg-white px-4 py-3 text-left text-sm hover:bg-gray-50"
+                    >
+                      <div className="font-medium">I’m not sure</div>
+                    </button>
+                  ))}
+
+                  {normalBoards.length === 0 && notSureOne.length === 0 ? (
+                    <div className="mt-2 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
+                      No exam boards found for this subject.
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
