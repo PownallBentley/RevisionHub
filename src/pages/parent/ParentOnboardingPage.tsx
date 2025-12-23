@@ -1,13 +1,13 @@
 // src/pages/parent/ParentOnboardingPage.tsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import StepShell from "../../components/parentOnboarding/StepShell";
 import ChildDetailsStep, { ChildDetails } from "../../components/parentOnboarding/steps/ChildDetailsStep";
 import GoalStep from "../../components/parentOnboarding/steps/GoalStep";
 import ExamTypeStep from "../../components/parentOnboarding/steps/ExamTypeStep";
-import SubjectBoardStep, { type SubjectSelection } from "../../components/parentOnboarding/steps/SubjectBoardStep";
+import SubjectBoardStep, { type SelectedSubject } from "../../components/parentOnboarding/steps/SubjectBoardStep";
 import NeedsStep, { NeedClusterSelection } from "../../components/parentOnboarding/steps/NeedsStep";
 import AvailabilityStep, { Availability } from "../../components/parentOnboarding/steps/AvailabilityStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
@@ -25,13 +25,6 @@ const defaultAvailability: Availability = {
   friday: { sessions: 0, session_pattern: "p45" },
   saturday: { sessions: 1, session_pattern: "p70" },
   sunday: { sessions: 0, session_pattern: "p45" },
-};
-
-type ExamTypeMeta = {
-  id: string;
-  code: string;
-  name: string;
-  sort_order: number;
 };
 
 function normaliseStringArray(value: unknown): string[] {
@@ -69,17 +62,6 @@ async function copyToClipboard(text: string) {
   }
 }
 
-/**
- * Steps:
- * 0 ChildDetails
- * 1 Goal
- * 2 ExamTypes (multi-select)
- * 3 Subjects (runs once per selected exam type; GCSE page then IGCSE page etc.)
- * 4 Needs
- * 5 Availability
- * 6 Confirm + Submit
- * 7 Invite child (code/link)
- */
 export default function ParentOnboardingPage() {
   const navigate = useNavigate();
   const { refresh, user } = useAuth();
@@ -102,79 +84,42 @@ export default function ParentOnboardingPage() {
   const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
   const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
 
-  // NEW: board-aware selections
-  const [subjectSelections, setSubjectSelections] = useState<SubjectSelection[]>([]);
+  // ✅ structured selections for chips + per-exam grouping
+  const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
 
   const [needClusters, setNeedClusters] = useState<NeedClusterSelection>([]);
   const [availability, setAvailability] = useState<Availability>(defaultAvailability);
 
-  // NEW: exam type metas + cursor for step 3
-  const [examTypesMeta, setExamTypesMeta] = useState<ExamTypeMeta[]>([]);
-  const [examTypeCursor, setExamTypeCursor] = useState(0);
-
-  // Load exam type meta (id/name/sort order)
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadExamTypes() {
-      try {
-        const { data, error } = await supabase.rpc("rpc_list_exam_types");
-        if (!mounted) return;
-
-        if (error || !Array.isArray(data)) setExamTypesMeta([]);
-        else setExamTypesMeta(data as ExamTypeMeta[]);
-      } catch {
-        if (mounted) setExamTypesMeta([]);
-      }
-    }
-
-    loadExamTypes();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const selectedExamTypesOrdered = useMemo(() => {
-    const ids = new Set(normaliseStringArray(examTypeIds));
-    const picked = examTypesMeta.filter((e) => ids.has(e.id));
-    picked.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
-    return picked;
-  }, [examTypeIds, examTypesMeta]);
-
-  const activeExamType = useMemo(() => {
-    return selectedExamTypesOrdered[examTypeCursor] ?? null;
-  }, [selectedExamTypesOrdered, examTypeCursor]);
-
   const payload = useMemo(() => {
-    const subject_ids = (subjectSelections ?? []).map((s) => s.subject_id).filter(Boolean);
+    const subject_ids = (selectedSubjects ?? [])
+      .map((s) => s.subject_id)
+      .filter(Boolean)
+      .map(String);
+
     const need_clusters = normaliseNeedClusters(needClusters);
 
     return {
       child,
       goal_code: goalCode ?? null,
       exam_timeline: "6_weeks",
-
-      // IMPORTANT: board-specific subject IDs
       subject_ids,
-
       need_clusters,
-
       settings: {
         availability,
         urgency: { mode: "exam_date", exam_date: "" },
       },
     };
-  }, [child, goalCode, subjectSelections, needClusters, availability]);
+  }, [child, goalCode, selectedSubjects, needClusters, availability]);
 
   const canNext = useMemo(() => {
     if (step === 0) return !!child.first_name?.trim();
     if (step === 1) return !!goalCode;
     if (step === 2) return normaliseStringArray(examTypeIds).length > 0;
 
-    // step 3 owns its own validation (must pick at least one subject for that exam type)
+    // Step 3 owns nav
     if (step === 4) return true;
-
     if (step === 5) return Object.values(availability).some((d) => (d?.sessions ?? 0) > 0);
+
     return true;
   }, [step, child.first_name, goalCode, examTypeIds, availability]);
 
@@ -221,6 +166,7 @@ export default function ParentOnboardingPage() {
 
     try {
       const result: any = await rpcParentCreateChildAndPlan(payload);
+
       await refresh();
 
       const childId =
@@ -232,6 +178,7 @@ export default function ParentOnboardingPage() {
       const inviteResult = await rpcCreateChildInvite(childId);
       if (!inviteResult.ok || !inviteResult.invite) {
         setError(inviteResult.error ?? "Plan created, but failed to generate invite");
+        setBusy(false);
         return;
       }
 
@@ -249,54 +196,12 @@ export default function ParentOnboardingPage() {
     return `${window.location.origin}${invite.invitation_link}`;
   }, [invite]);
 
-  // Step 3 handlers
-  function resetSubjectsForExamTypeChange(nextExamTypeIds: string[]) {
-    setExamTypeIds(normaliseStringArray(nextExamTypeIds));
-    setSubjectSelections([]);
-    setExamTypeCursor(0);
-  }
-
-  function subjectsPickedForExamType(examTypeId: string) {
-    return (subjectSelections ?? []).some((s) => s.exam_type_id === examTypeId);
-  }
-
-  async function handleSubjectsContinue() {
-    setError(null);
-
-    if (!activeExamType) {
-      setError("No exam type selected.");
-      return;
-    }
-
-    if (!subjectsPickedForExamType(activeExamType.id)) {
-      setError(`Please pick at least one subject for ${activeExamType.name}.`);
-      return;
-    }
-
-    // Move to next selected exam type, or proceed to Needs
-    const nextIndex = examTypeCursor + 1;
-    if (nextIndex < selectedExamTypesOrdered.length) {
-      setExamTypeCursor(nextIndex);
-      return;
-    }
-
-    setStep(4);
-  }
-
-  function handleSubjectsBack() {
-    setError(null);
-
-    if (examTypeCursor > 0) {
-      setExamTypeCursor((n) => Math.max(0, n - 1));
-      return;
-    }
-
-    // back to exam type selection
-    setStep(2);
-  }
-
   return (
-    <StepShell title="Set up your child’s revision plan" subtitle="A few steps. You can change things later." error={error}>
+    <StepShell
+      title="Set up your child’s revision plan"
+      subtitle="A few steps. You can change things later."
+      error={error}
+    >
       {step === 0 && <ChildDetailsStep value={child} onChange={setChild} />}
 
       {step === 1 && <GoalStep value={goalCode} onChange={setGoalCode} />}
@@ -305,18 +210,19 @@ export default function ParentOnboardingPage() {
         <ExamTypeStep
           value={examTypeIds}
           onChange={(ids) => {
-            resetSubjectsForExamTypeChange(ids);
+            setExamTypeIds(normaliseStringArray(ids));
+            setSelectedSubjects([]); // reset subjects if exams change
           }}
         />
       )}
 
-      {step === 3 && activeExamType && (
+      {step === 3 && (
         <SubjectBoardStep
-          examType={{ id: activeExamType.id, name: activeExamType.name }}
-          value={subjectSelections}
-          onChange={setSubjectSelections}
-          onBack={handleSubjectsBack}
-          onContinue={handleSubjectsContinue}
+          examTypeIds={normaliseStringArray(examTypeIds)}
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          onBackToExamTypes={() => setStep(2)}
+          onDone={() => setStep(4)}
         />
       )}
 
@@ -329,7 +235,9 @@ export default function ParentOnboardingPage() {
       {step === 7 && invite && (
         <div className="mt-2">
           <h3 className="text-lg font-semibold">Invite your child</h3>
-          <p className="mt-1 text-sm text-gray-600">Send this link to your child. They’ll set a password and land straight in Today.</p>
+          <p className="mt-1 text-sm text-gray-600">
+            Send this link to your child. They’ll set a password and land straight in Today.
+          </p>
 
           <div className="mt-4 rounded-xl border bg-white p-4">
             <div className="text-xs text-gray-500">Invite link</div>
@@ -363,17 +271,25 @@ export default function ParentOnboardingPage() {
                 Copy code
               </button>
 
-              <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => navigate("/parent", { replace: true })}>
+              <button
+                type="button"
+                className="rounded-lg border px-4 py-2 text-sm"
+                onClick={() => navigate("/parent", { replace: true })}
+              >
                 Go to dashboard
               </button>
             </div>
 
-            {copied && <div className="mt-3 text-xs text-gray-600">{copied === "link" ? "Link copied." : "Code copied."}</div>}
+            {copied && (
+              <div className="mt-3 text-xs text-gray-600">
+                {copied === "link" ? "Link copied." : "Code copied."}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Bottom nav (Step 3 owns its own nav; Invite step has its own buttons) */}
+      {/* Default nav (Subject step owns its own Continue button) */}
       {step !== 3 && step < 7 ? (
         <div className="mt-6 flex items-center justify-between">
           <button
@@ -390,16 +306,7 @@ export default function ParentOnboardingPage() {
               type="button"
               className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
               disabled={!canNext || busy}
-              onClick={() => {
-                // move forward
-                if (step === 2) {
-                  // entering subjects: reset cursor and go to step 3
-                  setExamTypeCursor(0);
-                  setStep(3);
-                } else {
-                  setStep((s) => Math.min(6, s + 1));
-                }
-              }}
+              onClick={() => setStep((s) => Math.min(6, s + 1))}
             >
               Next
             </button>
