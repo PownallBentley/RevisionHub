@@ -9,6 +9,8 @@ import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
 import ReflectionStep from "./sessionSteps/ReflectionStep";
 import CompleteStep from "./sessionSteps/CompleteStep";
+import SessionHeader from "../../components/session/SessionHeader";
+import ProgressTracker from "../../components/session/ProgressTracker";
 
 type StartPlannedSessionRow = {
   out_planned_session_id: string;
@@ -457,65 +459,111 @@ export default function SessionRun() {
     step_percent: computeProgress(currentStepKey),
   };
 
+  const stepPhaseName = {
+    recall: "Activating memory",
+    reinforce: "Building understanding",
+    practice: "Applying knowledge",
+    reflection: "Reflecting on learning",
+    complete: "Session complete",
+  }[currentStepKey] || "Learning";
+
+  const stepLabels: Record<string, string> = {
+    recall: "Recall",
+    reinforce: currentStepRow?.current_item_index !== null && currentStepRow?.current_item_index !== undefined && currentStepRow?.total_items
+      ? `Card ${currentStepRow.current_item_index + 1} of ${currentStepRow.total_items}`
+      : "Reinforcement",
+    practice: currentStepRow?.current_item_index !== null && currentStepRow?.current_item_index !== undefined && currentStepRow?.total_items
+      ? `Question ${currentStepRow.current_item_index + 1} of ${currentStepRow.total_items}`
+      : "Practice question",
+    reflection: "Final reflection",
+  };
+
+  const currentStepNum = idxOf(currentStepKey) + 1;
+  const totalSteps = currentStepKey === "complete" ? currentStepNum : STEP_ORDER.length;
+  const timeRemaining = headerMeta.session_duration_minutes
+    ? `About ${headerMeta.session_duration_minutes} min left`
+    : undefined;
+
   return (
-    <div className="min-h-screen bg-neutral-bg px-6 py-8">
-      <div className="max-w-5xl mx-auto">
-        {currentStepKey === "recall" && (
-          <RecallStep
-            overview={headerMeta}
-            payload={effectivePayloadForStep}
-            saving={saving}
-            onPatch={patchCurrentStep}
-            onNext={onNext}
-            onBack={onBack}
-            onExit={handleExit}
-          />
-        )}
+    <div className="min-h-screen bg-gray-50">
+      <SessionHeader
+        subjectName={headerMeta.subject_name}
+        subjectIcon="🧪"
+        sessionInfo={`Session 1 • ${headerMeta.topic_name}`}
+        showBack={false}
+        showExit={currentStepKey !== "complete"}
+        onExit={handleExit}
+      />
 
-        {currentStepKey === "reinforce" && (
-          <ReinforceStep
-            overview={headerMeta}
-            payload={effectivePayloadForStep}
-            saving={saving}
-            onPatch={patchCurrentStep}
-            onNext={onNext}
-            onBack={onBack}
-            onExit={handleExit}
-          />
-        )}
+      {currentStepKey !== "complete" && (
+        <ProgressTracker
+          phaseName={stepPhaseName}
+          currentStep={currentStepNum}
+          totalSteps={totalSteps}
+          timeRemaining={timeRemaining}
+          stepLabel={stepLabels[currentStepKey]}
+        />
+      )}
 
-        {currentStepKey === "practice" && (
-          <PracticeStep
-            overview={headerMeta}
-            payload={effectivePayloadForStep}
-            saving={saving}
-            onPatch={patchCurrentStep}
-            onNext={onNext}
-            onBack={onBack}
-            onExit={handleExit}
-          />
-        )}
+      <div className="px-6 py-8">
+        <div className="max-w-5xl mx-auto">
+          {currentStepKey === "recall" && (
+            <RecallStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              saving={saving}
+              onPatch={patchCurrentStep}
+              onNext={onNext}
+              onBack={onBack}
+              onExit={handleExit}
+            />
+          )}
 
-        {currentStepKey === "reflection" && (
-          <ReflectionStep
-            overview={headerMeta}
-            payload={effectivePayloadForStep}
-            saving={saving}
-            onPatch={patchCurrentStep}
-            onNext={onNext}
-            onBack={onBack}
-            onExit={handleExit}
-            onFinish={finishSession}
-          />
-        )}
+          {currentStepKey === "reinforce" && (
+            <ReinforceStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              saving={saving}
+              onPatch={patchCurrentStep}
+              onNext={onNext}
+              onBack={onBack}
+              onExit={handleExit}
+            />
+          )}
 
-        {currentStepKey === "complete" && (
-          <CompleteStep
-            overview={headerMeta}
-            payload={effectivePayloadForStep}
-            onExit={handleExit}
-          />
-        )}
+          {currentStepKey === "practice" && (
+            <PracticeStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              saving={saving}
+              onPatch={patchCurrentStep}
+              onNext={onNext}
+              onBack={onBack}
+              onExit={handleExit}
+            />
+          )}
+
+          {currentStepKey === "reflection" && (
+            <ReflectionStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              saving={saving}
+              onPatch={patchCurrentStep}
+              onNext={onNext}
+              onBack={onBack}
+              onExit={handleExit}
+              onFinish={finishSession}
+            />
+          )}
+
+          {currentStepKey === "complete" && (
+            <CompleteStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              onExit={handleExit}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -19,12 +19,9 @@ type ReinforceStepProps = {
 };
 
 export default function ReinforceStep({
-  overview,
   payload,
   saving,
   onNext,
-  onBack,
-  onExit,
 }: ReinforceStepProps) {
   const reinforce = payload?.reinforce ?? {};
   const cards = Array.isArray(reinforce.cards) ? reinforce.cards : [];
@@ -54,152 +51,171 @@ export default function ReinforceStep({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-green-600 transition-all duration-300"
-            style={{ width: `${overview.step_percent}%` }}
-          />
-        </div>
-        <div className="mt-2 text-sm text-gray-500">
-          Step 2 of 4: Reinforce
-        </div>
-      </div>
-
+    <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">{overview.subject_name}</h1>
-        <p className="mt-2 text-lg text-gray-600">{overview.topic_name}</p>
+      <div className="px-8 py-6 border-b border-gray-200">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center">
+            <svg className="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Reinforcing concepts</h2>
+            <p className="text-sm text-gray-600">Review these key ideas</p>
+          </div>
+          {hasCards && !showWorkedExample && (
+            <div className="ml-auto text-right">
+              <div className="text-sm font-medium text-gray-900">Card {currentCardIndex + 1} of {cards.length}</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Flashcards */}
-      {hasCards && !showWorkedExample ? (
-        <div className="mb-6">
-          <div className="mb-4 text-sm text-gray-500">
-            Card {currentCardIndex + 1} of {cards.length}
-          </div>
-
-          <div className="min-h-[300px] p-8 bg-gradient-to-br from-green-50 to-blue-50 border border-green-200 rounded-2xl flex flex-col items-center justify-center">
-            {!showAnswer ? (
-              <div className="text-center">
-                <p className="text-2xl font-semibold text-gray-900 mb-6">
-                  {currentCard?.front || "Question"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowAnswer(true)}
-                  className="px-6 py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700"
-                >
-                  Show Answer
-                </button>
+      {/* Content */}
+      <div className="p-8">
+        {/* Flashcards */}
+        {hasCards && !showWorkedExample ? (
+          <div>
+            <div className="min-h-[400px] p-12 bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 rounded-3xl flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-white shadow-lg flex items-center justify-center mb-8">
+                <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
               </div>
-            ) : (
-              <div className="text-center w-full">
-                <p className="text-lg text-gray-700 mb-2 font-medium">Question:</p>
-                <p className="text-xl text-gray-900 mb-6">{currentCard?.front}</p>
-                <div className="pt-6 border-t border-green-300">
-                  <p className="text-lg text-gray-700 mb-2 font-medium">Answer:</p>
-                  <p className="text-xl text-gray-900">{currentCard?.back || "No answer provided"}</p>
+
+              {!showAnswer ? (
+                <div className="max-w-2xl">
+                  <h3 className="text-3xl font-bold text-gray-900 mb-8">
+                    {currentCard?.front || "Question"}
+                  </h3>
+                  <p className="text-gray-600 mb-8">Think about what you learned...</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAnswer(true)}
+                    className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-lg hover:bg-indigo-700 transition-colors shadow-lg"
+                  >
+                    Show answer
+                  </button>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Card Navigation */}
-          <div className="mt-6 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handlePrevCard}
-              disabled={currentCardIndex === 0}
-              className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-30"
-            >
-              Previous
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNextCard}
-              disabled={!showAnswer}
-              className="px-5 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 font-semibold disabled:opacity-50"
-            >
-              {currentCardIndex < cards.length - 1 ? "Next Card" : workedExample ? "See Example" : "Continue"}
-            </button>
-          </div>
-        </div>
-      ) : showWorkedExample && workedExample ? (
-        <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Worked Example</h2>
-
-          <div className="p-6 bg-purple-50 border border-purple-200 rounded-2xl">
-            {workedExample.title && (
-              <h3 className="text-xl font-semibold text-purple-900 mb-4">{workedExample.title}</h3>
-            )}
-
-            {Array.isArray(workedExample.steps) && workedExample.steps.length > 0 && (
-              <div className="space-y-3 mb-4">
-                {workedExample.steps.map((step: string, idx: number) => (
-                  <div key={idx} className="flex gap-3">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white text-sm flex items-center justify-center font-semibold">
-                      {idx + 1}
-                    </div>
-                    <p className="text-gray-800 pt-0.5">{step}</p>
+              ) : (
+                <div className="max-w-2xl w-full">
+                  <div className="bg-white rounded-2xl p-8 shadow-lg">
+                    <p className="text-lg text-gray-900 leading-relaxed">
+                      {currentCard?.back || "No answer provided"}
+                    </p>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Card Navigation */}
+            <div className="mt-8 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handlePrevCard}
+                disabled={currentCardIndex === 0}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
+
+              <div className="flex gap-1.5">
+                {cards.map((_: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      idx === currentCardIndex
+                        ? "bg-indigo-600"
+                        : idx < currentCardIndex
+                        ? "bg-green-500"
+                        : "bg-gray-300"
+                    }`}
+                  />
                 ))}
               </div>
-            )}
 
-            {workedExample.final_answer && (
-              <div className="mt-6 pt-6 border-t border-purple-300">
-                <p className="text-sm font-semibold text-purple-900 mb-2">Final Answer:</p>
-                <p className="text-lg text-gray-900">{workedExample.final_answer}</p>
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={handleNextCard}
+                disabled={!showAnswer}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {currentCardIndex < cards.length - 1 ? "Next card" : workedExample ? "See example" : "Continue"}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
+        ) : showWorkedExample && workedExample ? (
+          <div>
+            <div className="mb-6 flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center">
+                <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Worked example</h3>
+                <p className="text-sm text-gray-600">Follow along step by step</p>
+              </div>
+              <div className="ml-auto text-sm text-gray-600">Step 3 of 4</div>
+            </div>
 
-          <div className="mt-6">
+            <div className="p-8 bg-blue-50 border border-blue-200 rounded-2xl">
+              {workedExample.title && (
+                <h4 className="text-xl font-semibold text-blue-900 mb-6">{workedExample.title}</h4>
+              )}
+
+              {Array.isArray(workedExample.steps) && workedExample.steps.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  {workedExample.steps.map((step: string, idx: number) => (
+                    <div key={idx} className="flex gap-4">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-600 text-white text-sm flex items-center justify-center font-semibold">
+                        {idx + 1}
+                      </div>
+                      <p className="text-gray-800 pt-1 leading-relaxed">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {workedExample.final_answer && (
+                <div className="mt-6 pt-6 border-t border-blue-300">
+                  <p className="text-sm font-semibold text-blue-900 mb-2">Final Answer:</p>
+                  <p className="text-lg text-gray-900">{workedExample.final_answer}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={async () => await onNext()}
+                disabled={saving}
+                className="w-full px-8 py-4 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold text-lg disabled:opacity-50 transition-colors shadow-lg"
+              >
+                {saving ? "Saving..." : "Continue to Practice"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-8 bg-gray-50 border border-gray-200 rounded-2xl">
+            <p className="text-gray-600">No reinforcement content available for this session.</p>
             <button
               type="button"
               onClick={async () => await onNext()}
               disabled={saving}
-              className="w-full px-8 py-3 rounded-xl bg-green-600 text-white hover:bg-green-700 font-semibold disabled:opacity-50"
+              className="mt-4 px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold disabled:opacity-50 transition-colors"
             >
-              {saving ? "Saving..." : "Continue to Practice"}
+              {saving ? "Saving..." : "Continue"}
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="mb-6 p-6 bg-gray-50 border border-gray-200 rounded-xl">
-          <p className="text-gray-600">No reinforcement content available for this session.</p>
-          <button
-            type="button"
-            onClick={async () => await onNext()}
-            disabled={saving}
-            className="mt-4 px-6 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 font-semibold disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Continue"}
-          </button>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center justify-between gap-4 pt-6 border-t">
-        <button
-          type="button"
-          onClick={onBack}
-          className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
-        >
-          Back
-        </button>
-
-        <button
-          type="button"
-          onClick={onExit}
-          className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
-        >
-          Exit
-        </button>
+        )}
       </div>
     </div>
   );
