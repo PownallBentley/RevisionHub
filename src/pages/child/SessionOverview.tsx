@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -27,9 +28,20 @@ type PlannedSessionOverview = {
   topic_name?: string | null;
 };
 
+const subjectIcons: Record<string, string> = {
+  chemistry: "🧪",
+  mathematics: "🔢",
+  "english literature": "📚",
+  physics: "⚛️",
+  biology: "🧬",
+  history: "📜",
+  geography: "🌍",
+};
+
 export default function SessionOverview() {
   const navigate = useNavigate();
   const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,15 +151,15 @@ export default function SessionOverview() {
     return overview.subject_name ?? "Session";
   }, [overview]);
 
-  const subtitle = useMemo(() => {
-    if (!overview) return "";
-    return overview.topic_title ?? overview.topic_name ?? "";
-  }, [overview]);
+  const childName = profile?.full_name || profile?.email?.split("@")[0] || "Student";
+  const avatarUrl = (profile as any)?.avatar_url;
+  const subjectKey = (title || "").toLowerCase();
+  const icon = subjectIcons[subjectKey] || "📖";
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-bg flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6">
           <div className="text-gray-700">Preparing your session…</div>
         </div>
       </div>
@@ -156,8 +168,8 @@ export default function SessionOverview() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-neutral-bg flex items-center justify-center px-6">
-        <div className="max-w-lg w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+        <div className="max-w-lg w-full bg-white rounded-2xl border border-gray-200 p-6">
           <h1 className="text-xl font-semibold text-gray-900">Session</h1>
           <p className="mt-2 text-gray-600">{error}</p>
 
@@ -175,23 +187,188 @@ export default function SessionOverview() {
     );
   }
 
-  // We don’t put revisionSessionId into the URL, but we ensure it exists here.
   return (
-    <div className="min-h-screen bg-neutral-bg px-6 py-10">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-5xl font-semibold tracking-tight text-gray-900">{title}</h1>
-        {subtitle ? <p className="mt-3 text-2xl text-gray-600">Topic: {subtitle}</p> : null}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/child/today")}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Go back"
+            >
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
 
-        <div className="mt-10">
-          <button
-            type="button"
-            disabled={!revisionSessionId}
-            onClick={() => navigate(`/child/session/${plannedSessionId}/run`)}
-            className="px-10 py-4 rounded-2xl bg-brand-purple text-white font-semibold text-xl hover:opacity-95 disabled:opacity-50"
-          >
-            Begin
-          </button>
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-semibold text-gray-900">Revision</h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" aria-label="Help">
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+
+            <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={childName} className="w-9 h-9 rounded-full object-cover" />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-semibold">
+                  {childName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-sm font-medium text-gray-900">{childName}</span>
+            </div>
+          </div>
         </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-6 py-10">
+        {/* Subject Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="w-20 h-20 rounded-3xl bg-indigo-100 flex items-center justify-center text-4xl">
+              {icon}
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">{title}</h2>
+              <p className="text-gray-600 mt-1">Session 2 of 3 today</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 text-sm text-gray-600 mt-4">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              About 20 minutes
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              2 topics to cover
+            </div>
+          </div>
+        </div>
+
+        {/* Session Progress */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Session progress</h3>
+            <span className="text-sm text-gray-600">Not started</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">0 of 8 steps</span>
+            <span className="text-sm font-medium text-indigo-600">Ready to begin</span>
+          </div>
+        </div>
+
+        {/* What You'll Cover Today */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 mb-8">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">What you'll cover today</h3>
+
+          <div className="space-y-4">
+            <div className="flex gap-4 p-6 bg-indigo-50 rounded-2xl">
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-semibold">
+                1
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">Atomic structure</h4>
+                <p className="text-sm text-gray-700 leading-relaxed mb-3">
+                  Understanding protons, neutrons and electrons, and how they determine the properties of elements
+                </p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-indigo-700 text-xs font-medium">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                  Core concept
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-4 p-6 bg-purple-50 rounded-2xl">
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-semibold">
+                2
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">The periodic table</h4>
+                <p className="text-sm text-gray-700 leading-relaxed mb-3">
+                  How elements are arranged in groups and periods, and what this tells us about their behaviour
+                </p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-purple-700 text-xs font-medium">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  Practice skill
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* How This Session Works */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 mb-8">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">How this session works</h3>
+
+          <div className="space-y-5">
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Quick recall</h4>
+                <p className="text-sm text-gray-600">Test what you remember from before</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Learn together</h4>
+                <p className="text-sm text-gray-600">Work through examples step by step</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Try yourself</h4>
+                <p className="text-sm text-gray-600">Practice with instant help available</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Start Button */}
+        <button
+          type="button"
+          disabled={!revisionSessionId}
+          onClick={() => navigate(`/child/session/${plannedSessionId}/run`)}
+          className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg"
+        >
+          Start session
+        </button>
       </div>
     </div>
   );
