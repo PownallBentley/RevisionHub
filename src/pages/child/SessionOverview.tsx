@@ -70,11 +70,11 @@ export default function SessionOverview() {
 
         const subjectRes = await supabase
           .from("subjects")
-          .select("name")
+          .select("subject_name")
           .eq("id", planned.subject_id)
           .maybeSingle();
 
-        if (!subjectRes.error) subjectName = subjectRes.data?.name ?? null;
+        if (!subjectRes.error) subjectName = subjectRes.data?.subject_name ?? null;
 
         const firstTopicId = Array.isArray(planned.topic_ids) ? planned.topic_ids[0] : null;
         if (firstTopicId && isUuid(String(firstTopicId))) {
@@ -98,7 +98,7 @@ export default function SessionOverview() {
         // 2) Start (or resume) the revision session for this planned session
         // Your RPC should be idempotent: start if none exists, else return existing.
         const start = await safeRpc<any>("rpc_start_planned_session", {
-          planned_session_id: id,
+          p_planned_session_id: id,
         });
 
         if (start.error) throw start.error;
