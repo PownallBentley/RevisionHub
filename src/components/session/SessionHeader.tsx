@@ -21,8 +21,8 @@ export default function SessionHeader({
   const navigate = useNavigate();
   const { profile } = useAuth();
 
-  const childName = profile?.full_name || profile?.email?.split("@")[0] || "Student";
-  const avatarUrl = (profile as any)?.avatar_url;
+  const childName = profile?.preferred_name || profile?.first_name || profile?.full_name || profile?.email?.split("@")[0] || "Student";
+  const avatarUrl = profile?.avatar_url;
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">

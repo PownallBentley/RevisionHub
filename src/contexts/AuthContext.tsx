@@ -20,6 +20,9 @@ export type Profile = {
   country: string | null;
   created_at: string | null;
   updated_at: string | null;
+  avatar_url?: string | null;
+  first_name?: string | null;
+  preferred_name?: string | null;
 };
 
 type AuthContextValue = {
@@ -98,6 +101,30 @@ async function fetchMyChildId(): Promise<string | null> {
   return data ? String(data) : null;
 }
 
+async function fetchChildProfile(childId: string): Promise<Partial<Profile> | null> {
+  const { data, error } = await supabase
+    .from("children")
+    .select("id, first_name, preferred_name, avatar_url, email")
+    .eq("id", childId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[auth] fetchChildProfile error:", error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    first_name: data.first_name,
+    preferred_name: data.preferred_name,
+    avatar_url: data.avatar_url,
+    email: data.email,
+    full_name: data.preferred_name || data.first_name,
+  };
+}
+
 async function ensureParentProfile(params: { userId: string; email: string; fullName?: string }): Promise<void> {
   const { userId, email, fullName } = params;
 
@@ -147,7 +174,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       "hydrate signals (profile + childId)"
     );
 
-    setProfile(p);
+    let finalProfile = p;
+
+    if (childId) {
+      const childProfile = await withTimeout(
+        fetchChildProfile(childId),
+        AUTH_TIMEOUT_MS,
+        "fetchChildProfile"
+      );
+
+      if (childProfile) {
+        finalProfile = {
+          ...(p || {}),
+          ...childProfile,
+          role: "child",
+        } as Profile;
+      }
+    }
+
+    setProfile(finalProfile);
     setActiveChildId(childId);
 
     if (p) {

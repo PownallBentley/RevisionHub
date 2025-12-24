@@ -133,8 +133,8 @@ export default function Today() {
     };
   }, [user, childId]);
 
-  const childName = profile?.full_name || profile?.email?.split("@")[0] || "Student";
-  const avatarUrl = (profile as any)?.avatar_url;
+  const childName = profile?.preferred_name || profile?.first_name || profile?.full_name || profile?.email?.split("@")[0] || "Student";
+  const avatarUrl = profile?.avatar_url;
   const totalMinutes = rows.length * 20;
   const todayDate = rows.length > 0 ? rows[0].session_date : todayIsoDateLondonSafe();
 
