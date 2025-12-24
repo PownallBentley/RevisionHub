@@ -105,6 +105,8 @@ export default function SessionOverview() {
 
         // Support a few possible return shapes
         const rId =
+          (start.data as any)?.out_revision_session_id ??
+          (Array.isArray(start.data) ? (start.data[0] as any)?.out_revision_session_id : null) ??
           (start.data as any)?.revision_session_id ??
           (start.data as any)?.id ??
           (Array.isArray(start.data) ? (start.data[0] as any)?.id : null);
