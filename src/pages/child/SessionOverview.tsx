@@ -21,11 +21,17 @@ async function safeRpc<T>(fn: string, args?: Record<string, any>) {
   return first as any;
 }
 
+type TopicInfo = {
+  id: string;
+  topic_name: string;
+};
+
 type PlannedSessionOverview = {
   planned_session_id: string;
-  subject_name?: string | null;
-  topic_title?: string | null;
-  topic_name?: string | null;
+  subject_name: string | null;
+  topic_ids: string[];
+  topics: TopicInfo[];
+  session_duration_minutes: number;
 };
 
 const subjectIcons: Record<string, string> = {
@@ -36,7 +42,16 @@ const subjectIcons: Record<string, string> = {
   biology: "🧬",
   history: "📜",
   geography: "🌍",
+  "religious studies": "🕊️",
 };
+
+const topicColors = [
+  { bg: "bg-indigo-50", number: "bg-indigo-600", text: "text-indigo-700" },
+  { bg: "bg-purple-50", number: "bg-purple-600", text: "text-purple-700" },
+  { bg: "bg-blue-50", number: "bg-blue-600", text: "text-blue-700" },
+  { bg: "bg-teal-50", number: "bg-teal-600", text: "text-teal-700" },
+  { bg: "bg-green-50", number: "bg-green-600", text: "text-green-700" },
+];
 
 export default function SessionOverview() {
   const navigate = useNavigate();
@@ -64,22 +79,18 @@ export default function SessionOverview() {
       setError(null);
 
       try {
-        // 1) Pull overview (lightweight; keep it simple and robust)
-        // If you already have a service function, you can swap this out.
+        // 1) Pull planned session data
         const { data: planned, error: plannedErr } = await supabase
           .from("planned_sessions")
-          .select("id, subject_id, topic_ids")
+          .select("id, subject_id, topic_ids, session_duration_minutes")
           .eq("id", id)
           .maybeSingle();
 
         if (plannedErr) throw plannedErr;
         if (!planned) throw new Error("Session not found.");
 
-        // Optional: enrich display labels (safe even if columns differ)
-        // Topics table column is topic_name (not name)
+        // 2) Get subject name
         let subjectName: string | null = null;
-        let topicTitle: string | null = null;
-
         const subjectRes = await supabase
           .from("subjects")
           .select("subject_name")
@@ -88,15 +99,24 @@ export default function SessionOverview() {
 
         if (!subjectRes.error) subjectName = subjectRes.data?.subject_name ?? null;
 
-        const firstTopicId = Array.isArray(planned.topic_ids) ? planned.topic_ids[0] : null;
-        if (firstTopicId && isUuid(String(firstTopicId))) {
-          const topicRes = await supabase
-            .from("topics")
-            .select("topic_name")
-            .eq("id", String(firstTopicId))
-            .maybeSingle();
+        // 3) Get all topic details
+        const topicIds: string[] = Array.isArray(planned.topic_ids) 
+          ? planned.topic_ids.filter((tid: any) => tid && isUuid(String(tid))).map(String)
+          : [];
 
-          if (!topicRes.error) topicTitle = (topicRes.data as any)?.topic_name ?? null;
+        let topics: TopicInfo[] = [];
+        if (topicIds.length > 0) {
+          const { data: topicsData, error: topicsErr } = await supabase
+            .from("topics")
+            .select("id, topic_name")
+            .in("id", topicIds);
+
+          if (!topicsErr && topicsData) {
+            // Maintain the order from topic_ids
+            topics = topicIds
+              .map(tid => topicsData.find(t => t.id === tid))
+              .filter((t): t is TopicInfo => t !== undefined);
+          }
         }
 
         if (cancelled) return;
@@ -104,18 +124,19 @@ export default function SessionOverview() {
         setOverview({
           planned_session_id: id,
           subject_name: subjectName,
-          topic_title: topicTitle,
+          topic_ids: topicIds,
+          topics,
+          session_duration_minutes: planned.session_duration_minutes ?? 20,
         });
 
-        // 2) Start (or resume) the revision session for this planned session
-        // Your RPC should be idempotent: start if none exists, else return existing.
+        // 4) Start (or resume) the revision session
         const start = await safeRpc<any>("rpc_start_planned_session", {
           p_planned_session_id: id,
         });
 
         if (start.error) throw start.error;
 
-        // Support a few possible return shapes
+        // Support various return shapes
         const rId =
           (start.data as any)?.out_revision_session_id ??
           (Array.isArray(start.data) ? (start.data[0] as any)?.out_revision_session_id : null) ??
@@ -125,7 +146,7 @@ export default function SessionOverview() {
 
         const rIdStr = String(rId ?? "");
         if (!isUuid(rIdStr)) {
-          throw new Error("Couldn’t start the session (no valid revision session id returned).");
+          throw new Error("Couldn't start the session (no valid revision session id returned).");
         }
 
         if (cancelled) return;
@@ -187,6 +208,9 @@ export default function SessionOverview() {
     );
   }
 
+  const topicCount = overview?.topics.length ?? 0;
+  const duration = overview?.session_duration_minutes ?? 20;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -242,7 +266,7 @@ export default function SessionOverview() {
             </div>
             <div>
               <h2 className="text-3xl font-bold text-gray-900">{title}</h2>
-              <p className="text-gray-600 mt-1">Session 2 of 3 today</p>
+              <p className="text-gray-600 mt-1">Ready to revise</p>
             </div>
           </div>
 
@@ -251,13 +275,13 @@ export default function SessionOverview() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              About 20 minutes
+              About {duration} minutes
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
-              2 topics to cover
+              {topicCount} {topicCount === 1 ? "topic" : "topics"} to cover
             </div>
           </div>
         </div>
@@ -269,52 +293,49 @@ export default function SessionOverview() {
             <span className="text-sm text-gray-600">Not started</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">0 of 8 steps</span>
+            <span className="text-sm text-gray-600">0 of 4 steps</span>
             <span className="text-sm font-medium text-indigo-600">Ready to begin</span>
           </div>
         </div>
 
-        {/* What You'll Cover Today */}
+        {/* What You'll Cover Today - DYNAMIC */}
         <div className="bg-white rounded-2xl border border-gray-200 p-8 mb-8">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">What you'll cover today</h3>
 
-          <div className="space-y-4">
-            <div className="flex gap-4 p-6 bg-indigo-50 rounded-2xl">
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-semibold">
-                1
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Atomic structure</h4>
-                <p className="text-sm text-gray-700 leading-relaxed mb-3">
-                  Understanding protons, neutrons and electrons, and how they determine the properties of elements
-                </p>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-indigo-700 text-xs font-medium">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  Core concept
-                </span>
-              </div>
+          {topicCount === 0 ? (
+            <p className="text-gray-600">No topics assigned to this session.</p>
+          ) : (
+            <div className="space-y-4">
+              {overview?.topics.map((topic, index) => {
+                const colorScheme = topicColors[index % topicColors.length];
+                return (
+                  <div
+                    key={topic.id}
+                    className={`flex gap-4 p-6 ${colorScheme.bg} rounded-2xl`}
+                  >
+                    <div
+                      className={`flex-shrink-0 w-10 h-10 rounded-xl ${colorScheme.number} text-white flex items-center justify-center font-semibold`}
+                    >
+                      {index + 1}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">
+                        {topic.topic_name}
+                      </h4>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white ${colorScheme.text} text-xs font-medium`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                        Topic {index + 1} of {topicCount}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="flex gap-4 p-6 bg-purple-50 rounded-2xl">
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-semibold">
-                2
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-2">The periodic table</h4>
-                <p className="text-sm text-gray-700 leading-relaxed mb-3">
-                  How elements are arranged in groups and periods, and what this tells us about their behaviour
-                </p>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-purple-700 text-xs font-medium">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  Practice skill
-                </span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* How This Session Works */}
@@ -329,7 +350,7 @@ export default function SessionOverview() {
                 </svg>
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Quick recall</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">Recall</h4>
                 <p className="text-sm text-gray-600">Test what you remember from before</p>
               </div>
             </div>
@@ -341,8 +362,8 @@ export default function SessionOverview() {
                 </svg>
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Learn together</h4>
-                <p className="text-sm text-gray-600">Work through examples step by step</p>
+                <h4 className="font-semibold text-gray-900 mb-1">Reinforce</h4>
+                <p className="text-sm text-gray-600">Flashcards and worked examples to strengthen understanding</p>
               </div>
             </div>
 
@@ -353,8 +374,20 @@ export default function SessionOverview() {
                 </svg>
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Try yourself</h4>
-                <p className="text-sm text-gray-600">Practice with instant help available</p>
+                <h4 className="font-semibold text-gray-900 mb-1">Practice</h4>
+                <p className="text-sm text-gray-600">Apply what you've learned with questions</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Reflection</h4>
+                <p className="text-sm text-gray-600">Review what you've learned and how you feel</p>
               </div>
             </div>
           </div>
