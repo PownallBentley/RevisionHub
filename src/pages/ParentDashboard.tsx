@@ -27,42 +27,47 @@ type InviteRow = {
 
 export default function ParentDashboard() {
   const navigate = useNavigate();
-  const { user, profile, isChild, isParent, parentChildCount, loading: authLoading } = useAuth();
+  const { user, profile, isChild, isParent, activeChildId, parentChildCount, loading: authLoading } = useAuth();
 
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [invites, setInvites] = useState<Record<string, InviteRow | null>>({});
   const [loading, setLoading] = useState(true);
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
+  const [redirected, setRedirected] = useState(false);
 
+  // Handle redirects
   useEffect(() => {
-    if (authLoading) return;
+    // Don't redirect while loading or if already redirected
+    if (authLoading || redirected) return;
     
-    // Not logged in
+    // Not logged in - go to landing
     if (!user) {
+      setRedirected(true);
       navigate("/", { replace: true });
       return;
     }
     
     // This is a child - redirect to child area
-    if (isChild) {
+    if (activeChildId) {
+      setRedirected(true);
       navigate("/child/today", { replace: true });
       return;
     }
     
-    // Not a parent (no profile, not a child) - go to home gate
-    if (!isParent) {
-      navigate("/", { replace: true });
-      return;
-    }
-  }, [authLoading, user, isChild, isParent, navigate]);
+    // No profile and no child ID - something is wrong, but don't loop
+    // Just let them see the dashboard (will be empty)
+  }, [authLoading, user, activeChildId, navigate, redirected]);
 
+  // Handle redirect to onboarding for parents with no children
   useEffect(() => {
+    if (authLoading || redirected) return;
     if (!user || !profile) return;
 
     if (parentChildCount === 0) {
+      setRedirected(true);
       navigate("/parent/onboarding", { replace: true });
     }
-  }, [user, profile, parentChildCount, navigate]);
+  }, [authLoading, user, profile, parentChildCount, navigate, redirected]);
 
   useEffect(() => {
     let mounted = true;
