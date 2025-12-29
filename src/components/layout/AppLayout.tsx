@@ -1,18 +1,14 @@
 // src/components/layout/AppLayout.tsx
 
-import type { ReactNode } from "react";
+import { Outlet } from "react-router-dom";
 import AppHeader from "./AppHeader";
 
-type Props = {
-  children: ReactNode;
-};
-
-export default function AppLayout({ children }: Props) {
+export default function AppLayout() {
   return (
     <div className="min-h-screen bg-neutral-bg flex flex-col">
       <AppHeader />
       <main className="flex-1">
-        {children}
+        <Outlet />
       </main>
     </div>
   );
