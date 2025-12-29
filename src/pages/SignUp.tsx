@@ -9,7 +9,9 @@ import { useAuth } from "../contexts/AuthContext";
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return await Promise.race([
     p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Sign up timed out")), ms)),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Sign up timed out")), ms)
+    ),
   ]);
 }
 
@@ -17,11 +19,10 @@ export default function SignUp() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
-  const { signUp } = useAuth();
+  const { signUp, refresh } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -30,15 +31,20 @@ export default function SignUp() {
     setSubmitting(true);
 
     try {
-      // Assumes your AuthContext has signUp(email, password, fullName?)
-      // If your signUp only accepts (email, password), remove fullName from the call.
-      const result: any = await withTimeout(signUp(email.trim().toLowerCase(), password, fullName.trim()), 8000);
+      const result: any = await withTimeout(
+        signUp(email.trim().toLowerCase(), password, fullName.trim()),
+        8000
+      );
 
       if (result?.error) {
         setError(result.error.message ?? "Sign up failed");
         setSubmitting(false);
         return;
       }
+
+      // Refresh auth state to load the profile before navigating
+      // This ensures the header shows the user's name immediately
+      await refresh();
 
       // After parent signup we go straight into parent onboarding
       navigate("/parent/onboarding", { replace: true });
@@ -56,11 +62,15 @@ export default function SignUp() {
             <FontAwesomeIcon icon={faBookOpen} className="text-brand-purple text-2xl" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">RevisionHub</h1>
-          <p className="text-purple-100">Calm, confidence-building revision for your children</p>
+          <p className="text-purple-100">
+            Calm, confidence-building revision for your children
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Create your parent account</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
+            Create your parent account
+          </h2>
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6">
@@ -70,7 +80,10 @@ export default function SignUp() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="fullName"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Full name
               </label>
               <input
@@ -78,7 +91,9 @@ export default function SignUp() {
                 type="text"
                 required
                 value={fullName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setFullName(e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
                 placeholder="Jane Smith"
                 disabled={submitting}
@@ -86,7 +101,10 @@ export default function SignUp() {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Email address
               </label>
               <input
@@ -94,7 +112,9 @@ export default function SignUp() {
                 type="email"
                 required
                 value={email}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setEmail(e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
                 placeholder="you@example.com"
                 disabled={submitting}
@@ -102,7 +122,10 @@ export default function SignUp() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Password
               </label>
               <input
@@ -110,7 +133,9 @@ export default function SignUp() {
                 type="password"
                 required
                 value={password}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setPassword(e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
                 placeholder="At least 6 characters"
                 disabled={submitting}
@@ -129,13 +154,18 @@ export default function SignUp() {
 
           <p className="mt-6 text-center text-sm text-gray-600">
             Already have an account?{" "}
-            <Link to="/login" className="text-brand-purple font-semibold hover:text-brand-purple-dark">
+            <Link
+              to="/login"
+              className="text-brand-purple font-semibold hover:text-brand-purple-dark"
+            >
               Sign in
             </Link>
           </p>
         </div>
 
-        <p className="text-center text-purple-100 text-sm mt-6">Parent-led, child-used revision planning</p>
+        <p className="text-center text-purple-100 text-sm mt-6">
+          Parent-led, child-used revision planning
+        </p>
       </div>
     </div>
   );
