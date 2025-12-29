@@ -16,7 +16,7 @@ export type Profile = {
   id: string;
   email: string;
   full_name: string | null;
-  role: "parent" | string;
+  role: "parent" | "child" | string;
   country: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -61,7 +61,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
-// Bolt/StackBlitz can be slow for auth init + storage recovery.
 const AUTH_TIMEOUT_MS = 15000;
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
@@ -144,8 +143,6 @@ async function ensureParentProfile(params: { userId: string; email: string; full
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-
-  // IMPORTANT: loading should only represent “initial auth bootstrap”
   const [loading, setLoading] = useState(true);
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -174,28 +171,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       "hydrate signals (profile + childId)"
     );
 
-    let finalProfile = p;
+    // Set profile (only parents have this)
+    setProfile(p);
+    
+    // Set activeChildId (only children have this)
+    setActiveChildId(childId);
 
+    // If this is a child, fetch their details for display purposes
     if (childId) {
       const childProfile = await withTimeout(
         fetchChildProfile(childId),
         AUTH_TIMEOUT_MS,
         "fetchChildProfile"
       );
-
+      
+      // Store child details in profile for display (but keep it separate conceptually)
       if (childProfile) {
-        finalProfile = {
-          ...(p || {}),
-          ...childProfile,
+        setProfile({
+          id: childProfile.id || '',
+          email: childProfile.email || '',
+          full_name: childProfile.full_name || null,
+          first_name: childProfile.first_name,
+          preferred_name: childProfile.preferred_name,
+          avatar_url: childProfile.avatar_url,
           role: "child",
-        } as Profile;
+          country: null,
+          created_at: null,
+          updated_at: null,
+        } as Profile);
       }
-    }
-
-    setProfile(finalProfile);
-    setActiveChildId(childId);
-
-    if (p) {
+      setParentChildCount(null);
+    } else if (p) {
+      // Parent - fetch their child count
       const count = await withTimeout(fetchParentChildCount(u.id), AUTH_TIMEOUT_MS, "fetchParentChildCount");
       setParentChildCount(count);
     } else {
@@ -237,7 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Manual refresh should NOT flip global loading (prevents route thrash / flicker)
   async function refresh() {
     await resolveAuth("manual refresh", { showLoading: false });
   }
@@ -247,7 +253,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       if (!mounted) return;
-      // Initial mount: do the one true blocking auth resolve
       await resolveAuth("initial mount", { showLoading: true });
     })();
 
@@ -255,7 +260,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       try {
-        // After initial mount, do NOT toggle global loading
         await withTimeout(hydrateFromSession(newSession), AUTH_TIMEOUT_MS, "hydrateFromSession (event)");
         hydratedOnceRef.current = true;
       } catch (e) {
@@ -268,7 +272,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setActiveChildId(null);
         setParentChildCount(null);
       } finally {
-        // Ensure loading is not left “true” after init
         if (!hydratedOnceRef.current) setLoading(false);
       }
     });
@@ -311,11 +314,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setActiveChildId(null);
     setParentChildCount(null);
-    // do not set loading=true here
   }
 
-  const isParent = !!profile;
-  const isChild = !profile && !!activeChildId;
+  // CORRECT LOGIC based on actual data model:
+  // - Parents have a profile row, no activeChildId
+  // - Children have no profile row, but have activeChildId (from children table)
+  const isParent = !!profile && !activeChildId;
+  const isChild = !!activeChildId;
   const isUnresolved = !!user && !isParent && !isChild;
 
   const value = useMemo<AuthContextValue>(
