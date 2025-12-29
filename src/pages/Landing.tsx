@@ -2,39 +2,11 @@
 
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBookOpen, faCheckCircle } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle } from "@fortawesome/free-solid-svg-icons";
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple-light via-brand-purple to-brand-purple-dark">
-      {/* Header */}
-      <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-3 text-white">
-          <div className="w-11 h-11 bg-white rounded-2xl flex items-center justify-center shadow-md">
-            <FontAwesomeIcon icon={faBookOpen} className="text-brand-purple text-xl" />
-          </div>
-          <div>
-            <div className="text-lg font-semibold leading-tight">RevisionHub</div>
-            <div className="text-xs text-purple-100">Parent-led, child-used revision planning</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to="/login"
-            className="px-4 py-2 rounded-xl bg-white/10 text-white border border-white/20 hover:bg-white/15 text-sm"
-          >
-            Log in
-          </Link>
-          <Link
-            to="/signup"
-            className="px-4 py-2 rounded-xl bg-white text-brand-purple hover:bg-purple-50 text-sm font-semibold"
-          >
-            Sign up
-          </Link>
-        </div>
-      </header>
-
+    <div className="bg-gradient-to-br from-brand-purple-light via-brand-purple to-brand-purple-dark min-h-[calc(100vh-73px)]">
       {/* Hero */}
       <main className="max-w-6xl mx-auto px-6 py-10 md:py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
@@ -66,7 +38,7 @@ export default function Landing() {
             <div className="mt-8 space-y-3">
               <div className="flex items-start gap-3">
                 <FontAwesomeIcon icon={faCheckCircle} className="text-white mt-1" />
-                <p className="text-purple-100">Parents set the plan. Children simply follow today’s sessions.</p>
+                <p className="text-purple-100">Parents set the plan. Children simply follow today's sessions.</p>
               </div>
               <div className="flex items-start gap-3">
                 <FontAwesomeIcon icon={faCheckCircle} className="text-white mt-1" />
@@ -74,7 +46,7 @@ export default function Landing() {
               </div>
               <div className="flex items-start gap-3">
                 <FontAwesomeIcon icon={faCheckCircle} className="text-white mt-1" />
-                <p className="text-purple-100">Invite link for children at the end of onboarding (we’ll re-wire this next).</p>
+                <p className="text-purple-100">Invite link for children at the end of onboarding.</p>
               </div>
             </div>
           </div>
@@ -87,13 +59,13 @@ export default function Landing() {
                 <span className="font-semibold">1)</span> Parent signs up and completes onboarding.
               </li>
               <li>
-                <span className="font-semibold">2)</span> We generate a revision plan and today’s sessions.
+                <span className="font-semibold">2)</span> We generate a revision plan and today's sessions.
               </li>
               <li>
                 <span className="font-semibold">3)</span> Parent invites the child with a secure code link.
               </li>
               <li>
-                <span className="font-semibold">4)</span> Child sets a password and lands on “Today”.
+                <span className="font-semibold">4)</span> Child sets a password and lands on "Today".
               </li>
             </ol>
 
@@ -113,7 +85,7 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-xs text-gray-500">
-              This is still an MVP build. We’ll keep the design stable while we fix the invite + child signup end-to-end.
+              RevisionHub — helping families prepare for exams with less stress.
             </p>
           </div>
         </div>
