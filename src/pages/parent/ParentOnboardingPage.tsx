@@ -4,18 +4,36 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import StepShell from "../../components/parentOnboarding/StepShell";
-import ChildDetailsStep, { ChildDetails } from "../../components/parentOnboarding/steps/ChildDetailsStep";
+import ChildDetailsStep, {
+  ChildDetails,
+} from "../../components/parentOnboarding/steps/ChildDetailsStep";
 import GoalStep from "../../components/parentOnboarding/steps/GoalStep";
 import ExamTypeStep from "../../components/parentOnboarding/steps/ExamTypeStep";
-import SubjectBoardStep, { type SelectedSubject } from "../../components/parentOnboarding/steps/SubjectBoardStep";
-import NeedsStep, { NeedClusterSelection } from "../../components/parentOnboarding/steps/NeedsStep";
-import AvailabilityStep, { Availability } from "../../components/parentOnboarding/steps/AvailabilityStep";
+import SubjectBoardStep, {
+  type SelectedSubject,
+} from "../../components/parentOnboarding/steps/SubjectBoardStep";
+import NeedsStep, {
+  type NeedClusterSelection,
+} from "../../components/parentOnboarding/steps/NeedsStep";
+import ExamTimelineStep, {
+  type ExamTimeline,
+} from "../../components/parentOnboarding/steps/ExamTimelineStep";
+import AvailabilityStep, {
+  Availability,
+} from "../../components/parentOnboarding/steps/AvailabilityStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
 
 import { rpcParentCreateChildAndPlan } from "../../services/parentOnboarding/parentOnboardingService";
-import { rpcCreateChildInvite, type ChildInviteCreateResult } from "../../services/invitationService";
+import {
+  rpcCreateChildInvite,
+  type ChildInviteCreateResult,
+} from "../../services/invitationService";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
+
+/* ============================
+   Constants
+============================ */
 
 const defaultAvailability: Availability = {
   monday: { sessions: 1, session_pattern: "p45" },
@@ -27,22 +45,20 @@ const defaultAvailability: Availability = {
   sunday: { sessions: 0, session_pattern: "p45" },
 };
 
+const defaultExamTimeline: ExamTimeline = {
+  exam_date: null,
+  feeling_code: null,
+  history_code: null,
+};
+
+/* ============================
+   Helpers
+============================ */
+
 function normaliseStringArray(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.filter(Boolean).map(String);
   return [String(value)];
-}
-
-function normaliseNeedClusters(value: unknown): Array<{ cluster_code: string }> {
-  if (!value) return [];
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((row: any) => {
-      const code = row?.cluster_code ?? row?.code;
-      if (!code) return null;
-      return { cluster_code: String(code) };
-    })
-    .filter(Boolean) as Array<{ cluster_code: string }>;
 }
 
 function formatSupabaseError(e: any): string {
@@ -62,6 +78,26 @@ async function copyToClipboard(text: string) {
   }
 }
 
+/* ============================
+   Step Configuration
+============================ */
+
+const STEPS = {
+  CHILD_DETAILS: 0,
+  GOAL: 1,
+  EXAM_TYPE: 2,
+  SUBJECTS: 3,
+  NEEDS: 4,
+  EXAM_TIMELINE: 5,
+  AVAILABILITY: 6,
+  CONFIRM: 7,
+  INVITE: 8,
+} as const;
+
+/* ============================
+   Main Component
+============================ */
+
 export default function ParentOnboardingPage() {
   const navigate = useNavigate();
   const { refresh, user } = useAuth();
@@ -73,6 +109,7 @@ export default function ParentOnboardingPage() {
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Form state
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
     last_name: "",
@@ -83,54 +120,82 @@ export default function ParentOnboardingPage() {
 
   const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
   const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
-
-  // ✅ structured selections for chips + per-exam grouping
   const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
-
-  const [needClusters, setNeedClusters] = useState<NeedClusterSelection>([]);
+  const [needClusters, setNeedClusters] = useState<NeedClusterSelection[]>([]);
+  const [examTimeline, setExamTimeline] = useState<ExamTimeline>(defaultExamTimeline);
   const [availability, setAvailability] = useState<Availability>(defaultAvailability);
 
+  // Build payload for RPC
   const payload = useMemo(() => {
     const subject_ids = (selectedSubjects ?? [])
       .map((s) => s.subject_id)
       .filter(Boolean)
       .map(String);
 
-    const need_clusters = normaliseNeedClusters(needClusters);
+    // Transform need clusters to match backend expectations
+    const need_clusters = needClusters.map((nc) => ({
+      cluster_code: nc.cluster_code,
+      source: nc.source,
+      has_exam_accommodations: nc.has_exam_accommodations ?? false,
+      accommodation_details: nc.accommodation_details,
+    }));
 
     return {
       child,
       goal_code: goalCode ?? null,
-      exam_timeline: "6_weeks",
       subject_ids,
       need_clusters,
+      exam_timeline: {
+        exam_date: examTimeline.exam_date,
+        feeling_code: examTimeline.feeling_code ?? "feeling_on_track",
+        history_code: examTimeline.history_code,
+      },
       settings: {
         availability,
-        urgency: { mode: "exam_date", exam_date: "" },
       },
     };
-  }, [child, goalCode, selectedSubjects, needClusters, availability]);
+  }, [child, goalCode, selectedSubjects, needClusters, examTimeline, availability]);
 
+  // Validation for navigation
   const canNext = useMemo(() => {
-    if (step === 0) return !!child.first_name?.trim();
-    if (step === 1) return !!goalCode;
-    if (step === 2) return normaliseStringArray(examTypeIds).length > 0;
-
-    // Step 3 owns nav
-    if (step === 4) return true;
-    if (step === 5) return Object.values(availability).some((d) => (d?.sessions ?? 0) > 0);
-
-    return true;
-  }, [step, child.first_name, goalCode, examTypeIds, availability]);
+    switch (step) {
+      case STEPS.CHILD_DETAILS:
+        return !!child.first_name?.trim();
+      case STEPS.GOAL:
+        return !!goalCode;
+      case STEPS.EXAM_TYPE:
+        return normaliseStringArray(examTypeIds).length > 0;
+      case STEPS.SUBJECTS:
+        return true; // SubjectBoardStep owns its nav
+      case STEPS.NEEDS:
+        return true; // Optional step
+      case STEPS.EXAM_TIMELINE:
+        return examTimeline.feeling_code !== null; // At least feeling is required
+      case STEPS.AVAILABILITY:
+        return Object.values(availability).some((d) => (d?.sessions ?? 0) > 0);
+      default:
+        return true;
+    }
+  }, [step, child.first_name, goalCode, examTypeIds, examTimeline, availability]);
 
   function validatePayload(): string | null {
-    if (!payload.child?.first_name?.trim()) return "Please enter your child’s first name.";
-    if (!payload.goal_code) return "Please choose a goal.";
+    if (!payload.child?.first_name?.trim()) {
+      return "Please enter your child's first name.";
+    }
+    if (!payload.goal_code) {
+      return "Please choose a goal.";
+    }
     if (!Array.isArray(payload.subject_ids) || payload.subject_ids.length === 0) {
       return "Please select at least one subject (including exam board/spec).";
     }
-    if (!payload.settings?.availability) return "Availability is missing.";
-    if (!Object.values(payload.settings.availability).some((d: any) => (d?.sessions ?? 0) > 0)) {
+    if (!payload.settings?.availability) {
+      return "Availability is missing.";
+    }
+    if (
+      !Object.values(payload.settings.availability).some(
+        (d: any) => (d?.sessions ?? 0) > 0
+      )
+    ) {
       return "Please add at least one study session to your availability.";
     }
     return null;
@@ -183,7 +248,7 @@ export default function ParentOnboardingPage() {
       }
 
       setInvite(inviteResult.invite);
-      setStep(7);
+      setStep(STEPS.INVITE);
     } catch (e: any) {
       setError(formatSupabaseError(e));
     } finally {
@@ -196,17 +261,29 @@ export default function ParentOnboardingPage() {
     return `${window.location.origin}${invite.invitation_link}`;
   }, [invite]);
 
+  const childDisplayName =
+    child.preferred_name?.trim() || child.first_name?.trim() || "your child";
+
+  // Steps that manage their own navigation
+  const selfNavigatingSteps = [STEPS.SUBJECTS];
+  const showDefaultNav = !selfNavigatingSteps.includes(step) && step < STEPS.INVITE;
+
   return (
     <StepShell
-      title="Set up your child’s revision plan"
+      title="Set up your child's revision plan"
       subtitle="A few steps. You can change things later."
       error={error}
     >
-      {step === 0 && <ChildDetailsStep value={child} onChange={setChild} />}
+      {/* Step 0: Child Details */}
+      {step === STEPS.CHILD_DETAILS && (
+        <ChildDetailsStep value={child} onChange={setChild} />
+      )}
 
-      {step === 1 && <GoalStep value={goalCode} onChange={setGoalCode} />}
+      {/* Step 1: Goal */}
+      {step === STEPS.GOAL && <GoalStep value={goalCode} onChange={setGoalCode} />}
 
-      {step === 2 && (
+      {/* Step 2: Exam Type */}
+      {step === STEPS.EXAM_TYPE && (
         <ExamTypeStep
           value={examTypeIds}
           onChange={(ids) => {
@@ -216,27 +293,52 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {step === 3 && (
+      {/* Step 3: Subject & Board Selection (self-navigating) */}
+      {step === STEPS.SUBJECTS && (
         <SubjectBoardStep
           examTypeIds={normaliseStringArray(examTypeIds)}
           value={selectedSubjects}
           onChange={setSelectedSubjects}
-          onBackToExamTypes={() => setStep(2)}
-          onDone={() => setStep(4)}
+          onBackToExamTypes={() => setStep(STEPS.EXAM_TYPE)}
+          onDone={() => setStep(STEPS.NEEDS)}
         />
       )}
 
-      {step === 4 && <NeedsStep value={needClusters} onChange={setNeedClusters} />}
+      {/* Step 4: Needs (JCQ-aligned) */}
+      {step === STEPS.NEEDS && (
+        <NeedsStep
+          childName={childDisplayName}
+          value={needClusters}
+          onChange={setNeedClusters}
+        />
+      )}
 
-      {step === 5 && <AvailabilityStep value={availability} onChange={setAvailability} />}
+      {/* Step 5: Exam Timeline */}
+      {step === STEPS.EXAM_TIMELINE && (
+        <ExamTimelineStep
+          childName={childDisplayName}
+          value={examTimeline}
+          onChange={setExamTimeline}
+        />
+      )}
 
-      {step === 6 && <ConfirmStep payload={payload} busy={busy} onSubmit={submit} />}
+      {/* Step 6: Availability */}
+      {step === STEPS.AVAILABILITY && (
+        <AvailabilityStep value={availability} onChange={setAvailability} />
+      )}
 
-      {step === 7 && invite && (
+      {/* Step 7: Confirm */}
+      {step === STEPS.CONFIRM && (
+        <ConfirmStep payload={payload} busy={busy} onSubmit={submit} />
+      )}
+
+      {/* Step 8: Invite */}
+      {step === STEPS.INVITE && invite && (
         <div className="mt-2">
-          <h3 className="text-lg font-semibold">Invite your child</h3>
+          <h3 className="text-lg font-semibold">Invite {childDisplayName}</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Send this link to your child. They’ll set a password and land straight in Today.
+            Send this link to your child. They'll set a password and land straight in
+            Today.
           </p>
 
           <div className="mt-4 rounded-xl border bg-white p-4">
@@ -289,8 +391,8 @@ export default function ParentOnboardingPage() {
         </div>
       )}
 
-      {/* Default nav (Subject step owns its own Continue button) */}
-      {step !== 3 && step < 7 ? (
+      {/* Default navigation */}
+      {showDefaultNav && (
         <div className="mt-6 flex items-center justify-between">
           <button
             type="button"
@@ -301,18 +403,22 @@ export default function ParentOnboardingPage() {
             Back
           </button>
 
-          {step < 6 ? (
+          {step < STEPS.CONFIRM ? (
             <button
               type="button"
               className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
               disabled={!canNext || busy}
-              onClick={() => setStep((s) => Math.min(6, s + 1))}
+              onClick={() => setStep((s) => Math.min(STEPS.CONFIRM, s + 1))}
             >
-              Next
+              {step === STEPS.NEEDS && needClusters.length === 0
+                ? "Skip"
+                : step === STEPS.EXAM_TIMELINE && !examTimeline.history_code
+                ? "Next"
+                : "Next"}
             </button>
           ) : null}
         </div>
-      ) : null}
+      )}
     </StepShell>
   );
 }
