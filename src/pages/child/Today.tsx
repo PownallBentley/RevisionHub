@@ -1,6 +1,6 @@
 // src/pages/child/Today.tsx
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
@@ -51,17 +51,15 @@ export default function Today() {
   const navigate = useNavigate();
   const {
     user,
-    profile,
     activeChildId,
+    isParent,
     loading: authLoading,
-    refresh,
   } = useAuth();
 
   const [rows, setRows] = useState<TodaySessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
-
-  const refreshAttemptedRef = useRef(false);
+  const [redirected, setRedirected] = useState(false);
 
   const childId = useMemo(() => {
     if (activeChildId) return activeChildId;
@@ -69,33 +67,38 @@ export default function Today() {
     return ls || null;
   }, [activeChildId]);
 
+  // Handle redirects - only once auth is fully loaded
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || redirected) return;
 
     // If a parent lands here, send them to the parent area
-    if (user && profile) {
+    if (isParent) {
+      setRedirected(true);
       navigate("/parent", { replace: true });
       return;
     }
 
-    // Logged out => login
-    if (!user) {
-      navigate("/login", { replace: true });
-      return;
+    // Only redirect to login if we're certain there's no user
+    // Don't redirect while things are still loading
+    if (!user && !authLoading) {
+      // Give it a moment - auth might still be initializing
+      const timer = setTimeout(() => {
+        if (!user) {
+          setRedirected(true);
+          navigate("/login", { replace: true });
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
     }
+  }, [authLoading, user, isParent, navigate, redirected]);
 
-    // Child session exists but childId not yet hydrated:
-    // do ONE non-blocking refresh attempt, then stop.
-    if (user && !profile && !activeChildId && !refreshAttemptedRef.current) {
-      refreshAttemptedRef.current = true;
-      refresh().catch(() => {});
-    }
-  }, [authLoading, user, profile, activeChildId, refresh, navigate]);
-
+  // Load today's sessions
   useEffect(() => {
     let mounted = true;
 
     async function loadToday() {
+      // Wait for auth to settle
+      if (authLoading) return;
       if (!user) return;
 
       setLoading(true);
@@ -103,32 +106,40 @@ export default function Today() {
 
       if (!childId) {
         setRows([]);
-        setError("No child profile is linked to this account yet.");
+        setError("No child profile is linked to this account yet. Please wait while we load your data...");
         setLoading(false);
         return;
       }
 
       const p_date = todayIsoDateLondonSafe();
 
-      const { data, error } = await supabase.rpc(
-        "rpc_get_todays_planned_sessions",
-        {
-          p_child_id: childId,
-          p_date,
+      try {
+        const { data, error: rpcError } = await supabase.rpc(
+          "rpc_get_todays_planned_sessions",
+          {
+            p_child_id: childId,
+            p_date,
+          }
+        );
+
+        if (!mounted) return;
+
+        if (rpcError) {
+          console.error("[Today] RPC error:", rpcError);
+          setRows([]);
+          setError(rpcError.message ?? "Failed to load today's sessions.");
+          setLoading(false);
+          return;
         }
-      );
 
-      if (!mounted) return;
-
-      if (error) {
-        setRows([]);
-        setError(error.message ?? "Failed to load today's sessions.");
+        setRows((data ?? []) as TodaySessionRow[]);
         setLoading(false);
-        return;
+      } catch (e: any) {
+        if (!mounted) return;
+        console.error("[Today] Load error:", e);
+        setError(e?.message ?? "Failed to load sessions");
+        setLoading(false);
       }
-
-      setRows((data ?? []) as TodaySessionRow[]);
-      setLoading(false);
     }
 
     loadToday();
@@ -136,7 +147,7 @@ export default function Today() {
     return () => {
       mounted = false;
     };
-  }, [user, childId]);
+  }, [authLoading, user, childId]);
 
   const totalMinutes = rows.length * 20;
   const todayDate =
