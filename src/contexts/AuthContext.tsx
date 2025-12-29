@@ -166,11 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const [p, childId] = await withTimeout(
-      Promise.all([fetchProfile(u.id), fetchMyChildId()]),
-      AUTH_TIMEOUT_MS,
-      "hydrate signals (profile + childId)"
-    );
+    // Fetch profile and childId in parallel - no timeout
+    const [p, childId] = await Promise.all([
+      fetchProfile(u.id),
+      fetchMyChildId()
+    ]);
 
     // Set profile (only parents have this)
     setProfile(p);
@@ -180,11 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // If this is a child, fetch their details for display purposes
     if (childId) {
-      const childProfile = await withTimeout(
-        fetchChildProfile(childId),
-        AUTH_TIMEOUT_MS,
-        "fetchChildProfile"
-      );
+      const childProfile = await fetchChildProfile(childId);
       
       // Store child details in profile for display (but keep it separate conceptually)
       if (childProfile) {
@@ -204,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setParentChildCount(null);
     } else if (p) {
       // Parent - fetch their child count
-      const count = await withTimeout(fetchParentChildCount(u.id), AUTH_TIMEOUT_MS, "fetchParentChildCount");
+      const count = await fetchParentChildCount(u.id);
       setParentChildCount(count);
     } else {
       setParentChildCount(null);
@@ -220,11 +216,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (showLoading) setLoading(true);
 
-      const { data, error } = await withTimeout(
-        supabase.auth.getSession(),
-        AUTH_TIMEOUT_MS,
-        `supabase.auth.getSession (${source})`
-      );
+      // Don't timeout getSession - let Supabase handle its own timing
+      const { data, error } = await supabase.auth.getSession();
 
       if (error) console.warn("[auth] getSession error:", source, error);
 
@@ -234,11 +227,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn("[auth] resolveAuth failed:", source, e);
       hydratedOnceRef.current = true;
 
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setActiveChildId(null);
-      setParentChildCount(null);
+      // Don't wipe state on error - leave whatever we had
+      // This prevents children from being logged out due to transient errors
     } finally {
       if (showLoading) setLoading(false);
       resolvingRef.current = false;
