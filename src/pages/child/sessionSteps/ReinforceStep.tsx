@@ -18,6 +18,38 @@ type ReinforceStepProps = {
   onExit: () => void;
 };
 
+// Safe extraction of front content - handles multiple formats
+const getFront = (card: any): string => {
+  if (!card) return "Question";
+  // Format 1: direct string (from RPC)
+  if (typeof card.front === 'string') return card.front;
+  // Format 2: object with text property
+  if (typeof card.front === 'object' && card.front?.text) return card.front.text;
+  // Format 3: front_content as string
+  if (typeof card.front_content === 'string') return card.front_content;
+  // Format 4: front_content as object with text
+  if (typeof card.front_content === 'object' && card.front_content?.text) return card.front_content.text;
+  // Format 5: prompt field (raw content_body structure)
+  if (typeof card.prompt === 'string') return card.prompt;
+  return "Question";
+};
+
+// Safe extraction of back content - handles multiple formats
+const getBack = (card: any): string => {
+  if (!card) return "No answer provided";
+  // Format 1: direct string (from RPC)
+  if (typeof card.back === 'string') return card.back;
+  // Format 2: object with text property
+  if (typeof card.back === 'object' && card.back?.text) return card.back.text;
+  // Format 3: back_content as string
+  if (typeof card.back_content === 'string') return card.back_content;
+  // Format 4: back_content as object with text
+  if (typeof card.back_content === 'object' && card.back_content?.text) return card.back_content.text;
+  // Format 5: answer field (raw content_body structure)
+  if (typeof card.answer === 'string') return card.answer;
+  return "No answer provided";
+};
+
 export default function ReinforceStep({
   payload,
   saving,
@@ -87,7 +119,7 @@ export default function ReinforceStep({
               {!showAnswer ? (
                 <div className="max-w-2xl">
                   <h3 className="text-3xl font-bold text-gray-900 mb-8">
-                    {currentCard?.front || "Question"}
+                    {getFront(currentCard)}
                   </h3>
                   <p className="text-gray-600 mb-8">Think about what you learned...</p>
                   <button
@@ -102,7 +134,7 @@ export default function ReinforceStep({
                 <div className="max-w-2xl w-full">
                   <div className="bg-white rounded-2xl p-8 shadow-lg">
                     <p className="text-lg text-gray-900 leading-relaxed">
-                      {currentCard?.back || "No answer provided"}
+                      {getBack(currentCard)}
                     </p>
                   </div>
                 </div>
