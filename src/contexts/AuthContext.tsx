@@ -61,7 +61,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
-const AUTH_TIMEOUT_MS = 15000;
+// Bolt/StackBlitz can be very slow for auth init + storage recovery.
+const AUTH_TIMEOUT_MS = 30000;
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
