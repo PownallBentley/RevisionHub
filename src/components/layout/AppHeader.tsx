@@ -13,12 +13,20 @@ function getInitials(name: string | null | undefined): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function getDisplayName(profile: any, isChild: boolean, activeChildId: string | null): string {
-  if (isChild && profile) {
+function getDisplayName(profile: any, isChild: boolean): string {
+  if (!profile) return "User";
+  
+  if (isChild) {
+    // Child: prefer preferred_name, then first_name
     return profile.preferred_name || profile.first_name || "Student";
   }
-  if (profile) {
-    return profile.preferred_name || profile.first_name || profile.full_name?.split(" ")[0] || "User";
+  
+  // Parent: prefer full_name (first word), or fall back to email prefix
+  if (profile.full_name) {
+    return profile.full_name.split(" ")[0];
+  }
+  if (profile.email) {
+    return profile.email.split("@")[0];
   }
   return "User";
 }
@@ -30,7 +38,7 @@ export default function AppHeader() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isLoggedIn = !!user;
-  const displayName = getDisplayName(profile, isChild, activeChildId);
+  const displayName = getDisplayName(profile, isChild);
   const initials = getInitials(displayName);
 
   // Close dropdown when clicking outside
