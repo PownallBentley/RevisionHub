@@ -27,7 +27,7 @@ type InviteRow = {
 
 export default function ParentDashboard() {
   const navigate = useNavigate();
-  const { user, profile, parentChildCount, loading: authLoading } = useAuth();
+  const { user, profile, isChild, isParent, parentChildCount, loading: authLoading } = useAuth();
 
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [invites, setInvites] = useState<Record<string, InviteRow | null>>({});
@@ -36,14 +36,25 @@ export default function ParentDashboard() {
 
   useEffect(() => {
     if (authLoading) return;
+    
+    // Not logged in
     if (!user) {
       navigate("/", { replace: true });
       return;
     }
-    if (!profile) {
-      navigate("/", { replace: true });
+    
+    // This is a child - redirect to child area
+    if (isChild) {
+      navigate("/child/today", { replace: true });
+      return;
     }
-  }, [authLoading, user, profile, navigate]);
+    
+    // Not a parent (no profile, not a child) - go to home gate
+    if (!isParent) {
+      navigate("/", { replace: true });
+      return;
+    }
+  }, [authLoading, user, isChild, isParent, navigate]);
 
   useEffect(() => {
     if (!user || !profile) return;
