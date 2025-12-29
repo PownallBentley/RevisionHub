@@ -43,8 +43,13 @@ function HomeGate() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppLayout>
-        <Routes>
+      <Routes>
+        {/* Session routes - have their own headers, no AppLayout */}
+        <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
+        <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
+
+        {/* All other routes wrapped in AppLayout */}
+        <Route element={<AppLayout />}>
           {/* Home gate - handles routing based on auth state */}
           <Route path="/" element={<HomeGate />} />
 
@@ -61,13 +66,11 @@ export default function App() {
 
           {/* Child routes */}
           <Route path="/child/today" element={<Today />} />
-          <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
-          <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AppLayout>
+        </Route>
+      </Routes>
     </BrowserRouter>
   );
 }
