@@ -1,5 +1,4 @@
 // src/services/referenceData/referenceDataService.ts
-
 import { supabase } from "../../lib/supabase";
 
 /* ============================
@@ -21,10 +20,37 @@ export type Goal = {
   sort_order: number;
 };
 
+// JCQ Area type
+export type JcqArea =
+  | "cognition_learning"
+  | "communication_interaction"
+  | "sensory_physical"
+  | "semh"
+  | "study_skills";
+
+// Need Area (for grouping in UI)
+export type NeedArea = {
+  code: JcqArea;
+  name: string;
+  description: string | null;
+  helper_text: string | null;
+  is_jcq_recognised: boolean;
+  sort_order: number;
+};
+
+// Enhanced NeedCluster with JCQ fields
 export type NeedCluster = {
   code: string;
   name: string;
+  description: string | null;
+  jcq_area: JcqArea | null;
+  jcq_area_name: string | null;
+  condition_name: string | null;
+  parent_friendly_name: string | null;
   typical_behaviours: string[] | null;
+  example_signs: string[] | null;
+  typically_has_accommodations: boolean;
+  common_arrangements: string[] | null;
   sort_order: number | null;
 };
 
@@ -40,7 +66,7 @@ export type Subject = {
 };
 
 /* ============================
-   RPC Wrappers
+   Helpers
 ============================ */
 
 function throwIfError(error: any) {
@@ -69,8 +95,22 @@ export async function listGoals(): Promise<Goal[]> {
   return (data ?? []) as Goal[];
 }
 
+export async function listNeedAreas(): Promise<NeedArea[]> {
+  const { data, error } = await supabase.rpc("rpc_list_need_areas");
+  throwIfError(error);
+  return (data ?? []) as NeedArea[];
+}
+
 export async function listNeedClusters(): Promise<NeedCluster[]> {
   const { data, error } = await supabase.rpc("rpc_list_need_clusters");
+  throwIfError(error);
+  return (data ?? []) as NeedCluster[];
+}
+
+export async function listClustersByArea(area: JcqArea): Promise<NeedCluster[]> {
+  const { data, error } = await supabase.rpc("rpc_get_clusters_by_area", {
+    p_area: area,
+  });
   throwIfError(error);
   return (data ?? []) as NeedCluster[];
 }
@@ -79,14 +119,9 @@ export async function listSubjectsForExamTypes(
   examTypeIds: string[]
 ): Promise<Subject[]> {
   if (!examTypeIds || examTypeIds.length === 0) return [];
-
-  const { data, error } = await supabase.rpc(
-    "rpc_list_subjects_for_exam_types",
-    {
-      p_exam_type_ids: examTypeIds,
-    }
-  );
-
+  const { data, error } = await supabase.rpc("rpc_list_subjects_for_exam_types", {
+    p_exam_type_ids: examTypeIds,
+  });
   throwIfError(error);
   return (data ?? []) as Subject[];
 }
