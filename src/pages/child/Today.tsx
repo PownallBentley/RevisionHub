@@ -18,6 +18,9 @@ type SessionRow = {
   color: string | null;
   topic_count: number;
   topics_preview: { topic_name: string }[] | null;
+  // Topic progress (for in-progress sessions)
+  current_topic_index?: number;
+  total_topics?: number;
 };
 
 type UpcomingDay = {
@@ -181,6 +184,30 @@ export default function Today() {
         if (!mounted) return;
 
         setTodaySessions((todayData ?? []) as SessionRow[]);
+
+        // For started sessions, fetch topic progress from revision_sessions
+        const startedSessions = (todayData ?? []).filter((s: any) => s.status === 'started');
+        if (startedSessions.length > 0) {
+          const sessionsWithProgress = await Promise.all(
+            (todayData ?? []).map(async (session: any) => {
+              if (session.status === 'started') {
+                const { data: rsData } = await supabase
+                  .from('revision_sessions')
+                  .select('current_topic_index, total_topics')
+                  .eq('planned_session_id', session.planned_session_id)
+                  .maybeSingle();
+                
+                return {
+                  ...session,
+                  current_topic_index: rsData?.current_topic_index ?? 0,
+                  total_topics: rsData?.total_topics ?? session.topic_count ?? 1,
+                };
+              }
+              return session;
+            })
+          );
+          setTodaySessions(sessionsWithProgress as SessionRow[]);
+        }
 
         // Load upcoming sessions (next 7 days)
         const upcoming: UpcomingDay[] = [];
@@ -423,6 +450,26 @@ function SessionCard({
             {session.topic_count || 1} topic{(session.topic_count || 1) !== 1 ? "s" : ""}
           </div>
         </div>
+
+        {/* Topic progress for in-progress sessions */}
+        {isStarted && session.total_topics && session.total_topics > 1 && (
+          <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-amber-800">Topic Progress</span>
+              <span className="text-sm text-amber-700">
+                {(session.current_topic_index ?? 0) + 1} of {session.total_topics}
+              </span>
+            </div>
+            <div className="h-2 bg-amber-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                style={{ 
+                  width: `${((session.current_topic_index ?? 0) / session.total_topics) * 100}%` 
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Topics preview */}
         {topics.length > 0 && (
