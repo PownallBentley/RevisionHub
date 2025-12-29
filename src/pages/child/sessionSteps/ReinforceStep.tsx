@@ -50,6 +50,20 @@ const getBack = (card: any): string => {
   return "No answer provided";
 };
 
+// Safe extraction of worked example step content - handles multiple formats
+const getStepContent = (step: any): string => {
+  if (!step) return "";
+  // Format 1: direct string
+  if (typeof step === 'string') return step;
+  // Format 2: object with content property (our seeded format)
+  if (typeof step === 'object' && typeof step.content === 'string') return step.content;
+  // Format 3: object with text property
+  if (typeof step === 'object' && typeof step.text === 'string') return step.text;
+  // Format 4: object with description property
+  if (typeof step === 'object' && typeof step.description === 'string') return step.description;
+  return String(step);
+};
+
 export default function ReinforceStep({
   payload,
   saving,
@@ -205,12 +219,12 @@ export default function ReinforceStep({
 
               {Array.isArray(workedExample.steps) && workedExample.steps.length > 0 && (
                 <div className="space-y-4 mb-6">
-                  {workedExample.steps.map((step: string, idx: number) => (
+                  {workedExample.steps.map((step: any, idx: number) => (
                     <div key={idx} className="flex gap-4">
                       <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-600 text-white text-sm flex items-center justify-center font-semibold">
                         {idx + 1}
                       </div>
-                      <p className="text-gray-800 pt-1 leading-relaxed">{step}</p>
+                      <p className="text-gray-800 pt-1 leading-relaxed">{getStepContent(step)}</p>
                     </div>
                   ))}
                 </div>
