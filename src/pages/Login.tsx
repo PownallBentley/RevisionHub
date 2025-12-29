@@ -9,7 +9,9 @@ import { useAuth } from "../contexts/AuthContext";
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return await Promise.race([
     p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Login timed out")), ms)),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Login timed out")), ms)
+    ),
   ]);
 }
 
@@ -19,7 +21,7 @@ export default function Login() {
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
-  const { signIn } = useAuth();
+  const { signIn, refresh } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -36,6 +38,9 @@ export default function Login() {
         return;
       }
 
+      // Refresh auth state to ensure profile/childId is loaded
+      await refresh();
+
       // Send to home gate; it will route to /parent or /child correctly
       navigate("/", { replace: true });
     } catch (e: any) {
@@ -45,14 +50,19 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-purple-light via-brand-purple to-brand-purple-dark flex items-center justify-center p-4">
+    <div className="min-h-[calc(100vh-73px)] bg-gradient-to-br from-brand-purple-light via-brand-purple to-brand-purple-dark flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex w-16 h-16 bg-white rounded-2xl items-center justify-center mb-4 shadow-lg">
-            <FontAwesomeIcon icon={faBookOpen} className="text-brand-purple text-2xl" />
+            <FontAwesomeIcon
+              icon={faBookOpen}
+              className="text-brand-purple text-2xl"
+            />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">RevisionHub</h1>
-          <p className="text-purple-100">Calm, confidence-building revision for your children</p>
+          <p className="text-purple-100">
+            Calm, confidence-building revision for your children
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -66,7 +76,10 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Email address
               </label>
               <input
@@ -74,7 +87,9 @@ export default function Login() {
                 type="email"
                 required
                 value={email}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setEmail(e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
                 placeholder="you@example.com"
                 disabled={submitting}
@@ -82,7 +97,10 @@ export default function Login() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Password
               </label>
               <input
@@ -90,7 +108,9 @@ export default function Login() {
                 type="password"
                 required
                 value={password}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setPassword(e.target.value)
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-purple focus:border-transparent outline-none transition-all"
                 placeholder="Enter your password"
                 disabled={submitting}
@@ -108,13 +128,18 @@ export default function Login() {
 
           <p className="mt-6 text-center text-sm text-gray-600">
             Don&apos;t have an account?{" "}
-            <Link to="/signup" className="text-brand-purple font-semibold hover:text-brand-purple-dark">
+            <Link
+              to="/signup"
+              className="text-brand-purple font-semibold hover:text-brand-purple-dark"
+            >
               Sign up
             </Link>
           </p>
         </div>
 
-        <p className="text-center text-purple-100 text-sm mt-6">Parent-led, child-used revision planning</p>
+        <p className="text-center text-purple-100 text-sm mt-6">
+          Parent-led, child-used revision planning
+        </p>
       </div>
     </div>
   );
