@@ -1,5 +1,5 @@
 // src/pages/child/SessionRun.tsx
-// UPDATED: Integrated gamification support
+// UPDATED: Integrated gamification support (v3.3)
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -8,9 +8,10 @@ import RecallStep from "./sessionSteps/RecallStep";
 import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
 import ReflectionStep from "./sessionSteps/ReflectionStep";
+import CompleteStep from "./sessionSteps/CompleteStep";
 import SessionHeader from "../../components/session/SessionHeader";
 import ProgressTracker from "../../components/session/ProgressTracker";
-import { SessionCompleteWithGamification } from "../../components/gamification";
+import SessionCompleteWithGamification from "../../components/gamification/SessionCompleteWithGamification";
 import { markAchievementsNotified } from "../../services/gamificationService";
 import type { SessionGamificationResult, AdvanceTopicResult } from "../../types/gamification";
 
@@ -73,8 +74,8 @@ function idxOf(step: string | null | undefined) {
 
 function nextStepKey(step: string | null | undefined) {
   const s = normaliseStepKey(step);
-  if (s === "reflection") return "topic_complete";
-  if (s === "topic_complete") return "recall";
+  if (s === "reflection") return "topic_complete"; // Changed: go to topic_complete, not complete
+  if (s === "topic_complete") return "recall"; // After break, start next topic
   const i = idxOf(s);
   return STEP_ORDER[Math.min(i + 1, STEP_ORDER.length - 1)];
 }
@@ -135,7 +136,7 @@ export default function SessionRun() {
   const [showTopicComplete, setShowTopicComplete] = useState(false);
   const [nextTopicName, setNextTopicName] = useState<string | null>(null);
 
-  // GAMIFICATION STATE
+  // GAMIFICATION STATE (NEW in v3.3)
   const [gamificationResult, setGamificationResult] = useState<SessionGamificationResult | null>(null);
   const [showSessionComplete, setShowSessionComplete] = useState(false);
 
@@ -392,6 +393,7 @@ export default function SessionRun() {
   }
 
   // Called when user clicks "Continue" on the topic complete screen
+  // UPDATED: Now handles gamification result from RPC
   async function handleTopicComplete() {
     if (!revisionSessionId) return;
 
@@ -491,7 +493,7 @@ export default function SessionRun() {
     }
   }
 
-  // Handle marking achievements as notified
+  // Handle marking achievements as notified (NEW in v3.3)
   async function handleMarkAchievementsNotified() {
     if (!childId) return;
     await markAchievementsNotified(childId);
@@ -538,7 +540,7 @@ export default function SessionRun() {
     );
   }
 
-  // SESSION COMPLETE WITH GAMIFICATION
+  // SESSION COMPLETE WITH GAMIFICATION (NEW in v3.3)
   if (showSessionComplete) {
     const currentTopicName = topicsList[currentTopicIndex]?.topic_name ?? "Topic";
     
@@ -797,6 +799,14 @@ export default function SessionRun() {
               onBack={onBack}
               onExit={handleExit}
               onFinish={finishSession}
+            />
+          )}
+
+          {currentStepKey === "complete" && (
+            <CompleteStep
+              overview={headerMeta}
+              payload={effectivePayloadForStep}
+              onExit={handleExit}
             />
           )}
         </div>
