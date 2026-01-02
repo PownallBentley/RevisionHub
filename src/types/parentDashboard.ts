@@ -1,43 +1,54 @@
 // src/types/parentDashboard.ts
 
-// Subject info displayed in child cards and coverage
-export interface SubjectInfo {
+export interface ChildSubject {
   subject_id: string;
   subject_name: string;
   color: string;
   icon: string;
 }
 
-// Next focus session info
-export interface NextFocus {
+export interface ChildNextFocus {
   subject_name: string;
   topic_name: string | null;
   session_date: string;
 }
 
-// Mocks approaching flag
-export interface MocksFlag {
+export interface ChildMocksFlag {
   show: boolean;
   weeks_until: number | null;
   message: string | null;
 }
 
-// Individual child summary
+export interface ChildRecentAchievement {
+  code: string;
+  name: string;
+  icon: string;
+  earned_at: string;
+}
+
+export interface ChildGamification {
+  points_balance: number;
+  lifetime_points: number;
+  current_streak: number;
+  longest_streak: number;
+  recent_achievement: ChildRecentAchievement | null;
+}
+
 export interface ChildSummary {
   child_id: string;
   child_name: string;
   year_group: number | null;
   exam_type: string;
-  subjects: SubjectInfo[];
+  subjects: ChildSubject[];
   week_sessions_completed: number;
   week_sessions_total: number;
   prev_week_sessions_completed: number;
   week_topics_covered: number;
-  next_focus: NextFocus | null;
-  mocks_flag: MocksFlag;
+  next_focus: ChildNextFocus | null;
+  mocks_flag: ChildMocksFlag;
+  gamification: ChildGamification;
 }
 
-// Week summary aggregate
 export interface WeekSummary {
   total_sessions_completed: number;
   total_sessions_planned: number;
@@ -49,7 +60,6 @@ export interface WeekSummary {
   days_active: number;
 }
 
-// Daily activity pattern item
 export interface DailyPattern {
   day_index: number;
   day_name: string;
@@ -58,32 +68,17 @@ export interface DailyPattern {
   is_rest_day: boolean;
 }
 
-// Reminder metadata varies by type
-export interface ReminderMetadata {
-  weeks_until?: number;
-  subjects?: string[];
-  topic_id?: string;
-  topic_name?: string;
-  confidence_level?: string;
-  streak_days?: number;
-  subject_id?: string;
-  subject_name?: string;
-  days_since_last?: number;
-}
-
-// Gentle reminder item
 export interface GentleReminder {
-  type: 'mocks_coming_up' | 'topic_to_revisit' | 'building_momentum' | 'subject_neglected';
+  type: "mocks_coming_up" | "topic_to_revisit" | "building_momentum" | "subject_neglected";
   priority: number;
   child_id: string;
   child_name: string;
   message: string;
   action_label: string | null;
   action_route: string | null;
-  metadata: ReminderMetadata;
+  metadata: Record<string, any>;
 }
 
-// Upcoming session item
 export interface UpcomingSession {
   planned_session_id: string;
   child_id: string;
@@ -97,7 +92,6 @@ export interface UpcomingSession {
   status: string;
 }
 
-// Subject coverage item
 export interface SubjectCoverageItem {
   child_id: string;
   child_name: string;
@@ -109,7 +103,6 @@ export interface SubjectCoverageItem {
   topics_covered: number;
 }
 
-// Complete dashboard response
 export interface ParentDashboardData {
   children: ChildSummary[];
   week_summary: WeekSummary;
