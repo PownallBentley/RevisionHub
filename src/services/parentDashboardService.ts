@@ -1,113 +1,113 @@
-// src/services/parentDashboardService.ts
+// src/types/parentDashboard.ts
 
-import { supabase } from "../lib/supabase";
-import type { ParentDashboardData } from "../types/parentDashboard";
-
-/**
- * Fetches complete parent dashboard data in a single RPC call
- * @param parentId - The authenticated parent's user ID
- * @param weekStart - Optional start date for the week (defaults to current week)
- * @returns Dashboard data or null on error
- */
-export async function fetchParentDashboard(
-  parentId: string,
-  weekStart?: string
-): Promise<{ data: ParentDashboardData | null; error: string | null }> {
-  try {
-    const { data, error } = await supabase.rpc("rpc_get_parent_dashboard_summary", {
-      p_parent_id: parentId,
-      p_week_start: weekStart ?? null,
-    });
-
-    if (error) {
-      console.error("[parentDashboardService] RPC error:", error);
-      return { data: null, error: error.message };
-    }
-
-    // The RPC returns a single JSONB object
-    return { data: data as ParentDashboardData, error: null };
-  } catch (e) {
-    console.error("[parentDashboardService] Unexpected error:", e);
-    return { data: null, error: "Failed to load dashboard data" };
-  }
+export interface ChildSubject {
+  subject_id: string;
+  subject_name: string;
+  color: string;
+  icon: string;
 }
 
-/**
- * Get the start of the current week (Monday)
- */
-export function getCurrentWeekStart(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  const monday = new Date(now.setDate(diff));
-  return monday.toISOString().split("T")[0];
+export interface ChildNextFocus {
+  subject_name: string;
+  topic_name: string | null;
+  session_date: string;
 }
 
-/**
- * Get the start of the previous week (Monday)
- */
-export function getPreviousWeekStart(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1) - 7;
-  const monday = new Date(now.setDate(diff));
-  return monday.toISOString().split("T")[0];
+export interface ChildMocksFlag {
+  show: boolean;
+  weeks_until: number | null;
+  message: string | null;
 }
 
-/**
- * Format minutes into human-readable duration
- */
-export function formatDuration(minutes: number): string {
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+export interface ChildRecentAchievement {
+  code: string;
+  name: string;
+  icon: string;
+  earned_at: string;
 }
 
-/**
- * Format a date string for display
- */
-export function formatSessionDate(dateString: string): string {
-  const date = new Date(dateString);
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  // Check if today
-  if (date.toDateString() === today.toDateString()) {
-    return "Today";
-  }
-
-  // Check if tomorrow
-  if (date.toDateString() === tomorrow.toDateString()) {
-    return "Tomorrow";
-  }
-
-  // Otherwise show day name and date
-  return date.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+export interface ChildGamification {
+  points_balance: number;
+  lifetime_points: number;
+  current_streak: number;
+  longest_streak: number;
+  recent_achievement: ChildRecentAchievement | null;
 }
 
-/**
- * Get comparison text for week-over-week changes
- */
-export function getComparisonText(current: number, previous: number): string {
-  const diff = current - previous;
-  if (diff === 0) return "Same as last week";
-  if (diff > 0) return `↑ ${diff} more than last week`;
-  return `↓ ${Math.abs(diff)} fewer than last week`;
+export interface ChildSummary {
+  child_id: string;
+  child_name: string;
+  year_group: number | null;
+  exam_type: string;
+  subjects: ChildSubject[];
+  week_sessions_completed: number;
+  week_sessions_total: number;
+  prev_week_sessions_completed: number;
+  week_topics_covered: number;
+  next_focus: ChildNextFocus | null;
+  mocks_flag: ChildMocksFlag;
+  gamification: ChildGamification;
 }
 
-/**
- * Get color class based on comparison
- */
-export function getComparisonColor(diff: number): string {
-  if (diff > 0) return "text-green-600";
-  if (diff < 0) return "text-orange-500";
-  return "text-gray-500";
+export interface WeekSummary {
+  total_sessions_completed: number;
+  total_sessions_planned: number;
+  comparison_to_last_week: number;
+  topics_covered: number;
+  subjects_span: number;
+  time_spent_minutes: number;
+  average_session_minutes: number;
+  days_active: number;
+}
+
+export interface DailyPattern {
+  day_index: number;
+  day_name: string;
+  sessions_completed: number;
+  total_minutes: number;
+  is_rest_day: boolean;
+}
+
+export interface GentleReminder {
+  type: "mocks_coming_up" | "topic_to_revisit" | "building_momentum" | "subject_neglected";
+  priority: number;
+  child_id: string;
+  child_name: string;
+  message: string;
+  action_label: string | null;
+  action_route: string | null;
+  metadata: Record<string, any>;
+}
+
+export interface UpcomingSession {
+  planned_session_id: string;
+  child_id: string;
+  child_name: string;
+  subject_id: string;
+  subject_name: string;
+  subject_color: string;
+  topic_name: string | null;
+  session_date: string;
+  session_duration_minutes: number;
+  status: string;
+}
+
+export interface SubjectCoverageItem {
+  child_id: string;
+  child_name: string;
+  subject_id: string;
+  subject_name: string;
+  subject_color: string;
+  subject_icon: string;
+  sessions_completed: number;
+  topics_covered: number;
+}
+
+export interface ParentDashboardData {
+  children: ChildSummary[];
+  week_summary: WeekSummary;
+  daily_pattern: DailyPattern[];
+  gentle_reminders: GentleReminder[];
+  coming_up_next: UpcomingSession[];
+  subject_coverage: SubjectCoverageItem[];
 }
