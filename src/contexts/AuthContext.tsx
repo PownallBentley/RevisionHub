@@ -53,17 +53,6 @@ export function useAuth() {
   return ctx;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timeoutId: any;
-  const timeout = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
-}
-
-// Bolt/StackBlitz can be very slow for auth init + storage recovery.
-const AUTH_TIMEOUT_MS = 30000;
-
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
@@ -153,28 +142,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resolvingRef = useRef(false);
   const hydratedOnceRef = useRef(false);
 
-  async function hydrateFromSession(s: Session | null) {
+  /**
+   * Hydrates all auth state from a session.
+   * Returns true if successful, false if session is null (logged out).
+   */
+  async function hydrateFromSession(s: Session | null): Promise<boolean> {
     const u = s?.user ?? null;
 
-    setSession(s);
-    setUser(u);
-
     if (!u) {
+      // User logged out - clear everything
+      setSession(null);
+      setUser(null);
       setProfile(null);
       setActiveChildId(null);
       setParentChildCount(null);
-      return;
+      return false;
     }
 
-    // Fetch profile and childId in parallel - no timeout
+    // User is logged in - set session and user immediately
+    setSession(s);
+    setUser(u);
+
+    // Fetch profile and childId in parallel
     const [p, childId] = await Promise.all([
       fetchProfile(u.id),
       fetchMyChildId()
     ]);
 
-    // Set profile (only parents have this)
-    setProfile(p);
-    
     // Set activeChildId (only children have this)
     setActiveChildId(childId);
 
@@ -182,7 +176,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (childId) {
       const childProfile = await fetchChildProfile(childId);
       
-      // Store child details in profile for display (but keep it separate conceptually)
       if (childProfile) {
         setProfile({
           id: childProfile.id || '',
@@ -196,15 +189,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           created_at: null,
           updated_at: null,
         } as Profile);
+      } else {
+        setProfile(null);
       }
       setParentChildCount(null);
-    } else if (p) {
-      // Parent - fetch their child count
-      const count = await fetchParentChildCount(u.id);
-      setParentChildCount(count);
     } else {
-      setParentChildCount(null);
+      // Parent or unknown - set their profile
+      setProfile(p);
+      
+      if (p) {
+        // Parent - fetch their child count
+        const count = await fetchParentChildCount(u.id);
+        setParentChildCount(count);
+      } else {
+        setParentChildCount(null);
+      }
     }
+
+    return true;
   }
 
   async function resolveAuth(source: string, opts?: { showLoading?: boolean }) {
@@ -216,7 +218,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (showLoading) setLoading(true);
 
-      // Don't timeout getSession - let Supabase handle its own timing
       const { data, error } = await supabase.auth.getSession();
 
       if (error) console.warn("[auth] getSession error:", source, error);
@@ -226,9 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("[auth] resolveAuth failed:", source, e);
       hydratedOnceRef.current = true;
-
       // Don't wipe state on error - leave whatever we had
-      // This prevents children from being logged out due to transient errors
     } finally {
       if (showLoading) setLoading(false);
       resolvingRef.current = false;
@@ -242,28 +241,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    // Initial auth resolution
     (async () => {
       if (!mounted) return;
       await resolveAuth("initial mount", { showLoading: true });
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // Listen for auth state changes (sign in, sign out, token refresh)
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
 
-      try {
-        await withTimeout(hydrateFromSession(newSession), AUTH_TIMEOUT_MS, "hydrateFromSession (event)");
-        hydratedOnceRef.current = true;
-      } catch (e) {
-        console.warn("[auth] onAuthStateChange hydrate failed:", e);
-        hydratedOnceRef.current = true;
+      console.log("[auth] onAuthStateChange:", event);
 
+      // For SIGNED_OUT, clear state immediately
+      if (event === "SIGNED_OUT" || !newSession) {
         setSession(null);
         setUser(null);
         setProfile(null);
         setActiveChildId(null);
         setParentChildCount(null);
-      } finally {
-        if (!hydratedOnceRef.current) setLoading(false);
+        setLoading(false);
+        return;
+      }
+
+      // For other events (SIGNED_IN, TOKEN_REFRESHED, etc.)
+      // Only update if we haven't hydrated yet, or if this is a new sign-in
+      if (event === "SIGNED_IN" || !hydratedOnceRef.current) {
+        try {
+          await hydrateFromSession(newSession);
+          hydratedOnceRef.current = true;
+        } catch (e) {
+          console.warn("[auth] onAuthStateChange hydrate failed:", e);
+          // DON'T wipe state on error - the user might still be valid
+          // Just log and continue with existing state
+        } finally {
+          setLoading(false);
+        }
+      } else if (event === "TOKEN_REFRESHED") {
+        // Just update session/user, don't re-fetch everything
+        setSession(newSession);
+        setUser(newSession.user);
       }
     });
 
@@ -299,17 +316,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    // Clear state immediately for instant UI response
     setSession(null);
     setUser(null);
     setProfile(null);
     setActiveChildId(null);
     setParentChildCount(null);
+    
+    // Then tell Supabase (this triggers onAuthStateChange but we've already cleared)
+    await supabase.auth.signOut();
   }
 
   // CORRECT LOGIC based on actual data model:
   // - Parents have a profile row, no activeChildId
-  // - Children have no profile row, but have activeChildId (from children table)
+  // - Children have no profile row in profiles table, but have activeChildId
   const isParent = !!profile && !activeChildId;
   const isChild = !!activeChildId;
   const isUnresolved = !!user && !isParent && !isChild;
