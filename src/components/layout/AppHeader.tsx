@@ -11,6 +11,7 @@ import {
   faUser,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
+import ParentNav from "./ParentNav";
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -39,7 +40,7 @@ function getDisplayName(profile: any, isChild: boolean): string {
 
 export default function AppHeader() {
   const navigate = useNavigate();
-  const { user, profile, isChild, signOut } = useAuth();
+  const { user, profile, isChild, isParent, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -78,27 +79,33 @@ export default function AppHeader() {
   return (
     <header className={`${headerBg} border-b sticky top-0 z-50`}>
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Logo */}
-        <Link
-          to="/"
-          className="flex items-center gap-3 text-gray-900 hover:opacity-80 transition-opacity"
-        >
-          <div
-            className={`w-10 h-10 ${
-              isChild ? "bg-indigo-500" : "bg-brand-purple"
-            } rounded-xl flex items-center justify-center shadow-sm`}
+        {/* Left side: Logo + Parent Nav */}
+        <div className="flex items-center gap-8">
+          {/* Logo */}
+          <Link
+            to="/"
+            className="flex items-center gap-3 text-gray-900 hover:opacity-80 transition-opacity"
           >
-            <FontAwesomeIcon icon={faBookOpen} className="text-white text-lg" />
-          </div>
-          <div>
-            <div className="text-base font-semibold leading-tight">
-              RevisionHub
+            <div
+              className={`w-10 h-10 ${
+                isChild ? "bg-indigo-500" : "bg-brand-purple"
+              } rounded-xl flex items-center justify-center shadow-sm`}
+            >
+              <FontAwesomeIcon icon={faBookOpen} className="text-white text-lg" />
             </div>
-            <div className="text-xs text-gray-500">
-              {isChild ? "Your revision" : "Parent-led revision"}
+            <div>
+              <div className="text-base font-semibold leading-tight">
+                RevisionHub
+              </div>
+              <div className="text-xs text-gray-500">
+                {isChild ? "Your revision" : "Parent-led revision"}
+              </div>
             </div>
-          </div>
-        </Link>
+          </Link>
+
+          {/* Parent Navigation */}
+          {isLoggedIn && isParent && <ParentNav />}
+        </div>
 
         {/* Right side */}
         {!isLoggedIn ? (
