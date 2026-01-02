@@ -159,15 +159,7 @@ export default function ParentDashboard() {
         {/* Children Cards */}
         {dashboardData && dashboardData.children.length > 0 && (
           <section className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Your Children</h2>
-              <button
-                onClick={() => navigate("/parent/onboarding")}
-                className="text-sm text-brand-purple font-medium hover:underline flex items-center gap-1"
-              >
-                + Add Child
-              </button>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Children</h2>
             <div className={`grid gap-6 ${
               dashboardData.children.length === 1 
                 ? "grid-cols-1 max-w-lg" 
