@@ -1,4 +1,6 @@
 // src/pages/child/SessionRun.tsx
+// UPDATED: Integrated gamification support
+
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -6,9 +8,11 @@ import RecallStep from "./sessionSteps/RecallStep";
 import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
 import ReflectionStep from "./sessionSteps/ReflectionStep";
-import CompleteStep from "./sessionSteps/CompleteStep";
 import SessionHeader from "../../components/session/SessionHeader";
 import ProgressTracker from "../../components/session/ProgressTracker";
+import { SessionCompleteWithGamification } from "../../components/gamification";
+import { markAchievementsNotified } from "../../services/gamificationService";
+import type { SessionGamificationResult, AdvanceTopicResult } from "../../types/gamification";
 
 type StartPlannedSessionRow = {
   out_planned_session_id: string;
@@ -19,6 +23,7 @@ type StartPlannedSessionRow = {
 
 type RevisionSessionRow = {
   id: string;
+  child_id: string;
   planned_session_id: string;
   status: string;
   current_step: string | null;
@@ -68,8 +73,8 @@ function idxOf(step: string | null | undefined) {
 
 function nextStepKey(step: string | null | undefined) {
   const s = normaliseStepKey(step);
-  if (s === "reflection") return "topic_complete"; // Changed: go to topic_complete, not complete
-  if (s === "topic_complete") return "recall"; // After break, start next topic
+  if (s === "reflection") return "topic_complete";
+  if (s === "topic_complete") return "recall";
   const i = idxOf(s);
   return STEP_ORDER[Math.min(i + 1, STEP_ORDER.length - 1)];
 }
@@ -130,15 +135,21 @@ export default function SessionRun() {
   const [showTopicComplete, setShowTopicComplete] = useState(false);
   const [nextTopicName, setNextTopicName] = useState<string | null>(null);
 
+  // GAMIFICATION STATE
+  const [gamificationResult, setGamificationResult] = useState<SessionGamificationResult | null>(null);
+  const [showSessionComplete, setShowSessionComplete] = useState(false);
+
   const psid = useMemo(() => (plannedSessionId ?? "").trim(), [plannedSessionId]);
 
   const currentStepKey = useMemo(() => {
+    if (showSessionComplete) return "complete";
     if (showTopicComplete) return "topic_complete";
     return normaliseStepKey(revisionSession?.current_step ?? "recall");
-  }, [revisionSession?.current_step, showTopicComplete]);
+  }, [revisionSession?.current_step, showTopicComplete, showSessionComplete]);
 
   const currentTopicIndex = revisionSession?.current_topic_index ?? 0;
   const totalTopics = revisionSession?.total_topics ?? 1;
+  const childId = revisionSession?.child_id;
 
   const currentStepRow = useMemo(() => {
     return stepRows.find((s) => s.step_key === currentStepKey) ?? null;
@@ -208,11 +219,11 @@ export default function SessionRun() {
           if (!cancelled) setRevisionSessionId(rsid);
         }
 
-        // 2) Load revision_sessions (now includes topic tracking)
+        // 2) Load revision_sessions (now includes topic tracking and child_id)
         const { data: rsData, error: rsErr } = await supabase
           .from("revision_sessions")
           .select(
-            "id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at"
+            "id, child_id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at"
           )
           .eq("id", rsid)
           .maybeSingle();
@@ -393,10 +404,15 @@ export default function SessionRun() {
       );
       if (advErr) throw advErr;
 
-      const result = Array.isArray(data) ? data[0] : data;
+      const result = (Array.isArray(data) ? data[0] : data) as AdvanceTopicResult;
       
       if (result.out_is_session_complete) {
-        // All topics done - session complete
+        // All topics done - session complete with gamification!
+        setGamificationResult(result.out_gamification);
+        setShowTopicComplete(false);
+        setShowSessionComplete(true);
+        
+        // Update local state
         setRevisionSession((prev) =>
           prev
             ? {
@@ -407,7 +423,6 @@ export default function SessionRun() {
               }
             : prev
         );
-        setShowTopicComplete(false);
       } else {
         // More topics to do
         setNextTopicName(result.out_topic_name);
@@ -415,7 +430,7 @@ export default function SessionRun() {
         // Reload session data to get fresh state
         const { data: rsData } = await supabase
           .from("revision_sessions")
-          .select("id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at")
+          .select("id, child_id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at")
           .eq("id", revisionSessionId)
           .maybeSingle();
         
@@ -476,6 +491,12 @@ export default function SessionRun() {
     }
   }
 
+  // Handle marking achievements as notified
+  async function handleMarkAchievementsNotified() {
+    if (!childId) return;
+    await markAchievementsNotified(childId);
+  }
+
   // Force step from navigation (only when requested)
   useEffect(() => {
     if (!forceStepFromNav) return;
@@ -514,6 +535,22 @@ export default function SessionRun() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // SESSION COMPLETE WITH GAMIFICATION
+  if (showSessionComplete) {
+    const currentTopicName = topicsList[currentTopicIndex]?.topic_name ?? "Topic";
+    
+    return (
+      <SessionCompleteWithGamification
+        subjectName={overview?.subject_name ?? "Revision"}
+        topicName={currentTopicName}
+        topicCount={totalTopics}
+        gamification={gamificationResult}
+        onExit={handleExit}
+        onMarkAchievementsNotified={handleMarkAchievementsNotified}
+      />
     );
   }
 
@@ -760,14 +797,6 @@ export default function SessionRun() {
               onBack={onBack}
               onExit={handleExit}
               onFinish={finishSession}
-            />
-          )}
-
-          {currentStepKey === "complete" && (
-            <CompleteStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              onExit={handleExit}
             />
           )}
         </div>
