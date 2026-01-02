@@ -3,7 +3,6 @@
 import { supabase } from "../lib/supabase";
 import type {
   GamificationSummary,
-  SessionGamificationResult,
 } from "../types/gamification";
 
 /**
