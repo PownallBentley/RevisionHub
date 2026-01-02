@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/SignUp";
 import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
 import ParentDashboard from "./pages/ParentDashboard";
+import SubjectProgress from "./pages/parent/SubjectProgress";
 import Today from "./pages/child/Today";
 import SessionOverview from "./pages/child/SessionOverview";
 import SessionRun from "./pages/child/SessionRun";
@@ -43,13 +44,8 @@ function HomeGate() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Session routes - have their own headers, no AppLayout */}
-        <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
-        <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
-
-        {/* All other routes wrapped in AppLayout */}
-        <Route element={<AppLayout />}>
+      <AppLayout>
+        <Routes>
           {/* Home gate - handles routing based on auth state */}
           <Route path="/" element={<HomeGate />} />
 
@@ -63,14 +59,17 @@ export default function App() {
           {/* Parent routes */}
           <Route path="/parent/onboarding" element={<ParentOnboardingPage />} />
           <Route path="/parent" element={<ParentDashboard />} />
+          <Route path="/parent/subjects" element={<SubjectProgress />} />
 
           {/* Child routes */}
           <Route path="/child/today" element={<Today />} />
+          <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
+          <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+        </Routes>
+      </AppLayout>
     </BrowserRouter>
   );
 }
