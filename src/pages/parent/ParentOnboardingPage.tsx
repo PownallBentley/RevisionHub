@@ -1,6 +1,6 @@
 // src/pages/parent/ParentOnboardingPage.tsx
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 import StepShell from "../../components/parentOnboarding/StepShell";
@@ -8,19 +8,22 @@ import ChildDetailsStep, {
   ChildDetails,
 } from "../../components/parentOnboarding/steps/ChildDetailsStep";
 import GoalStep from "../../components/parentOnboarding/steps/GoalStep";
+import NeedsStep, {
+  type NeedClusterSelection,
+} from "../../components/parentOnboarding/steps/NeedsStep";
 import ExamTypeStep from "../../components/parentOnboarding/steps/ExamTypeStep";
 import SubjectBoardStep, {
   type SelectedSubject,
 } from "../../components/parentOnboarding/steps/SubjectBoardStep";
-import NeedsStep, {
-  type NeedClusterSelection,
-} from "../../components/parentOnboarding/steps/NeedsStep";
-import ExamTimelineStep, {
-  type ExamTimeline,
-} from "../../components/parentOnboarding/steps/ExamTimelineStep";
-import AvailabilityStep, {
-  Availability,
-} from "../../components/parentOnboarding/steps/AvailabilityStep";
+import SubjectPriorityGradesStep, {
+  type SubjectWithGrades,
+} from "../../components/parentOnboarding/steps/SubjectPriorityGradesStep";
+import RevisionPeriodStep, {
+  type RevisionPeriodData,
+} from "../../components/parentOnboarding/steps/RevisionPeriodStep";
+import AvailabilityBuilderStep, {
+  type DateOverride,
+} from "../../components/parentOnboarding/steps/AvailabilityBuilderStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
 
 import { rpcParentCreateChildAndPlan } from "../../services/parentOnboarding/parentOnboardingService";
@@ -28,32 +31,48 @@ import {
   rpcCreateChildInvite,
   type ChildInviteCreateResult,
 } from "../../services/invitationService";
+import {
+  calculateRecommendedSessions,
+  type RecommendationResult,
+  type DayTemplate,
+} from "../../services/parentOnboarding/recommendationService";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 
 /* ============================
-   Constants
+   Constants & Helpers
 ============================ */
 
-const defaultAvailability: Availability = {
-  monday: { sessions: 1, session_pattern: "p45" },
-  tuesday: { sessions: 1, session_pattern: "p45" },
-  wednesday: { sessions: 0, session_pattern: "p45" },
-  thursday: { sessions: 1, session_pattern: "p45" },
-  friday: { sessions: 0, session_pattern: "p45" },
-  saturday: { sessions: 1, session_pattern: "p70" },
-  sunday: { sessions: 0, session_pattern: "p45" },
-};
+function createEmptyTemplate(): DayTemplate[] {
+  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  return dayNames.map((name, index) => ({
+    day_of_week: index,
+    day_name: name,
+    is_enabled: index < 5, // Weekdays enabled by default
+    slots: [],
+    session_count: 0,
+  }));
+}
 
-const defaultExamTimeline: ExamTimeline = {
-  exam_date: null,
-  feeling_code: null,
-  history_code: null,
-};
+function createDefaultRevisionPeriod(): RevisionPeriodData {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+  
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() + daysUntilMonday);
+  
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 56); // 8 weeks
 
-/* ============================
-   Helpers
-============================ */
+  return {
+    start_date: startDate.toISOString().split('T')[0],
+    end_date: endDate.toISOString().split('T')[0],
+    contingency_percent: 10,
+    feeling_code: null,
+    history_code: null,
+  };
+}
 
 function normaliseStringArray(value: unknown): string[] {
   if (!value) return [];
@@ -80,18 +99,31 @@ async function copyToClipboard(text: string) {
 
 /* ============================
    Step Configuration
+   
+   NEW ORDER:
+   1. Child Details
+   2. Goal
+   3. Needs (moved earlier - informs recommendations)
+   4. Exam Type
+   5. Subjects
+   6. Priority & Grades (NEW)
+   7. Revision Period (NEW - replaces ExamTimeline)
+   8. Availability (NEW - replaces old AvailabilityStep)
+   9. Confirm
+   10. Invite
 ============================ */
 
 const STEPS = {
   CHILD_DETAILS: 0,
   GOAL: 1,
-  EXAM_TYPE: 2,
-  SUBJECTS: 3,
-  NEEDS: 4,
-  EXAM_TIMELINE: 5,
-  AVAILABILITY: 6,
-  CONFIRM: 7,
-  INVITE: 8,
+  NEEDS: 2,           // Moved earlier
+  EXAM_TYPE: 3,
+  SUBJECTS: 4,
+  PRIORITY_GRADES: 5, // NEW
+  REVISION_PERIOD: 6, // NEW (replaces EXAM_TIMELINE)
+  AVAILABILITY: 7,    // NEW (replaces old availability)
+  CONFIRM: 8,
+  INVITE: 9,
 } as const;
 
 /* ============================
@@ -109,7 +141,7 @@ export default function ParentOnboardingPage() {
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Form state
+  // Step 1: Child Details
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
     last_name: "",
@@ -118,65 +150,165 @@ export default function ParentOnboardingPage() {
     year_group: 11,
   });
 
+  // Step 2: Goal
   const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
-  const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
-  const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
+
+  // Step 3: Needs (moved earlier)
   const [needClusters, setNeedClusters] = useState<NeedClusterSelection[]>([]);
-  const [examTimeline, setExamTimeline] = useState<ExamTimeline>(defaultExamTimeline);
-  const [availability, setAvailability] = useState<Availability>(defaultAvailability);
 
-  // Build payload for RPC
+  // Step 4: Exam Types
+  const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
+
+  // Step 5: Subjects (basic selection)
+  const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
+
+  // Step 6: Priority & Grades (NEW)
+  const [subjectsWithGrades, setSubjectsWithGrades] = useState<SubjectWithGrades[]>([]);
+
+  // Step 7: Revision Period (NEW)
+  const [revisionPeriod, setRevisionPeriod] = useState<RevisionPeriodData>(
+    createDefaultRevisionPeriod()
+  );
+
+  // Step 8: Availability (NEW)
+  const [weeklyTemplate, setWeeklyTemplate] = useState<DayTemplate[]>(createEmptyTemplate());
+  const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
+
+  // Recommendation state (calculated when entering availability step)
+  const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
+  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+
+  /* ============================
+     Convert subjects to grades format when moving to priority step
+  ============================ */
+  useEffect(() => {
+    if (step === STEPS.PRIORITY_GRADES && selectedSubjects.length > 0 && subjectsWithGrades.length === 0) {
+      const converted: SubjectWithGrades[] = selectedSubjects.map((s, index) => ({
+        subject_id: s.subject_id,
+        subject_name: s.subject_name,
+        exam_board_name: s.exam_board_name,
+        sort_order: index + 1,
+        current_grade: null,
+        target_grade: null,
+        grade_confidence: 'confirmed' as const,
+      }));
+      setSubjectsWithGrades(converted);
+    }
+  }, [step, selectedSubjects, subjectsWithGrades.length]);
+
+  /* ============================
+     Calculate recommendations when entering availability step
+  ============================ */
+  const calculateRecommendations = useCallback(async () => {
+    if (subjectsWithGrades.length === 0 || !goalCode) return;
+
+    setIsLoadingRecommendation(true);
+    try {
+      const subjectData = subjectsWithGrades.map(s => ({
+        subject_id: s.subject_id,
+        sort_order: s.sort_order,
+        current_grade: s.current_grade,
+        target_grade: s.target_grade,
+        grade_confidence: s.grade_confidence,
+      }));
+
+      const needClusterCodes = needClusters.map(nc => nc.cluster_code);
+
+      const result = await calculateRecommendedSessions(
+        subjectData,
+        goalCode,
+        needClusterCodes,
+        revisionPeriod.contingency_percent
+      );
+
+      setRecommendation(result);
+    } catch (err) {
+      console.error('Error calculating recommendations:', err);
+      // Don't block progress - recommendations are helpful but not required
+    } finally {
+      setIsLoadingRecommendation(false);
+    }
+  }, [subjectsWithGrades, goalCode, needClusters, revisionPeriod.contingency_percent]);
+
+  useEffect(() => {
+    if (step === STEPS.AVAILABILITY && subjectsWithGrades.length > 0 && goalCode && !recommendation) {
+      calculateRecommendations();
+    }
+  }, [step, subjectsWithGrades, goalCode, recommendation, calculateRecommendations]);
+
+  /* ============================
+     Build payload for RPC (NEW FORMAT)
+  ============================ */
   const payload = useMemo(() => {
-    const subject_ids = (selectedSubjects ?? [])
-      .map((s) => s.subject_id)
-      .filter(Boolean)
-      .map(String);
+    // Build weekly_availability in new format
+    const weekly_availability: Record<string, { enabled: boolean; slots: Array<{ time_of_day: string; session_pattern: string }> }> = {};
+    
+    for (const day of weeklyTemplate) {
+      weekly_availability[day.day_of_week.toString()] = {
+        enabled: day.is_enabled,
+        slots: day.slots.map(s => ({
+          time_of_day: s.time_of_day,
+          session_pattern: s.session_pattern,
+        })),
+      };
+    }
 
-    // Transform need clusters to match backend expectations
+    // Build subjects in new format (with grades)
+    const subjects = subjectsWithGrades.map(s => ({
+      subject_id: s.subject_id,
+      sort_order: s.sort_order,
+      current_grade: s.current_grade,
+      target_grade: s.target_grade,
+      grade_confidence: s.grade_confidence,
+    }));
+
+    // Build need_clusters
     const need_clusters = needClusters.map((nc) => ({
       cluster_code: nc.cluster_code,
-      source: nc.source,
-      has_exam_accommodations: nc.has_exam_accommodations ?? false,
-      accommodation_details: nc.accommodation_details,
     }));
 
     return {
       child,
       goal_code: goalCode ?? null,
-      subject_ids,
+      subjects,
       need_clusters,
-      exam_timeline: {
-        exam_date: examTimeline.exam_date,
-        feeling_code: examTimeline.feeling_code ?? "feeling_on_track",
-        history_code: examTimeline.history_code,
+      revision_period: {
+        start_date: revisionPeriod.start_date,
+        end_date: revisionPeriod.end_date,
+        contingency_percent: revisionPeriod.contingency_percent,
+        feeling_code: revisionPeriod.feeling_code,
+        history_code: revisionPeriod.history_code,
       },
-      settings: {
-        availability,
-      },
+      weekly_availability,
+      date_overrides: dateOverrides.length > 0 ? dateOverrides : undefined,
     };
-  }, [child, goalCode, selectedSubjects, needClusters, examTimeline, availability]);
+  }, [child, goalCode, subjectsWithGrades, needClusters, revisionPeriod, weeklyTemplate, dateOverrides]);
 
-  // Validation for navigation
+  /* ============================
+     Validation
+  ============================ */
   const canNext = useMemo(() => {
     switch (step) {
       case STEPS.CHILD_DETAILS:
         return !!child.first_name?.trim();
       case STEPS.GOAL:
         return !!goalCode;
+      case STEPS.NEEDS:
+        return true; // Optional step
       case STEPS.EXAM_TYPE:
         return normaliseStringArray(examTypeIds).length > 0;
       case STEPS.SUBJECTS:
         return true; // SubjectBoardStep owns its nav
-      case STEPS.NEEDS:
-        return true; // Optional step
-      case STEPS.EXAM_TIMELINE:
-        return examTimeline.feeling_code !== null; // At least feeling is required
+      case STEPS.PRIORITY_GRADES:
+        return subjectsWithGrades.length > 0 && subjectsWithGrades.every(s => s.target_grade !== null);
+      case STEPS.REVISION_PERIOD:
+        return !!revisionPeriod.start_date && !!revisionPeriod.end_date;
       case STEPS.AVAILABILITY:
-        return Object.values(availability).some((d) => (d?.sessions ?? 0) > 0);
+        return weeklyTemplate.some(d => d.is_enabled && d.slots.length > 0);
       default:
         return true;
     }
-  }, [step, child.first_name, goalCode, examTypeIds, examTimeline, availability]);
+  }, [step, child.first_name, goalCode, examTypeIds, subjectsWithGrades, revisionPeriod, weeklyTemplate]);
 
   function validatePayload(): string | null {
     if (!payload.child?.first_name?.trim()) {
@@ -185,19 +317,24 @@ export default function ParentOnboardingPage() {
     if (!payload.goal_code) {
       return "Please choose a goal.";
     }
-    if (!Array.isArray(payload.subject_ids) || payload.subject_ids.length === 0) {
-      return "Please select at least one subject (including exam board/spec).";
+    if (!Array.isArray(payload.subjects) || payload.subjects.length === 0) {
+      return "Please select at least one subject.";
     }
-    if (!payload.settings?.availability) {
-      return "Availability is missing.";
+    if (!payload.subjects.every(s => s.target_grade !== null)) {
+      return "Please set a target grade for each subject.";
     }
-    if (
-      !Object.values(payload.settings.availability).some(
-        (d: any) => (d?.sessions ?? 0) > 0
-      )
-    ) {
-      return "Please add at least one study session to your availability.";
+    if (!payload.revision_period?.start_date || !payload.revision_period?.end_date) {
+      return "Please set a revision period.";
     }
+    
+    // Check availability has at least one session
+    const hasSession = Object.values(payload.weekly_availability).some(
+      day => day.enabled && day.slots.length > 0
+    );
+    if (!hasSession) {
+      return "Please add at least one study session to your schedule.";
+    }
+    
     return null;
   }
 
@@ -268,6 +405,43 @@ export default function ParentOnboardingPage() {
   const selfNavigatingSteps = [STEPS.SUBJECTS];
   const showDefaultNav = !selfNavigatingSteps.includes(step) && step < STEPS.INVITE;
 
+  /* ============================
+     Step-specific navigation handlers
+  ============================ */
+  
+  const handlePriorityGradesNext = useCallback(() => {
+    setError(null);
+    setStep(STEPS.REVISION_PERIOD);
+  }, []);
+
+  const handlePriorityGradesBack = useCallback(() => {
+    setStep(STEPS.SUBJECTS);
+  }, []);
+
+  const handleRevisionPeriodNext = useCallback(() => {
+    setError(null);
+    // Trigger recommendation calculation
+    calculateRecommendations();
+    setStep(STEPS.AVAILABILITY);
+  }, [calculateRecommendations]);
+
+  const handleRevisionPeriodBack = useCallback(() => {
+    setStep(STEPS.PRIORITY_GRADES);
+  }, []);
+
+  const handleAvailabilityNext = useCallback(() => {
+    setError(null);
+    setStep(STEPS.CONFIRM);
+  }, []);
+
+  const handleAvailabilityBack = useCallback(() => {
+    setStep(STEPS.REVISION_PERIOD);
+  }, []);
+
+  /* ============================
+     Render
+  ============================ */
+
   return (
     <StepShell
       title="Set up your child's revision plan"
@@ -280,31 +454,11 @@ export default function ParentOnboardingPage() {
       )}
 
       {/* Step 1: Goal */}
-      {step === STEPS.GOAL && <GoalStep value={goalCode} onChange={setGoalCode} />}
-
-      {/* Step 2: Exam Type */}
-      {step === STEPS.EXAM_TYPE && (
-        <ExamTypeStep
-          value={examTypeIds}
-          onChange={(ids) => {
-            setExamTypeIds(normaliseStringArray(ids));
-            setSelectedSubjects([]); // reset subjects if exams change
-          }}
-        />
+      {step === STEPS.GOAL && (
+        <GoalStep value={goalCode} onChange={setGoalCode} />
       )}
 
-      {/* Step 3: Subject & Board Selection (self-navigating) */}
-      {step === STEPS.SUBJECTS && (
-        <SubjectBoardStep
-          examTypeIds={normaliseStringArray(examTypeIds)}
-          value={selectedSubjects}
-          onChange={setSelectedSubjects}
-          onBackToExamTypes={() => setStep(STEPS.EXAM_TYPE)}
-          onDone={() => setStep(STEPS.NEEDS)}
-        />
-      )}
-
-      {/* Step 4: Needs (JCQ-aligned) */}
+      {/* Step 2: Needs (moved earlier) */}
       {step === STEPS.NEEDS && (
         <NeedsStep
           childName={childDisplayName}
@@ -313,26 +467,73 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 5: Exam Timeline */}
-      {step === STEPS.EXAM_TIMELINE && (
-        <ExamTimelineStep
-          childName={childDisplayName}
-          value={examTimeline}
-          onChange={setExamTimeline}
+      {/* Step 3: Exam Type */}
+      {step === STEPS.EXAM_TYPE && (
+        <ExamTypeStep
+          value={examTypeIds}
+          onChange={(ids) => {
+            setExamTypeIds(normaliseStringArray(ids));
+            setSelectedSubjects([]); // reset subjects if exams change
+            setSubjectsWithGrades([]); // reset grades too
+          }}
         />
       )}
 
-      {/* Step 6: Availability */}
-      {step === STEPS.AVAILABILITY && (
-        <AvailabilityStep value={availability} onChange={setAvailability} />
+      {/* Step 4: Subject & Board Selection (self-navigating) */}
+      {step === STEPS.SUBJECTS && (
+        <SubjectBoardStep
+          examTypeIds={normaliseStringArray(examTypeIds)}
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          onBackToExamTypes={() => setStep(STEPS.EXAM_TYPE)}
+          onDone={() => {
+            // Reset grades when subjects change
+            setSubjectsWithGrades([]);
+            setStep(STEPS.PRIORITY_GRADES);
+          }}
+        />
       )}
 
-      {/* Step 7: Confirm */}
+      {/* Step 5: Priority & Grades (NEW) */}
+      {step === STEPS.PRIORITY_GRADES && (
+        <SubjectPriorityGradesStep
+          subjects={subjectsWithGrades}
+          onSubjectsChange={setSubjectsWithGrades}
+          onNext={handlePriorityGradesNext}
+          onBack={handlePriorityGradesBack}
+        />
+      )}
+
+      {/* Step 6: Revision Period (NEW - replaces ExamTimeline) */}
+      {step === STEPS.REVISION_PERIOD && (
+        <RevisionPeriodStep
+          revisionPeriod={revisionPeriod}
+          onRevisionPeriodChange={setRevisionPeriod}
+          onNext={handleRevisionPeriodNext}
+          onBack={handleRevisionPeriodBack}
+        />
+      )}
+
+      {/* Step 7: Availability (NEW) */}
+      {step === STEPS.AVAILABILITY && (
+        <AvailabilityBuilderStep
+          weeklyTemplate={weeklyTemplate}
+          dateOverrides={dateOverrides}
+          recommendation={recommendation}
+          revisionPeriod={revisionPeriod}
+          onTemplateChange={setWeeklyTemplate}
+          onOverridesChange={setDateOverrides}
+          onNext={handleAvailabilityNext}
+          onBack={handleAvailabilityBack}
+        />
+      )}
+
+      {/* Step 8: Confirm */}
       {step === STEPS.CONFIRM && (
         <ConfirmStep payload={payload} busy={busy} onSubmit={submit} />
       )}
 
-      {/* Step 8: Invite */}
+      {/* Step 9: Invite */}
       {step === STEPS.INVITE && invite && (
         <div className="mt-2">
           <h3 className="text-lg font-semibold">Invite {childDisplayName}</h3>
@@ -391,8 +592,8 @@ export default function ParentOnboardingPage() {
         </div>
       )}
 
-      {/* Default navigation */}
-      {showDefaultNav && (
+      {/* Default navigation for steps that don't manage their own */}
+      {showDefaultNav && step !== STEPS.PRIORITY_GRADES && step !== STEPS.REVISION_PERIOD && step !== STEPS.AVAILABILITY && (
         <div className="mt-6 flex items-center justify-between">
           <button
             type="button"
@@ -410,11 +611,7 @@ export default function ParentOnboardingPage() {
               disabled={!canNext || busy}
               onClick={() => setStep((s) => Math.min(STEPS.CONFIRM, s + 1))}
             >
-              {step === STEPS.NEEDS && needClusters.length === 0
-                ? "Skip"
-                : step === STEPS.EXAM_TIMELINE && !examTimeline.history_code
-                ? "Next"
-                : "Next"}
+              {step === STEPS.NEEDS && needClusters.length === 0 ? "Skip" : "Next"}
             </button>
           ) : null}
         </div>
