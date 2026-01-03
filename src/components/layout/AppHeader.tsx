@@ -24,11 +24,9 @@ function getDisplayName(profile: any, isChild: boolean): string {
   if (!profile) return "User";
 
   if (isChild) {
-    // Child: prefer preferred_name, then first_name
     return profile.preferred_name || profile.first_name || "Student";
   }
 
-  // Parent: prefer full_name (first word), or fall back to email prefix
   if (profile.full_name) {
     return profile.full_name.split(" ")[0];
   }
@@ -48,7 +46,6 @@ export default function AppHeader() {
   const displayName = getDisplayName(profile, isChild);
   const initials = getInitials(displayName);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -62,13 +59,17 @@ export default function AppHeader() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function handleSignOut() {
+  function handleSignOut() {
     setDropdownOpen(false);
-    await signOut();
+    
+    // Navigate IMMEDIATELY - don't wait for signOut
     navigate("/", { replace: true });
+    
+    // Then trigger signOut (which clears state synchronously, 
+    // and tells Supabase in background)
+    signOut();
   }
 
-  // Different styling for child vs parent
   const headerBg = isChild
     ? "bg-indigo-50 border-indigo-100"
     : "bg-white border-gray-100";
@@ -109,7 +110,6 @@ export default function AppHeader() {
 
         {/* Right side */}
         {!isLoggedIn ? (
-          /* Logged out: Login + Signup buttons */
           <div className="flex items-center gap-2">
             <Link
               to="/login"
@@ -125,24 +125,20 @@ export default function AppHeader() {
             </Link>
           </div>
         ) : (
-          /* Logged in: Avatar + Name + Dropdown */
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/50 transition-colors"
             >
-              {/* Avatar */}
               <div
                 className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center text-white text-sm font-semibold`}
               >
                 {initials}
               </div>
-              {/* Name */}
               <span className="text-sm font-medium text-gray-700 hidden sm:block">
                 {displayName}
               </span>
-              {/* Chevron */}
               <FontAwesomeIcon
                 icon={faChevronDown}
                 className={`text-gray-400 text-xs transition-transform ${
@@ -151,7 +147,6 @@ export default function AppHeader() {
               />
             </button>
 
-            {/* Dropdown menu */}
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
                 {!isChild && (
