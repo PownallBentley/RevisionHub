@@ -5,6 +5,7 @@
 // - Background profile hydration (doesn't block UI)
 // - Instant logout (clears state immediately)
 // - Proper error handling (doesn't wipe state on transient errors)
+// - Immediate state update on signUp (v3.5 fix)
 
 import {
   createContext,
@@ -158,25 +159,35 @@ async function ensureParentProfile(params: {
   userId: string; 
   email: string; 
   fullName?: string 
-}): Promise<void> {
+}): Promise<Profile | null> {
   const { userId, email, fullName } = params;
 
   try {
+    // Check if profile already exists
     const existing = await fetchProfile(userId);
-    if (existing) return;
+    if (existing) return existing;
 
-    const { error } = await supabase.from("profiles").insert({
-      id: userId,
-      email,
-      full_name: fullName ?? null,
-      role: "parent",
-    });
+    // Create new profile
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert({
+        id: userId,
+        email,
+        full_name: fullName ?? null,
+        role: "parent",
+      })
+      .select()
+      .single();
 
     if (error) {
       console.warn("[auth] ensureParentProfile insert failed:", error.message);
+      return null;
     }
+    
+    return data as Profile;
   } catch (e) {
     console.warn("[auth] ensureParentProfile exception:", e);
+    return null;
   }
 }
 
@@ -441,16 +452,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { full_name: fullName ?? "" } },
     });
 
-    // Create parent profile if signup succeeded
-    if (!error && data?.user?.id) {
-      await ensureParentProfile({
-        userId: data.user.id,
-        email: data.user.email ?? email,
-        fullName,
-      });
+    if (error) {
+      return { data, error };
     }
 
-    return { data, error };
+    // Supabase signup succeeded
+    const newUser = data?.user;
+    const newSession = data?.session;
+
+    if (newUser) {
+      // Update auth state IMMEDIATELY so UI reflects logged-in state
+      if (newSession) {
+        setSession(newSession);
+      }
+      setUser(newUser);
+
+      // Create parent profile and set it immediately
+      const newProfile = await ensureParentProfile({
+        userId: newUser.id,
+        email: newUser.email ?? email,
+        fullName,
+      });
+
+      if (newProfile) {
+        setProfile(newProfile);
+        // New parent has 0 children
+        setParentChildCount(0);
+        setActiveChildId(null);
+      }
+    }
+
+    return { data, error: null };
   }
 
   async function signOut() {
