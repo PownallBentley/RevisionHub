@@ -6,22 +6,13 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBookOpen } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
 
-async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return await Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Login timed out")), ms)
-    ),
-  ]);
-}
-
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
-  const { signIn, refresh } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -30,7 +21,7 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      const { error } = await withTimeout(signIn(email, password), 8000);
+      const { error } = await signIn(email, password);
 
       if (error) {
         setError(error.message ?? "Login failed");
@@ -38,11 +29,12 @@ export default function Login() {
         return;
       }
 
-      // Refresh auth state to ensure profile/childId is loaded
-      await refresh();
-
-      // Send to home gate; it will route to /parent or /child correctly
-      navigate("/", { replace: true });
+      // signIn now sets user/session state directly
+      // Navigate to home gate which will route based on role
+      // Use setTimeout to ensure React has processed the state update
+      setTimeout(() => {
+        navigate("/", { replace: true });
+      }, 0);
     } catch (e: any) {
       setError(e?.message ?? "Login failed");
       setSubmitting(false);
@@ -86,6 +78,7 @@ export default function Login() {
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e: ChangeEvent<HTMLInputElement>) =>
                   setEmail(e.target.value)
@@ -107,6 +100,7 @@ export default function Login() {
                 id="password"
                 type="password"
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e: ChangeEvent<HTMLInputElement>) =>
                   setPassword(e.target.value)

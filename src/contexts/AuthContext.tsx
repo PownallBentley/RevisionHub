@@ -181,16 +181,47 @@ async function ensureParentProfile(params: {
 }
 
 // =============================================================================
+// HELPER: Check if there's a session in localStorage (synchronous)
+// =============================================================================
+
+function hasStoredSession(): boolean {
+  try {
+    // Supabase stores session in localStorage with key pattern: sb-<project>-auth-token
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.includes('supabase') && key.includes('auth')) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          const parsed = JSON.parse(value);
+          // Check if there's an access token
+          if (parsed?.access_token || parsed?.currentSession?.access_token) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// =============================================================================
 // AUTH PROVIDER
 // =============================================================================
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Check localStorage synchronously to determine initial loading state
+  // If no stored session, we know user is logged out - no need to wait
+  const hasSession = hasStoredSession();
+  
   // Core auth state - set from localStorage/Supabase session
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   
   // Loading states
-  const [loading, setLoading] = useState(true);     // Initial auth check
+  // If no stored session, start with loading=false (show Landing immediately)
+  const [loading, setLoading] = useState(hasSession);
   const [hydrating, setHydrating] = useState(false); // Profile fetching
   
   // Profile and role data - populated in background
@@ -384,8 +415,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ===========================================================================
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
+    if (error) {
+      return { error };
+    }
+    
+    // Supabase returned successfully - update state immediately
+    // Don't wait for onAuthStateChange which can be slow
+    if (data?.session && data?.user) {
+      setSession(data.session);
+      setUser(data.user);
+      
+      // Start hydrating user data in background
+      hydrateUserData(data.user);
+    }
+    
+    return { error: null };
   }
 
   async function signUp(email: string, password: string, fullName?: string) {
