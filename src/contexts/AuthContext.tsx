@@ -1,4 +1,10 @@
 // src/contexts/AuthContext.tsx
+//
+// Production-ready auth context with:
+// - Fast initial load (checks localStorage first)
+// - Background profile hydration (doesn't block UI)
+// - Instant logout (clears state immediately)
+// - Proper error handling (doesn't wipe state on transient errors)
 
 import {
   createContext,
@@ -11,6 +17,10 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 export type Profile = {
   id: string;
@@ -26,22 +36,28 @@ export type Profile = {
 };
 
 type AuthContextValue = {
+  // Core auth state
   user: User | null;
   session: Session | null;
-  loading: boolean;
-
+  
+  // Loading states
+  loading: boolean;        // True only during initial auth check
+  hydrating: boolean;      // True while fetching profile/role data
+  
+  // Profile and role data
   profile: Profile | null;
   activeChildId: string | null;
   parentChildCount: number | null;
-
+  
+  // Computed role flags
   isParent: boolean;
   isChild: boolean;
   isUnresolved: boolean;
-
+  
+  // Actions
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ data: any; error: any }>;
   signOut: () => Promise<void>;
-
   refresh: () => Promise<void>;
 };
 
@@ -53,242 +69,319 @@ export function useAuth() {
   return ctx;
 }
 
-async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, role, country, created_at, updated_at")
-    .eq("id", userId)
-    .maybeSingle();
+// =============================================================================
+// DATA FETCHING FUNCTIONS
+// =============================================================================
 
-  if (error) {
-    console.warn("[auth] fetchProfile error:", error);
+async function fetchProfile(userId: string): Promise<Profile | null> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, role, country, created_at, updated_at")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[auth] fetchProfile error:", error.message);
+      return null;
+    }
+    return data as Profile | null;
+  } catch (e) {
+    console.warn("[auth] fetchProfile exception:", e);
     return null;
   }
-  return (data ?? null) as Profile | null;
 }
 
 async function fetchParentChildCount(parentId: string): Promise<number | null> {
-  const { count, error } = await supabase
-    .from("children")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", parentId);
+  try {
+    const { count, error } = await supabase
+      .from("children")
+      .select("id", { count: "exact", head: true })
+      .eq("parent_id", parentId);
 
-  if (error) {
-    console.warn("[auth] fetchParentChildCount error:", error);
+    if (error) {
+      console.warn("[auth] fetchParentChildCount error:", error.message);
+      return null;
+    }
+    return typeof count === "number" ? count : null;
+  } catch (e) {
+    console.warn("[auth] fetchParentChildCount exception:", e);
     return null;
   }
-  return typeof count === "number" ? count : null;
 }
 
 async function fetchMyChildId(): Promise<string | null> {
-  const { data, error } = await supabase.rpc("rpc_get_my_child_id");
+  try {
+    const { data, error } = await supabase.rpc("rpc_get_my_child_id");
 
-  if (error) {
-    console.warn("[auth] rpc_get_my_child_id error:", error);
+    if (error) {
+      console.warn("[auth] rpc_get_my_child_id error:", error.message);
+      return null;
+    }
+    return data ? String(data) : null;
+  } catch (e) {
+    console.warn("[auth] rpc_get_my_child_id exception:", e);
     return null;
   }
-  return data ? String(data) : null;
 }
 
 async function fetchChildProfile(childId: string): Promise<Partial<Profile> | null> {
-  const { data, error } = await supabase
-    .from("children")
-    .select("id, first_name, preferred_name, avatar_url, email")
-    .eq("id", childId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("children")
+      .select("id, first_name, preferred_name, avatar_url, email")
+      .eq("id", childId)
+      .maybeSingle();
 
-  if (error) {
-    console.warn("[auth] fetchChildProfile error:", error);
+    if (error) {
+      console.warn("[auth] fetchChildProfile error:", error.message);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      first_name: data.first_name,
+      preferred_name: data.preferred_name,
+      avatar_url: data.avatar_url,
+      email: data.email,
+      full_name: data.preferred_name || data.first_name,
+    };
+  } catch (e) {
+    console.warn("[auth] fetchChildProfile exception:", e);
     return null;
   }
-
-  if (!data) return null;
-
-  return {
-    id: data.id,
-    first_name: data.first_name,
-    preferred_name: data.preferred_name,
-    avatar_url: data.avatar_url,
-    email: data.email,
-    full_name: data.preferred_name || data.first_name,
-  };
 }
 
-async function ensureParentProfile(params: { userId: string; email: string; fullName?: string }): Promise<void> {
+async function ensureParentProfile(params: { 
+  userId: string; 
+  email: string; 
+  fullName?: string 
+}): Promise<void> {
   const { userId, email, fullName } = params;
 
-  const existing = await fetchProfile(userId);
-  if (existing) return;
+  try {
+    const existing = await fetchProfile(userId);
+    if (existing) return;
 
-  const { error } = await supabase.from("profiles").insert({
-    id: userId,
-    email,
-    full_name: fullName ?? null,
-    role: "parent",
-  });
+    const { error } = await supabase.from("profiles").insert({
+      id: userId,
+      email,
+      full_name: fullName ?? null,
+      role: "parent",
+    });
 
-  if (error) console.warn("[auth] ensureParentProfile insert failed:", error);
+    if (error) {
+      console.warn("[auth] ensureParentProfile insert failed:", error.message);
+    }
+  } catch (e) {
+    console.warn("[auth] ensureParentProfile exception:", e);
+  }
 }
 
+// =============================================================================
+// AUTH PROVIDER
+// =============================================================================
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Core auth state - set from localStorage/Supabase session
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
+  
+  // Loading states
+  const [loading, setLoading] = useState(true);     // Initial auth check
+  const [hydrating, setHydrating] = useState(false); // Profile fetching
+  
+  // Profile and role data - populated in background
   const [profile, setProfile] = useState<Profile | null>(null);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [parentChildCount, setParentChildCount] = useState<number | null>(null);
 
-  const resolvingRef = useRef(false);
-  const hydratedOnceRef = useRef(false);
+  // Refs to prevent duplicate work
+  const hydratingRef = useRef(false);
+  const initializedRef = useRef(false);
 
   /**
-   * Hydrates all auth state from a session.
-   * Returns true if successful, false if session is null (logged out).
+   * Hydrates profile and role data for a user.
+   * Runs in background - doesn't block UI.
    */
-  async function hydrateFromSession(s: Session | null): Promise<boolean> {
-    const u = s?.user ?? null;
-
-    if (!u) {
-      // User logged out - clear everything
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setActiveChildId(null);
-      setParentChildCount(null);
-      return false;
-    }
-
-    // User is logged in - set session and user immediately
-    setSession(s);
-    setUser(u);
-
-    // Fetch profile and childId in parallel
-    const [p, childId] = await Promise.all([
-      fetchProfile(u.id),
-      fetchMyChildId()
-    ]);
-
-    // Set activeChildId (only children have this)
-    setActiveChildId(childId);
-
-    // If this is a child, fetch their details for display purposes
-    if (childId) {
-      const childProfile = await fetchChildProfile(childId);
-      
-      if (childProfile) {
-        setProfile({
-          id: childProfile.id || '',
-          email: childProfile.email || '',
-          full_name: childProfile.full_name || null,
-          first_name: childProfile.first_name,
-          preferred_name: childProfile.preferred_name,
-          avatar_url: childProfile.avatar_url,
-          role: "child",
-          country: null,
-          created_at: null,
-          updated_at: null,
-        } as Profile);
-      } else {
-        setProfile(null);
-      }
-      setParentChildCount(null);
-    } else {
-      // Parent or unknown - set their profile
-      setProfile(p);
-      
-      if (p) {
-        // Parent - fetch their child count
-        const count = await fetchParentChildCount(u.id);
-        setParentChildCount(count);
-      } else {
-        setParentChildCount(null);
-      }
-    }
-
-    return true;
-  }
-
-  async function resolveAuth(source: string, opts?: { showLoading?: boolean }) {
-    if (resolvingRef.current) return;
-    resolvingRef.current = true;
-
-    const showLoading = opts?.showLoading ?? false;
+  async function hydrateUserData(u: User): Promise<void> {
+    if (hydratingRef.current) return;
+    hydratingRef.current = true;
+    setHydrating(true);
 
     try {
-      if (showLoading) setLoading(true);
+      // Fetch profile and childId in parallel
+      const [profileData, childId] = await Promise.all([
+        fetchProfile(u.id),
+        fetchMyChildId()
+      ]);
 
-      const { data, error } = await supabase.auth.getSession();
+      // Set activeChildId (only children have this)
+      setActiveChildId(childId);
 
-      if (error) console.warn("[auth] getSession error:", source, error);
-
-      await hydrateFromSession(data?.session ?? null);
-      hydratedOnceRef.current = true;
+      if (childId) {
+        // This is a child - fetch their display info
+        const childProfile = await fetchChildProfile(childId);
+        
+        if (childProfile) {
+          setProfile({
+            id: childProfile.id || "",
+            email: childProfile.email || "",
+            full_name: childProfile.full_name || null,
+            first_name: childProfile.first_name,
+            preferred_name: childProfile.preferred_name,
+            avatar_url: childProfile.avatar_url,
+            role: "child",
+            country: null,
+            created_at: null,
+            updated_at: null,
+          } as Profile);
+        } else {
+          setProfile(null);
+        }
+        setParentChildCount(null);
+      } else {
+        // This is a parent (or unknown user type)
+        setProfile(profileData);
+        
+        if (profileData) {
+          // Fetch child count for parents
+          const count = await fetchParentChildCount(u.id);
+          setParentChildCount(count);
+        } else {
+          setParentChildCount(null);
+        }
+      }
     } catch (e) {
-      console.warn("[auth] resolveAuth failed:", source, e);
-      hydratedOnceRef.current = true;
-      // Don't wipe state on error - leave whatever we had
+      console.warn("[auth] hydrateUserData failed:", e);
+      // Don't clear state on error - keep whatever we have
     } finally {
-      if (showLoading) setLoading(false);
-      resolvingRef.current = false;
+      hydratingRef.current = false;
+      setHydrating(false);
     }
   }
 
-  async function refresh() {
-    await resolveAuth("manual refresh", { showLoading: false });
+  /**
+   * Clears all auth state immediately.
+   */
+  function clearAuthState(): void {
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setActiveChildId(null);
+    setParentChildCount(null);
   }
 
+  // ===========================================================================
+  // INITIALIZATION
+  // ===========================================================================
+
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     let mounted = true;
 
-    // Initial auth resolution
-    (async () => {
-      if (!mounted) return;
-      await resolveAuth("initial mount", { showLoading: true });
-    })();
+    async function initialize() {
+      try {
+        // Get session - Supabase checks localStorage first (fast),
+        // then validates with server (can be slow)
+        const { data, error } = await supabase.auth.getSession();
 
-    // Listen for auth state changes (sign in, sign out, token refresh)
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return;
+        if (!mounted) return;
 
-      console.log("[auth] onAuthStateChange:", event);
+        if (error) {
+          console.warn("[auth] getSession error:", error.message);
+        }
 
-      // For SIGNED_OUT, clear state immediately
-      if (event === "SIGNED_OUT" || !newSession) {
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setActiveChildId(null);
-        setParentChildCount(null);
+        const currentSession = data?.session ?? null;
+        const currentUser = currentSession?.user ?? null;
+
+        // Set core auth state
+        setSession(currentSession);
+        setUser(currentUser);
+        
+        // CRITICAL: Set loading to false immediately
+        // This unblocks the UI - user can see Landing or start navigating
         setLoading(false);
-        return;
-      }
 
-      // For other events (SIGNED_IN, TOKEN_REFRESHED, etc.)
-      // Only update if we haven't hydrated yet, or if this is a new sign-in
-      if (event === "SIGNED_IN" || !hydratedOnceRef.current) {
-        try {
-          await hydrateFromSession(newSession);
-          hydratedOnceRef.current = true;
-        } catch (e) {
-          console.warn("[auth] onAuthStateChange hydrate failed:", e);
-          // DON'T wipe state on error - the user might still be valid
-          // Just log and continue with existing state
-        } finally {
+        // If logged in, hydrate profile data in background
+        if (currentUser) {
+          hydrateUserData(currentUser);
+        }
+      } catch (e) {
+        console.warn("[auth] initialize failed:", e);
+        if (mounted) {
           setLoading(false);
         }
-      } else if (event === "TOKEN_REFRESHED") {
-        // Just update session/user, don't re-fetch everything
-        setSession(newSession);
-        setUser(newSession.user);
       }
-    });
+    }
+
+    initialize();
+
+    // Listen for auth state changes
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (event, newSession) => {
+        if (!mounted) return;
+
+        console.log("[auth] onAuthStateChange:", event);
+
+        const newUser = newSession?.user ?? null;
+
+        // Update core auth state immediately
+        setSession(newSession);
+        setUser(newUser);
+
+        switch (event) {
+          case "SIGNED_OUT":
+            // Clear everything on sign out
+            clearAuthState();
+            break;
+
+          case "SIGNED_IN":
+            // New sign in - hydrate user data
+            if (newUser) {
+              hydrateUserData(newUser);
+            }
+            break;
+
+          case "TOKEN_REFRESHED":
+            // Token refreshed - session/user already updated above
+            // No need to re-hydrate profile data
+            break;
+
+          case "USER_UPDATED":
+            // User data changed - re-hydrate
+            if (newUser) {
+              hydrateUserData(newUser);
+            }
+            break;
+
+          default:
+            // INITIAL_SESSION and other events
+            // If we have a user but no profile yet, hydrate
+            if (newUser && !profile && !hydratingRef.current) {
+              hydrateUserData(newUser);
+            }
+            break;
+        }
+
+        // Ensure loading is false after any auth event
+        setLoading(false);
+      }
+    );
 
     return () => {
       mounted = false;
-      sub?.subscription?.unsubscribe();
+      subscription?.subscription?.unsubscribe();
     };
   }, []);
+
+  // ===========================================================================
+  // AUTH ACTIONS
+  // ===========================================================================
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -302,43 +395,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { full_name: fullName ?? "" } },
     });
 
-    try {
-      const newUserId = data?.user?.id;
-      const newEmail = data?.user?.email ?? email;
-      if (!error && newUserId) {
-        await ensureParentProfile({ userId: newUserId, email: newEmail, fullName });
-      }
-    } catch (e) {
-      console.warn("[auth] post-signup work failed:", e);
+    // Create parent profile if signup succeeded
+    if (!error && data?.user?.id) {
+      await ensureParentProfile({
+        userId: data.user.id,
+        email: data.user.email ?? email,
+        fullName,
+      });
     }
 
     return { data, error };
   }
 
   async function signOut() {
-    // Clear state immediately for instant UI response
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-    setActiveChildId(null);
-    setParentChildCount(null);
+    // CRITICAL: Clear state IMMEDIATELY for instant UI feedback
+    // Don't wait for Supabase - the user should see Landing right away
+    clearAuthState();
     
-    // Then tell Supabase (this triggers onAuthStateChange but we've already cleared)
-    await supabase.auth.signOut();
+    // Tell Supabase to sign out (runs in background)
+    // The onAuthStateChange will fire but we've already cleared state
+    supabase.auth.signOut().catch((e) => {
+      console.warn("[auth] signOut error:", e);
+    });
   }
 
-  // CORRECT LOGIC based on actual data model:
-  // - Parents have a profile row, no activeChildId
-  // - Children have no profile row in profiles table, but have activeChildId
+  async function refresh() {
+    if (user) {
+      await hydrateUserData(user);
+    }
+  }
+
+  // ===========================================================================
+  // COMPUTED VALUES
+  // ===========================================================================
+
+  // Role detection based on actual data model:
+  // - Parents: have a profile row in `profiles` table, no activeChildId
+  // - Children: have activeChildId (from `children` table), may or may not have profile
   const isParent = !!profile && !activeChildId;
   const isChild = !!activeChildId;
-  const isUnresolved = !!user && !isParent && !isChild;
+  
+  // User is logged in but we haven't determined their role yet
+  // This happens briefly during hydration
+  const isUnresolved = !!user && !isParent && !isChild && !hydrating;
+
+  // ===========================================================================
+  // CONTEXT VALUE
+  // ===========================================================================
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       session,
       loading,
+      hydrating,
       profile,
       activeChildId,
       parentChildCount,
@@ -350,7 +460,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       refresh,
     }),
-    [user, session, loading, profile, activeChildId, parentChildCount, isParent, isChild, isUnresolved]
+    [
+      user,
+      session,
+      loading,
+      hydrating,
+      profile,
+      activeChildId,
+      parentChildCount,
+      isParent,
+      isChild,
+      isUnresolved,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
