@@ -25,7 +25,7 @@ import {
   getSessionPatternLabel,
   getTimeOfDayLabel,
   calculateWeeksBetween,
-} from '@/services/parentOnboarding/recommendationService';
+} from '../../../services/parentOnboarding/recommendationService';
 
 // ============================================================================
 // Types
