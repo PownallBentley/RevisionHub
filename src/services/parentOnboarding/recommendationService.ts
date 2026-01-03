@@ -1,7 +1,8 @@
 // src/services/parentOnboarding/recommendationService.ts
 // Service for calculating recommended sessions and availability
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from "../../lib/supabase";
+
 
 // ============================================================================
 // Types
