@@ -16,7 +16,7 @@ import {
 
 export default function ParentDashboard() {
   const navigate = useNavigate();
-  const { user, profile, activeChildId, parentChildCount, loading: authLoading } = useAuth();
+  const { user, profile, activeChildId, parentChildCount, loading: authLoading, hydrating } = useAuth();
 
   const [dashboardData, setDashboardData] = useState<ParentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,15 +43,18 @@ export default function ParentDashboard() {
   }, [authLoading, user, activeChildId, navigate, redirected]);
 
   // Handle redirect to onboarding for parents with no children
+  // IMPORTANT: Only redirect if parentChildCount is EXACTLY 0, not null
+  // null means we're still loading the count
   useEffect(() => {
-    if (authLoading || redirected) return;
+    if (authLoading || hydrating || redirected) return;
     if (!user || !profile) return;
 
+    // Only redirect if we KNOW there are 0 children (not null/loading)
     if (parentChildCount === 0) {
       setRedirected(true);
       navigate("/parent/onboarding", { replace: true });
     }
-  }, [authLoading, user, profile, parentChildCount, navigate, redirected]);
+  }, [authLoading, hydrating, user, profile, parentChildCount, navigate, redirected]);
 
   // Load dashboard data
   useEffect(() => {
@@ -84,8 +87,8 @@ export default function ParentDashboard() {
     };
   }, [user, profile]);
 
-  // Loading state
-  if (authLoading || loading) {
+  // Loading state - also wait for hydrating to complete
+  if (authLoading || hydrating || loading) {
     return (
       <div className="min-h-[calc(100vh-73px)] bg-neutral-bg flex items-center justify-center">
         <div className="text-center">
