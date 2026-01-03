@@ -15,8 +15,16 @@ import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 
 function HomeGate() {
-  const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
+  const { 
+    loading, 
+    hydrating,
+    user, 
+    isParent, 
+    isChild, 
+    parentChildCount 
+  } = useAuth();
 
+  // Still checking auth - show loading
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
@@ -25,19 +33,39 @@ function HomeGate() {
     );
   }
 
-  // Logged out => Landing
-  if (!user) return <Landing />;
+  // Not logged in - show Landing
+  if (!user) {
+    return <Landing />;
+  }
 
-  // If unresolved, send to Landing for now
-  if (isUnresolved) return <Landing />;
+  // User is logged in but we're still fetching their profile/role
+  // Show a brief loading state rather than making wrong routing decisions
+  if (hydrating && !isParent && !isChild) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
+        Loading…
+      </div>
+    );
+  }
 
+  // Child user - go to Today
+  if (isChild) {
+    return <Navigate to="/child/today" replace />;
+  }
+
+  // Parent user
   if (isParent) {
-    if ((parentChildCount ?? 0) === 0) return <Navigate to="/parent/onboarding" replace />;
+    // parentChildCount is null during hydration - only redirect to onboarding 
+    // if we KNOW they have 0 children (not null)
+    if (parentChildCount === 0) {
+      return <Navigate to="/parent/onboarding" replace />;
+    }
+    // Either has children or still loading count - go to dashboard
     return <Navigate to="/parent" replace />;
   }
 
-  if (isChild) return <Navigate to="/child/today" replace />;
-
+  // Fallback - user exists but role not determined
+  // This shouldn't happen normally, but show Landing as safe fallback
   return <Landing />;
 }
 
