@@ -136,6 +136,9 @@ export default function ParentOnboardingPage() {
   
   // Track if we've completed onboarding (to prevent redirect loops)
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  
+  // Track if we're waiting to navigate to dashboard
+  const [pendingDashboardNav, setPendingDashboardNav] = useState(false);
 
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -180,6 +183,17 @@ export default function ParentOnboardingPage() {
   // Recommendation state (calculated when entering availability step)
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+
+  /* ============================
+     Navigate to dashboard when auth state confirms child was created
+  ============================ */
+  useEffect(() => {
+    // Only navigate if we're pending navigation AND parentChildCount > 0
+    if (pendingDashboardNav && parentChildCount !== null && parentChildCount > 0) {
+      setPendingDashboardNav(false);
+      navigate("/parent", { replace: true });
+    }
+  }, [pendingDashboardNav, parentChildCount, navigate]);
 
   /* ============================
      Convert subjects to grades format when moving to priority step
@@ -582,12 +596,12 @@ export default function ParentOnboardingPage() {
                 type="button"
                 className="rounded-lg border px-4 py-2 text-sm"
                 onClick={async () => {
+                  // Set pending navigation flag
+                  setPendingDashboardNav(true);
                   // Refresh auth state to update parentChildCount
                   await refresh();
-                  // Small delay to ensure state propagates
-                  setTimeout(() => {
-                    navigate("/parent", { replace: true });
-                  }, 100);
+                  // If parentChildCount is already > 0, useEffect will navigate
+                  // Otherwise, we wait for the state to update
                 }}
               >
                 Go to dashboard
