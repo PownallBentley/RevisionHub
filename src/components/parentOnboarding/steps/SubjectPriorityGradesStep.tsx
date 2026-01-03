@@ -19,16 +19,24 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faGripVertical, 
+  faChevronDown, 
+  faChevronUp, 
+  faExclamationTriangle 
+} from '@fortawesome/free-solid-svg-icons';
 
-// ============================================================================
-// Types
-// ============================================================================
+/* ============================
+   Types
+============================ */
 
 export interface SubjectWithGrades {
   subject_id: string;
   subject_name: string;
+  exam_board_id?: string;
   exam_board_name: string;
+  exam_type_id?: string;
   sort_order: number;
   current_grade: number | null;
   target_grade: number | null;
@@ -42,12 +50,13 @@ interface SubjectPriorityGradesStepProps {
   onBack: () => void;
 }
 
-// ============================================================================
-// Grade Options
-// ============================================================================
+/* ============================
+   Constants
+============================ */
 
 const GRADE_OPTIONS = [
-  { value: 9, label: '9 (Highest)' },
+  { value: null, label: 'Not sure' },
+  { value: 9, label: '9' },
   { value: 8, label: '8' },
   { value: 7, label: '7' },
   { value: 6, label: '6' },
@@ -55,28 +64,23 @@ const GRADE_OPTIONS = [
   { value: 4, label: '4' },
   { value: 3, label: '3' },
   { value: 2, label: '2' },
-  { value: 1, label: '1 (Lowest)' },
+  { value: 1, label: '1' },
 ];
 
-// ============================================================================
-// Sortable Subject Card Component
-// ============================================================================
+const TARGET_GRADE_OPTIONS = GRADE_OPTIONS.filter(g => g.value !== null);
 
-interface SortableSubjectCardProps {
+/* ============================
+   Sortable Card Component
+============================ */
+
+interface SortableCardProps {
   subject: SubjectWithGrades;
   isExpanded: boolean;
-  onToggleExpand: () => void;
+  onToggle: () => void;
   onGradeChange: (field: 'current_grade' | 'target_grade', value: number | null) => void;
-  onConfidenceChange: (confidence: 'confirmed' | 'estimated' | 'unknown') => void;
 }
 
-function SortableSubjectCard({
-  subject,
-  isExpanded,
-  onToggleExpand,
-  onGradeChange,
-  onConfidenceChange,
-}: SortableSubjectCardProps) {
+function SortableCard({ subject, isExpanded, onToggle, onGradeChange }: SortableCardProps) {
   const {
     attributes,
     listeners,
@@ -93,101 +97,105 @@ function SortableSubjectCard({
   };
 
   const gradeGap = 
-    subject.target_grade && subject.current_grade
+    subject.current_grade !== null && subject.target_grade !== null
       ? subject.target_grade - subject.current_grade
       : 0;
 
   const hasLargeGap = gradeGap >= 4;
 
+  const gradeDisplay = 
+    subject.current_grade !== null && subject.target_grade !== null
+      ? `${subject.current_grade} → ${subject.target_grade}`
+      : subject.target_grade !== null
+      ? `? → ${subject.target_grade}`
+      : 'Set grades';
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white border rounded-lg shadow-sm mb-3 ${
-        isDragging ? 'shadow-lg ring-2 ring-blue-500' : ''
-      }`}
+      className={`
+        rounded-xl border bg-white shadow-sm
+        ${isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}
+        ${hasLargeGap ? 'border-amber-300' : 'border-gray-200'}
+      `}
     >
-      {/* Header - always visible */}
-      <div className="flex items-center p-4">
+      {/* Card Header */}
+      <div className="flex items-center gap-3 p-4">
         {/* Drag Handle */}
-        <div
+        <button
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 mr-3 text-gray-400 hover:text-gray-600"
+          className="cursor-grab touch-none p-1 text-gray-400 hover:text-gray-600"
+          aria-label="Drag to reorder"
         >
-          <GripVertical size={20} />
-        </div>
+          <FontAwesomeIcon icon={faGripVertical} className="w-4 h-4" />
+        </button>
 
         {/* Priority Badge */}
-        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold text-sm mr-3">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
           {subject.sort_order}
         </div>
 
         {/* Subject Info */}
-        <div className="flex-1">
-          <h3 className="font-medium text-gray-900">{subject.subject_name}</h3>
-          <p className="text-sm text-gray-500">{subject.exam_board_name}</p>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-gray-900 truncate">
+            {subject.subject_name}
+          </div>
+          <div className="text-sm text-gray-500 truncate">
+            {subject.exam_board_name}
+          </div>
         </div>
 
-        {/* Grade Summary (when collapsed) */}
-        {!isExpanded && (subject.current_grade || subject.target_grade) && (
-          <div className="flex items-center gap-2 mr-3 text-sm">
-            <span className="text-gray-500">
-              {subject.current_grade ?? '?'} → {subject.target_grade ?? '?'}
-            </span>
+        {/* Grade Summary (collapsed) */}
+        {!isExpanded && (
+          <div className={`text-sm font-medium ${hasLargeGap ? 'text-amber-600' : 'text-gray-600'}`}>
+            {gradeDisplay}
             {hasLargeGap && (
-              <AlertTriangle size={16} className="text-amber-500" />
+              <FontAwesomeIcon icon={faExclamationTriangle} className="ml-1 w-4 h-4 text-amber-500" />
             )}
           </div>
         )}
 
-        {/* Expand/Collapse Button */}
+        {/* Expand/Collapse */}
         <button
-          onClick={onToggleExpand}
-          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+          onClick={onToggle}
+          className="p-2 text-gray-400 hover:text-gray-600"
+          aria-label={isExpanded ? 'Collapse' : 'Expand'}
         >
-          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          <FontAwesomeIcon 
+            icon={isExpanded ? faChevronUp : faChevronDown} 
+            className="w-4 h-4" 
+          />
         </button>
       </div>
 
-      {/* Expanded Content - Grade Inputs */}
+      {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-4 pb-4 pt-0 border-t">
-          <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+          <div className="grid grid-cols-2 gap-4">
             {/* Current Grade */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Current Grade
+                Current grade
               </label>
               <select
                 value={subject.current_grade ?? ''}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'unknown') {
-                    onGradeChange('current_grade', 5); // Default to 5
-                    onConfidenceChange('unknown');
-                  } else if (value === '') {
-                    onGradeChange('current_grade', null);
-                  } else {
-                    onGradeChange('current_grade', parseInt(value, 10));
-                    if (subject.grade_confidence === 'unknown') {
-                      onConfidenceChange('confirmed');
-                    }
-                  }
+                  const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                  onGradeChange('current_grade', val);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">Select grade...</option>
                 {GRADE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
+                  <option key={opt.label} value={opt.value ?? ''}>
                     {opt.label}
                   </option>
                 ))}
-                <option value="unknown">Not sure</option>
               </select>
-              {subject.grade_confidence === 'unknown' && (
-                <p className="text-xs text-gray-500 mt-1">
-                  We'll estimate as grade 5
+              {subject.current_grade === null && (
+                <p className="mt-1 text-xs text-gray-500">
+                  We'll estimate based on averages
                 </p>
               )}
             </div>
@@ -195,19 +203,19 @@ function SortableSubjectCard({
             {/* Target Grade */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Target Grade
+                Target grade
               </label>
               <select
                 value={subject.target_grade ?? ''}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  onGradeChange('target_grade', value ? parseInt(value, 10) : null);
+                  const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                  onGradeChange('target_grade', val);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">Select target...</option>
-                {GRADE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
+                <option value="">Select target</option>
+                {TARGET_GRADE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value ?? ''}>
                     {opt.label}
                   </option>
                 ))}
@@ -215,14 +223,14 @@ function SortableSubjectCard({
             </div>
           </div>
 
-          {/* Grade Gap Warning */}
+          {/* Large Gap Warning */}
           {hasLargeGap && (
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-              <AlertTriangle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-amber-800">
-                Moving from grade {subject.current_grade} to {subject.target_grade} is a big jump ({gradeGap} grades). 
-                This will require more revision time for this subject.
-              </p>
+            <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3">
+              <FontAwesomeIcon icon={faExclamationTriangle} className="mt-0.5 w-4 h-4 text-amber-500" />
+              <div className="text-sm text-amber-800">
+                <strong>Ambitious target!</strong> A {gradeGap}-grade improvement will need 
+                significant time. We'll allocate more sessions to this subject.
+              </div>
             </div>
           )}
         </div>
@@ -231,9 +239,9 @@ function SortableSubjectCard({
   );
 }
 
-// ============================================================================
-// Main Component
-// ============================================================================
+/* ============================
+   Main Component
+============================ */
 
 export default function SubjectPriorityGradesStep({
   subjects,
@@ -241,7 +249,9 @@ export default function SubjectPriorityGradesStep({
   onNext,
   onBack,
 }: SubjectPriorityGradesStepProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(
+    subjects.length > 0 ? subjects[0].subject_id : null
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -250,72 +260,69 @@ export default function SubjectPriorityGradesStep({
     })
   );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
 
-      if (over && active.id !== over.id) {
-        const oldIndex = subjects.findIndex((s) => s.subject_id === active.id);
-        const newIndex = subjects.findIndex((s) => s.subject_id === over.id);
+    if (over && active.id !== over.id) {
+      const oldIndex = subjects.findIndex(s => s.subject_id === active.id);
+      const newIndex = subjects.findIndex(s => s.subject_id === over.id);
 
-        const reordered = arrayMove(subjects, oldIndex, newIndex).map((s, i) => ({
-          ...s,
-          sort_order: i + 1,
-        }));
+      const reordered = arrayMove(subjects, oldIndex, newIndex).map((s, idx) => ({
+        ...s,
+        sort_order: idx + 1,
+      }));
 
-        onSubjectsChange(reordered);
+      onSubjectsChange(reordered);
+    }
+  }, [subjects, onSubjectsChange]);
+
+  const handleGradeChange = useCallback((
+    subjectId: string,
+    field: 'current_grade' | 'target_grade',
+    value: number | null
+  ) => {
+    const updated = subjects.map(s => {
+      if (s.subject_id !== subjectId) return s;
+
+      const newSubject = { ...s, [field]: value };
+
+      // Update grade_confidence based on current grade selection
+      if (field === 'current_grade') {
+        newSubject.grade_confidence = value === null ? 'unknown' : 'confirmed';
       }
-    },
-    [subjects, onSubjectsChange]
-  );
 
-  const handleGradeChange = useCallback(
-    (subjectId: string, field: 'current_grade' | 'target_grade', value: number | null) => {
-      const updated = subjects.map((s) =>
-        s.subject_id === subjectId ? { ...s, [field]: value } : s
-      );
-      onSubjectsChange(updated);
-    },
-    [subjects, onSubjectsChange]
-  );
+      return newSubject;
+    });
 
-  const handleConfidenceChange = useCallback(
-    (subjectId: string, confidence: 'confirmed' | 'estimated' | 'unknown') => {
-      const updated = subjects.map((s) =>
-        s.subject_id === subjectId ? { ...s, grade_confidence: confidence } : s
-      );
-      onSubjectsChange(updated);
-    },
-    [subjects, onSubjectsChange]
-  );
+    onSubjectsChange(updated);
+  }, [subjects, onSubjectsChange]);
 
   const toggleExpand = useCallback((subjectId: string) => {
-    setExpandedId((prev) => (prev === subjectId ? null : subjectId));
+    setExpandedId(prev => prev === subjectId ? null : subjectId);
   }, []);
 
-  // Check if we have minimum required data
-  const hasRequiredData = subjects.every(
-    (s) => s.target_grade !== null
-  );
+  // Validation: all subjects must have target grade
+  const isValid = subjects.every(s => s.target_grade !== null);
+
+  const incompleteCount = subjects.filter(s => s.target_grade === null).length;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Prioritise Subjects & Set Targets
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">
+          Prioritise subjects and set grades
         </h2>
-        <p className="text-gray-600">
-          Drag to reorder by priority (most important first). Then set current and target grades for each subject.
+        <p className="mt-1 text-sm text-gray-600">
+          Drag to reorder by priority. Set current and target grades to help us 
+          recommend the right amount of revision.
         </p>
       </div>
 
       {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
-        <p className="text-sm text-blue-800">
-          <strong>Tip:</strong> Higher priority subjects will get more revision sessions. 
-          Click on a subject to set grades — this helps us calculate how much revision time you need.
-        </p>
+      <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+        <strong>Tip:</strong> Put the subject that needs most attention at the top. 
+        We'll allocate more sessions to higher-priority subjects.
       </div>
 
       {/* Sortable List */}
@@ -325,22 +332,17 @@ export default function SubjectPriorityGradesStep({
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={subjects.map((s) => s.subject_id)}
+          items={subjects.map(s => s.subject_id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="mb-6">
-            {subjects.map((subject) => (
-              <SortableSubjectCard
+          <div className="space-y-3">
+            {subjects.map(subject => (
+              <SortableCard
                 key={subject.subject_id}
                 subject={subject}
                 isExpanded={expandedId === subject.subject_id}
-                onToggleExpand={() => toggleExpand(subject.subject_id)}
-                onGradeChange={(field, value) =>
-                  handleGradeChange(subject.subject_id, field, value)
-                }
-                onConfidenceChange={(confidence) =>
-                  handleConfidenceChange(subject.subject_id, confidence)
-                }
+                onToggle={() => toggleExpand(subject.subject_id)}
+                onGradeChange={(field, value) => handleGradeChange(subject.subject_id, field, value)}
               />
             ))}
           </div>
@@ -348,32 +350,29 @@ export default function SubjectPriorityGradesStep({
       </DndContext>
 
       {/* Validation Message */}
-      {!hasRequiredData && (
-        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-800">
-            Please set a target grade for each subject to continue.
-          </p>
+      {!isValid && (
+        <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+          Please set a target grade for {incompleteCount === 1 ? 'the remaining subject' : `all ${incompleteCount} remaining subjects`}.
         </div>
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex items-center justify-between pt-4">
         <button
+          type="button"
           onClick={onBack}
-          className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Back
         </button>
+
         <button
+          type="button"
           onClick={onNext}
-          disabled={!hasRequiredData}
-          className={`px-6 py-2 rounded-lg font-medium ${
-            hasRequiredData
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-          }`}
+          disabled={!isValid}
+          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
         >
-          Continue
+          Next
         </button>
       </div>
     </div>

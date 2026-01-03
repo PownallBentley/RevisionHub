@@ -1,133 +1,169 @@
 // src/components/parentOnboarding/steps/AvailabilityBuilderStep.tsx
-// Weekly availability builder with recommendations and feasibility checking
+// Weekly availability template builder with recommendations and feasibility checking
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
-  Plus, 
-  Trash2, 
-  Lightbulb, 
-  CheckCircle, 
-  AlertTriangle, 
-  XCircle,
-  Calendar,
-  Loader2
-} from 'lucide-react';
+  faLightbulb, 
+  faPlus, 
+  faTrash, 
+  faCheckCircle, 
+  faExclamationTriangle, 
+  faTimesCircle,
+  faCalendarAlt,
+  faSpinner,
+  faMagicWandSparkles
+} from '@fortawesome/free-solid-svg-icons';
 import {
-  DayTemplate,
-  AvailabilitySlot,
-  RecommendationResult,
-  FeasibilityStatus,
   generateDefaultTemplate,
-  calculateSessionsFromTemplate,
-  checkFeasibility,
-  getDayName,
-  getShortDayName,
-  getSessionPatternLabel,
-  getTimeOfDayLabel,
-  calculateWeeksBetween,
+  type RecommendationResult,
+  type DayTemplate,
 } from '../../../services/parentOnboarding/recommendationService';
+import type { RevisionPeriodData } from './RevisionPeriodStep';
 
-// ============================================================================
-// Types
-// ============================================================================
+/* ============================
+   Types
+============================ */
+
+export interface AvailabilitySlot {
+  time_of_day: 'before_school' | 'after_school' | 'evening';
+  session_pattern: 'p20' | 'p45' | 'p70';
+}
 
 export interface DateOverride {
   date: string;
   type: 'blocked' | 'extra';
   reason?: string;
+  slots?: AvailabilitySlot[];
 }
 
 interface AvailabilityBuilderStepProps {
   weeklyTemplate: DayTemplate[];
   dateOverrides: DateOverride[];
   recommendation: RecommendationResult | null;
-  revisionPeriod: { start_date: string; end_date: string; contingency_percent: number };
+  revisionPeriod: RevisionPeriodData;
   onTemplateChange: (template: DayTemplate[]) => void;
   onOverridesChange: (overrides: DateOverride[]) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
-// ============================================================================
-// Time Slot Options
-// ============================================================================
+/* ============================
+   Constants
+============================ */
 
-const TIME_OF_DAY_OPTIONS: Array<{ value: 'before_school' | 'after_school' | 'evening'; label: string }> = [
+const TIME_OF_DAY_OPTIONS: { value: AvailabilitySlot['time_of_day']; label: string }[] = [
   { value: 'before_school', label: 'Before school' },
   { value: 'after_school', label: 'After school' },
   { value: 'evening', label: 'Evening' },
 ];
 
-const SESSION_PATTERN_OPTIONS: Array<{ value: 'p20' | 'p45' | 'p70'; label: string }> = [
-  { value: 'p20', label: '20 min (1 topic)' },
-  { value: 'p45', label: '45 min (2 topics)' },
-  { value: 'p70', label: '70 min (3 topics)' },
+const SESSION_PATTERN_OPTIONS: { value: AvailabilitySlot['session_pattern']; label: string; minutes: number }[] = [
+  { value: 'p20', label: '20 min (1 topic)', minutes: 20 },
+  { value: 'p45', label: '45 min (2 topics)', minutes: 45 },
+  { value: 'p70', label: '70 min (3 topics)', minutes: 70 },
 ];
 
-// ============================================================================
-// Sub-Components
-// ============================================================================
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/* ============================
+   Helper Functions
+============================ */
+
+function calculateTotalSessions(template: DayTemplate[]): number {
+  return template.reduce((sum, day) => sum + (day.is_enabled ? day.slots.length : 0), 0);
+}
+
+function calculateWeeksBetween(start: string, end: string): number {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(1, Math.round(diffDays / 7 * 10) / 10);
+}
+
+type FeasibilityStatus = 'sufficient' | 'marginal' | 'insufficient';
+
+function getFeasibilityStatus(
+  planned: number,
+  recommended: number,
+  withContingency: number
+): FeasibilityStatus {
+  if (planned >= withContingency) return 'sufficient';
+  if (planned >= recommended) return 'marginal';
+  return 'insufficient';
+}
+
+/* ============================
+   Day Row Component
+============================ */
 
 interface DayRowProps {
   day: DayTemplate;
-  onToggleEnabled: () => void;
+  onToggle: () => void;
   onAddSlot: () => void;
   onRemoveSlot: (index: number) => void;
-  onUpdateSlot: (index: number, slot: AvailabilitySlot) => void;
+  onUpdateSlot: (index: number, field: keyof AvailabilitySlot, value: string) => void;
 }
 
-function DayRow({ day, onToggleEnabled, onAddSlot, onRemoveSlot, onUpdateSlot }: DayRowProps) {
-  const usedTimeSlots = day.slots.map(s => s.time_of_day);
+function DayRow({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayRowProps) {
   const availableTimeSlots = TIME_OF_DAY_OPTIONS.filter(
-    opt => !usedTimeSlots.includes(opt.value)
+    opt => !day.slots.some(s => s.time_of_day === opt.value)
   );
 
+  const canAddSlot = day.is_enabled && availableTimeSlots.length > 0;
+
   return (
-    <div className={`border rounded-lg p-4 ${day.is_enabled ? 'bg-white' : 'bg-gray-50'}`}>
+    <div className={`rounded-lg border ${day.is_enabled ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'}`}>
       {/* Day Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 p-3 border-b border-gray-100">
+        <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             checked={day.is_enabled}
-            onChange={onToggleEnabled}
-            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            onChange={onToggle}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <span className={`font-medium ${day.is_enabled ? 'text-gray-900' : 'text-gray-400'}`}>
+          <span className={`text-sm font-medium ${day.is_enabled ? 'text-gray-900' : 'text-gray-400'}`}>
             {day.day_name}
           </span>
-        </div>
+        </label>
 
-        {day.is_enabled && availableTimeSlots.length > 0 && (
-          <button
-            onClick={onAddSlot}
-            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-          >
-            <Plus size={16} />
-            Add session
-          </button>
+        <div className="flex-1" />
+
+        {day.is_enabled && (
+          <>
+            <span className="text-xs text-gray-500">
+              {day.slots.length} session{day.slots.length !== 1 ? 's' : ''}
+            </span>
+            {canAddSlot && (
+              <button
+                type="button"
+                onClick={onAddSlot}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
+              >
+                <FontAwesomeIcon icon={faPlus} className="w-3 h-3" />
+                Add
+              </button>
+            )}
+          </>
         )}
       </div>
 
       {/* Slots */}
-      {day.is_enabled && (
-        <div className="space-y-2 ml-8">
-          {day.slots.length === 0 && (
-            <p className="text-sm text-gray-400 italic">No sessions - click "Add session" to add</p>
-          )}
-
-          {day.slots.map((slot, index) => (
-            <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+      {day.is_enabled && day.slots.length > 0 && (
+        <div className="p-3 space-y-2">
+          {day.slots.map((slot, idx) => (
+            <div key={idx} className="flex items-center gap-2">
               <select
                 value={slot.time_of_day}
-                onChange={(e) => onUpdateSlot(index, { ...slot, time_of_day: e.target.value as any })}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => onUpdateSlot(idx, 'time_of_day', e.target.value)}
+                className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               >
-                {TIME_OF_DAY_OPTIONS.map((opt) => (
+                {TIME_OF_DAY_OPTIONS.map(opt => (
                   <option 
                     key={opt.value} 
                     value={opt.value}
-                    disabled={usedTimeSlots.includes(opt.value) && opt.value !== slot.time_of_day}
+                    disabled={opt.value !== slot.time_of_day && day.slots.some(s => s.time_of_day === opt.value)}
                   >
                     {opt.label}
                   </option>
@@ -136,10 +172,10 @@ function DayRow({ day, onToggleEnabled, onAddSlot, onRemoveSlot, onUpdateSlot }:
 
               <select
                 value={slot.session_pattern}
-                onChange={(e) => onUpdateSlot(index, { ...slot, session_pattern: e.target.value as any })}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => onUpdateSlot(idx, 'session_pattern', e.target.value)}
+                className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               >
-                {SESSION_PATTERN_OPTIONS.map((opt) => (
+                {SESSION_PATTERN_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -147,80 +183,38 @@ function DayRow({ day, onToggleEnabled, onAddSlot, onRemoveSlot, onUpdateSlot }:
               </select>
 
               <button
-                onClick={() => onRemoveSlot(index)}
-                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                type="button"
+                onClick={() => onRemoveSlot(idx)}
+                className="p-1.5 text-gray-400 hover:text-red-500"
+                aria-label="Remove slot"
               >
-                <Trash2 size={16} />
+                <FontAwesomeIcon icon={faTrash} className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Empty state for enabled days */}
+      {day.is_enabled && day.slots.length === 0 && (
+        <div className="p-3 text-center">
+          <button
+            type="button"
+            onClick={onAddSlot}
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            <FontAwesomeIcon icon={faPlus} className="mr-1" />
+            Add a session
+          </button>
         </div>
       )}
     </div>
   );
 }
 
-interface FeasibilityBannerProps {
-  status: FeasibilityStatus;
-  message: string;
-  recommended: number;
-  available: number;
-  withContingency: number;
-}
-
-function FeasibilityBanner({ status, message, recommended, available, withContingency }: FeasibilityBannerProps) {
-  const config = {
-    sufficient: {
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-      text: 'text-green-800',
-      icon: CheckCircle,
-      iconColor: 'text-green-600',
-    },
-    marginal: {
-      bg: 'bg-amber-50',
-      border: 'border-amber-200',
-      text: 'text-amber-800',
-      icon: AlertTriangle,
-      iconColor: 'text-amber-600',
-    },
-    insufficient: {
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-      text: 'text-red-800',
-      icon: XCircle,
-      iconColor: 'text-red-600',
-    },
-  }[status];
-
-  const Icon = config.icon;
-
-  return (
-    <div className={`${config.bg} ${config.border} border rounded-lg p-4`}>
-      <div className="flex items-start gap-3">
-        <Icon className={`${config.iconColor} mt-0.5 flex-shrink-0`} size={20} />
-        <div className="flex-1">
-          <p className={`${config.text} text-sm`}>{message}</p>
-          <div className="mt-2 flex gap-4 text-xs">
-            <span className={config.text}>
-              <strong>Planned:</strong> {available}
-            </span>
-            <span className={config.text}>
-              <strong>Recommended:</strong> {recommended}
-            </span>
-            <span className={config.text}>
-              <strong>With buffer:</strong> {withContingency}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Main Component
-// ============================================================================
+/* ============================
+   Main Component
+============================ */
 
 export default function AvailabilityBuilderStep({
   weeklyTemplate,
@@ -232,119 +226,137 @@ export default function AvailabilityBuilderStep({
   onNext,
   onBack,
 }: AvailabilityBuilderStepProps) {
-  const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   const [showBlockedDates, setShowBlockedDates] = useState(false);
   const [newBlockedDate, setNewBlockedDate] = useState('');
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false);
 
-  // Calculate total weeks
+  // Calculations
+  const totalWeeklySessions = useMemo(() => calculateTotalSessions(weeklyTemplate), [weeklyTemplate]);
+  
   const totalWeeks = useMemo(() => {
+    if (!revisionPeriod.start_date || !revisionPeriod.end_date) return 8;
     return calculateWeeksBetween(revisionPeriod.start_date, revisionPeriod.end_date);
   }, [revisionPeriod.start_date, revisionPeriod.end_date]);
 
-  // Calculate sessions from current template
-  const templateStats = useMemo(() => {
-    return calculateSessionsFromTemplate(weeklyTemplate, totalWeeks);
-  }, [weeklyTemplate, totalWeeks]);
+  const totalPlannedSessions = useMemo(() => {
+    const baseSessions = totalWeeklySessions * totalWeeks;
+    const blockedDays = dateOverrides.filter(o => o.type === 'blocked').length;
+    // Rough estimate: subtract average sessions per day for blocked days
+    const avgSessionsPerDay = totalWeeklySessions / 7;
+    return Math.round(baseSessions - (blockedDays * avgSessionsPerDay));
+  }, [totalWeeklySessions, totalWeeks, dateOverrides]);
 
-  // Adjust for blocked dates
-  const blockedDaysCount = dateOverrides.filter(o => o.type === 'blocked').length;
-  const adjustedSessions = Math.max(0, templateStats.totalSessions - blockedDaysCount);
-
-  // Feasibility check
   const feasibility = useMemo(() => {
     if (!recommendation) return null;
-    return checkFeasibility(
+    return getFeasibilityStatus(
+      totalPlannedSessions,
       recommendation.total_recommended_sessions,
-      recommendation.with_contingency,
-      adjustedSessions
+      recommendation.with_contingency
     );
-  }, [recommendation, adjustedSessions]);
+  }, [totalPlannedSessions, recommendation]);
 
-  // Handle quick setup
+  // Handlers
+  const handleToggleDay = useCallback((dayIndex: number) => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      return {
+        ...day,
+        is_enabled: !day.is_enabled,
+        slots: !day.is_enabled ? day.slots : [], // Clear slots when disabling
+      };
+    });
+    onTemplateChange(updated);
+  }, [weeklyTemplate, onTemplateChange]);
+
+  const handleAddSlot = useCallback((dayIndex: number) => {
+    const day = weeklyTemplate[dayIndex];
+    const usedTimes = day.slots.map(s => s.time_of_day);
+    const nextTime = TIME_OF_DAY_OPTIONS.find(opt => !usedTimes.includes(opt.value));
+    
+    if (!nextTime) return;
+
+    const newSlot: AvailabilitySlot = {
+      time_of_day: nextTime.value,
+      session_pattern: recommendation?.recommended_session_pattern || 'p45',
+    };
+
+    const updated = weeklyTemplate.map((d, idx) => {
+      if (idx !== dayIndex) return d;
+      return {
+        ...d,
+        slots: [...d.slots, newSlot],
+        session_count: d.slots.length + 1,
+      };
+    });
+    onTemplateChange(updated);
+  }, [weeklyTemplate, onTemplateChange, recommendation]);
+
+  const handleRemoveSlot = useCallback((dayIndex: number, slotIndex: number) => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      const newSlots = day.slots.filter((_, i) => i !== slotIndex);
+      return {
+        ...day,
+        slots: newSlots,
+        session_count: newSlots.length,
+      };
+    });
+    onTemplateChange(updated);
+  }, [weeklyTemplate, onTemplateChange]);
+
+  const handleUpdateSlot = useCallback((
+    dayIndex: number,
+    slotIndex: number,
+    field: keyof AvailabilitySlot,
+    value: string
+  ) => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      if (idx !== dayIndex) return day;
+      const newSlots = day.slots.map((slot, i) => {
+        if (i !== slotIndex) return slot;
+        return { ...slot, [field]: value };
+      });
+      return { ...day, slots: newSlots };
+    });
+    onTemplateChange(updated);
+  }, [weeklyTemplate, onTemplateChange]);
+
   const handleQuickSetup = useCallback(async () => {
     if (!recommendation) return;
     
-    setIsLoadingTemplate(true);
+    setIsGeneratingTemplate(true);
     try {
       const result = await generateDefaultTemplate(
         recommendation.total_recommended_sessions,
         recommendation.recommended_session_pattern,
         Math.round(totalWeeks)
       );
-      onTemplateChange(result.template);
+      
+      if (result?.template) {
+        onTemplateChange(result.template);
+      }
     } catch (error) {
-      console.error('Error generating default template:', error);
+      console.error('Error generating template:', error);
     } finally {
-      setIsLoadingTemplate(false);
+      setIsGeneratingTemplate(false);
     }
   }, [recommendation, totalWeeks, onTemplateChange]);
 
-  // Day manipulation handlers
-  const handleToggleDay = useCallback((dayIndex: number) => {
-    const updated = weeklyTemplate.map((day, i) => 
-      i === dayIndex ? { ...day, is_enabled: !day.is_enabled } : day
-    );
-    onTemplateChange(updated);
-  }, [weeklyTemplate, onTemplateChange]);
-
-  const handleAddSlot = useCallback((dayIndex: number) => {
-    const day = weeklyTemplate[dayIndex];
-    const usedTimeSlots = day.slots.map(s => s.time_of_day);
-    const availableSlot = TIME_OF_DAY_OPTIONS.find(opt => !usedTimeSlots.includes(opt.value));
-    
-    if (!availableSlot) return;
-
-    const newSlot: AvailabilitySlot = {
-      time_of_day: availableSlot.value,
-      session_pattern: recommendation?.recommended_session_pattern || 'p45',
-    };
-
-    const updated = weeklyTemplate.map((d, i) => 
-      i === dayIndex 
-        ? { ...d, slots: [...d.slots, newSlot], session_count: d.slots.length + 1 }
-        : d
-    );
-    onTemplateChange(updated);
-  }, [weeklyTemplate, recommendation, onTemplateChange]);
-
-  const handleRemoveSlot = useCallback((dayIndex: number, slotIndex: number) => {
-    const updated = weeklyTemplate.map((d, i) => 
-      i === dayIndex 
-        ? { 
-            ...d, 
-            slots: d.slots.filter((_, si) => si !== slotIndex),
-            session_count: d.slots.length - 1
-          }
-        : d
-    );
-    onTemplateChange(updated);
-  }, [weeklyTemplate, onTemplateChange]);
-
-  const handleUpdateSlot = useCallback((dayIndex: number, slotIndex: number, slot: AvailabilitySlot) => {
-    const updated = weeklyTemplate.map((d, i) => 
-      i === dayIndex 
-        ? { 
-            ...d, 
-            slots: d.slots.map((s, si) => si === slotIndex ? slot : s)
-          }
-        : d
-    );
-    onTemplateChange(updated);
-  }, [weeklyTemplate, onTemplateChange]);
-
-  // Blocked dates handlers
   const handleAddBlockedDate = useCallback(() => {
     if (!newBlockedDate) return;
     
-    // Check if already blocked
+    // Check if date already exists
     if (dateOverrides.some(o => o.date === newBlockedDate)) {
       return;
     }
-
-    onOverridesChange([
-      ...dateOverrides,
-      { date: newBlockedDate, type: 'blocked', reason: 'User blocked' }
-    ]);
+    
+    const newOverride: DateOverride = {
+      date: newBlockedDate,
+      type: 'blocked',
+      reason: 'blocked',
+    };
+    
+    onOverridesChange([...dateOverrides, newOverride]);
     setNewBlockedDate('');
   }, [newBlockedDate, dateOverrides, onOverridesChange]);
 
@@ -353,118 +365,170 @@ export default function AvailabilityBuilderStep({
   }, [dateOverrides, onOverridesChange]);
 
   // Validation
-  const hasAnySessions = adjustedSessions > 0;
+  const isValid = totalWeeklySessions > 0;
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Build Your Revision Schedule
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">
+          Build your weekly schedule
         </h2>
-        <p className="text-gray-600">
-          Set up when revision sessions can happen each week.
+        <p className="mt-1 text-sm text-gray-600">
+          Set which days and times work for revision. We'll help you check if it's enough.
         </p>
       </div>
 
       {/* Recommendation Banner */}
       {recommendation && (
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-start gap-3">
-            <Lightbulb className="text-blue-600 mt-0.5 flex-shrink-0" size={20} />
+            <FontAwesomeIcon icon={faLightbulb} className="mt-0.5 text-blue-500" />
             <div className="flex-1">
-              <p className="text-sm text-blue-800">
-                <strong>Based on your subjects and goals</strong>, we recommend approximately{' '}
-                <strong>{recommendation.total_recommended_sessions} sessions</strong> over {totalWeeks} weeks
-                (about {Math.round(recommendation.total_recommended_sessions / totalWeeks)} per week).
-              </p>
+              <div className="font-medium text-blue-900">
+                We recommend approximately {recommendation.total_recommended_sessions} sessions
+              </div>
+              <div className="mt-1 text-sm text-blue-700">
+                That's about {Math.round(recommendation.total_recommended_sessions / totalWeeks)} sessions per week 
+                over {totalWeeks} weeks, with {revisionPeriod.contingency_percent}% contingency buffer.
+              </div>
               {recommendation.needs_advice && (
-                <p className="text-sm text-blue-700 mt-2">{recommendation.needs_advice}</p>
+                <div className="mt-2 text-sm text-blue-700 italic">
+                  {recommendation.needs_advice}
+                </div>
               )}
             </div>
           </div>
+
+          {/* Quick Setup Button */}
+          <button
+            type="button"
+            onClick={handleQuickSetup}
+            disabled={isGeneratingTemplate}
+            className="mt-3 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isGeneratingTemplate ? (
+              <>
+                <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <FontAwesomeIcon icon={faMagicWandSparkles} className="w-4 h-4" />
+                Quick setup
+              </>
+            )}
+          </button>
         </div>
       )}
 
-      {/* Quick Setup Button */}
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={handleQuickSetup}
-          disabled={isLoadingTemplate || !recommendation}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          {isLoadingTemplate ? (
-            <>
-              <Loader2 className="animate-spin" size={16} />
-              Generating...
-            </>
-          ) : (
-            'Quick Setup'
-          )}
-        </button>
-      </div>
-
       {/* Weekly Template */}
-      <div className="space-y-3 mb-6">
-        {weeklyTemplate.map((day, index) => (
+      <div className="space-y-2">
+        {weeklyTemplate.map((day, idx) => (
           <DayRow
             key={day.day_of_week}
             day={day}
-            onToggleEnabled={() => handleToggleDay(index)}
-            onAddSlot={() => handleAddSlot(index)}
-            onRemoveSlot={(slotIndex) => handleRemoveSlot(index, slotIndex)}
-            onUpdateSlot={(slotIndex, slot) => handleUpdateSlot(index, slotIndex, slot)}
+            onToggle={() => handleToggleDay(idx)}
+            onAddSlot={() => handleAddSlot(idx)}
+            onRemoveSlot={(slotIdx) => handleRemoveSlot(idx, slotIdx)}
+            onUpdateSlot={(slotIdx, field, value) => handleUpdateSlot(idx, slotIdx, field, value)}
           />
         ))}
       </div>
 
-      {/* Blocked Dates Section */}
-      <div className="border rounded-lg p-4 mb-6">
+      {/* Session Counter */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-gray-900">{totalWeeklySessions}</div>
+            <div className="text-xs text-gray-500">per week</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">{totalPlannedSessions}</div>
+            <div className="text-xs text-gray-500">total planned</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {recommendation?.with_contingency || '—'}
+            </div>
+            <div className="text-xs text-gray-500">recommended</div>
+          </div>
+        </div>
+
+        {/* Feasibility Indicator */}
+        {feasibility && (
+          <div className={`
+            mt-4 flex items-center gap-2 rounded-lg p-3
+            ${feasibility === 'sufficient' ? 'bg-green-50 text-green-800' : ''}
+            ${feasibility === 'marginal' ? 'bg-amber-50 text-amber-800' : ''}
+            ${feasibility === 'insufficient' ? 'bg-red-50 text-red-800' : ''}
+          `}>
+            <FontAwesomeIcon 
+              icon={
+                feasibility === 'sufficient' ? faCheckCircle :
+                feasibility === 'marginal' ? faExclamationTriangle :
+                faTimesCircle
+              }
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">
+              {feasibility === 'sufficient' && 'Great! This covers the recommended sessions with contingency.'}
+              {feasibility === 'marginal' && 'This meets the minimum, but leaves little room for missed sessions.'}
+              {feasibility === 'insufficient' && `Shortfall of ${(recommendation?.total_recommended_sessions || 0) - totalPlannedSessions} sessions. Consider adding more.`}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Blocked Dates */}
+      <div className="rounded-xl border border-gray-200 bg-white">
         <button
+          type="button"
           onClick={() => setShowBlockedDates(!showBlockedDates)}
-          className="flex items-center justify-between w-full text-left"
+          className="flex w-full items-center justify-between p-4"
         >
           <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-gray-400" />
-            <span className="font-medium text-gray-700">Block specific dates</span>
-            {blockedDaysCount > 0 && (
-              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                {blockedDaysCount} blocked
+            <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400" />
+            <span className="text-sm font-medium text-gray-700">
+              Block specific dates
+            </span>
+            {dateOverrides.filter(o => o.type === 'blocked').length > 0 && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                {dateOverrides.filter(o => o.type === 'blocked').length}
               </span>
             )}
           </div>
+          <span className="text-gray-400">{showBlockedDates ? '−' : '+'}</span>
         </button>
 
         {showBlockedDates && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-sm text-gray-600 mb-3">
-              Block dates when revision won't happen (holidays, events, etc.)
-            </p>
-
+          <div className="border-t border-gray-100 p-4">
             <div className="flex gap-2 mb-3">
               <input
                 type="date"
                 value={newBlockedDate}
+                onChange={(e) => setNewBlockedDate(e.target.value)}
                 min={revisionPeriod.start_date}
                 max={revisionPeriod.end_date}
-                onChange={(e) => setNewBlockedDate(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               />
               <button
+                type="button"
                 onClick={handleAddBlockedDate}
                 disabled={!newBlockedDate}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
               >
                 Block
               </button>
             </div>
 
-            {dateOverrides.filter(o => o.type === 'blocked').length > 0 && (
-              <div className="space-y-1">
+            {dateOverrides.filter(o => o.type === 'blocked').length > 0 ? (
+              <div className="space-y-2">
                 {dateOverrides
                   .filter(o => o.type === 'blocked')
+                  .sort((a, b) => a.date.localeCompare(b.date))
                   .map((override) => (
-                    <div key={override.date} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                    <div key={override.date} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                       <span className="text-sm text-gray-700">
                         {new Date(override.date).toLocaleDateString('en-GB', { 
                           weekday: 'short', 
@@ -473,79 +537,41 @@ export default function AvailabilityBuilderStep({
                         })}
                       </span>
                       <button
+                        type="button"
                         onClick={() => handleRemoveBlockedDate(override.date)}
                         className="text-gray-400 hover:text-red-500"
                       >
-                        <Trash2 size={14} />
+                        <FontAwesomeIcon icon={faTrash} className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
               </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                No dates blocked. Add holidays or days off above.
+              </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Feasibility Status */}
-      {feasibility && (
-        <div className="mb-6">
-          <FeasibilityBanner
-            status={feasibility.status}
-            message={feasibility.message}
-            recommended={feasibility.recommended}
-            available={adjustedSessions}
-            withContingency={feasibility.withContingency}
-          />
-        </div>
-      )}
-
-      {/* Session Counter */}
-      <div className="bg-gray-50 rounded-lg p-4 mb-6">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{adjustedSessions}</p>
-            <p className="text-xs text-gray-500">Sessions planned</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">
-              {Math.round(adjustedSessions / totalWeeks * 10) / 10}
-            </p>
-            <p className="text-xs text-gray-500">Per week</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-gray-900">{totalWeeks}</p>
-            <p className="text-xs text-gray-500">Weeks total</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Validation Message */}
-      {!hasAnySessions && (
-        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-800">
-            Please add at least one session to continue.
-          </p>
-        </div>
-      )}
-
       {/* Navigation */}
-      <div className="flex justify-between">
+      <div className="flex items-center justify-between pt-4">
         <button
+          type="button"
           onClick={onBack}
-          className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Back
         </button>
+
         <button
+          type="button"
           onClick={onNext}
-          disabled={!hasAnySessions}
-          className={`px-6 py-2 rounded-lg font-medium ${
-            hasAnySessions
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-          }`}
+          disabled={!isValid}
+          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
         >
-          Continue
+          Next
         </button>
       </div>
     </div>
