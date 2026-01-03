@@ -22,7 +22,7 @@ export default function SignUp() {
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
-  const { signUp, refresh } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -31,7 +31,7 @@ export default function SignUp() {
     setSubmitting(true);
 
     try {
-      const result: any = await withTimeout(
+      const result = await withTimeout(
         signUp(email.trim().toLowerCase(), password, fullName.trim()),
         8000
       );
@@ -42,11 +42,7 @@ export default function SignUp() {
         return;
       }
 
-      // Refresh auth state to load the profile before navigating
-      // This ensures the header shows the user's name immediately
-      await refresh();
-
-      // After parent signup we go straight into parent onboarding
+      // signUp now updates auth state immediately, so we can navigate directly
       navigate("/parent/onboarding", { replace: true });
     } catch (e: any) {
       setError(e?.message ?? "Sign up failed");
