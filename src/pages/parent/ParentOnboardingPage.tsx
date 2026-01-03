@@ -132,7 +132,10 @@ const STEPS = {
 
 export default function ParentOnboardingPage() {
   const navigate = useNavigate();
-  const { refresh, user } = useAuth();
+  const { refresh, user, parentChildCount } = useAuth();
+  
+  // Track if we've completed onboarding (to prevent redirect loops)
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
 
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -385,6 +388,7 @@ export default function ParentOnboardingPage() {
       }
 
       setInvite(inviteResult.invite);
+      setOnboardingComplete(true);
       setStep(STEPS.INVITE);
     } catch (e: any) {
       setError(formatSupabaseError(e));
@@ -577,7 +581,14 @@ export default function ParentOnboardingPage() {
               <button
                 type="button"
                 className="rounded-lg border px-4 py-2 text-sm"
-                onClick={() => navigate("/parent", { replace: true })}
+                onClick={async () => {
+                  // Refresh auth state to update parentChildCount
+                  await refresh();
+                  // Small delay to ensure state propagates
+                  setTimeout(() => {
+                    navigate("/parent", { replace: true });
+                  }, 100);
+                }}
               >
                 Go to dashboard
               </button>
