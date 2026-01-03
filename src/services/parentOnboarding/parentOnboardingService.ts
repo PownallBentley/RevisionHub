@@ -19,8 +19,41 @@ function asString(value: any, fallback = ""): string {
 }
 
 /* =========================
-   Payload types
+   Payload types (NEW FORMAT)
 ========================= */
+
+export type SubjectWithGradesPayload = {
+  subject_id: string;
+  sort_order: number;
+  current_grade: number | null;
+  target_grade: number | null;
+  grade_confidence: 'confirmed' | 'estimated' | 'unknown';
+};
+
+export type RevisionPeriodPayload = {
+  start_date: string;
+  end_date: string;
+  contingency_percent: number;
+  feeling_code: string | null;
+  history_code: string | null;
+};
+
+export type AvailabilitySlotPayload = {
+  time_of_day: 'before_school' | 'after_school' | 'evening';
+  session_pattern: 'p20' | 'p45' | 'p70';
+};
+
+export type WeeklyAvailabilityPayload = Record<string, {
+  enabled: boolean;
+  slots: AvailabilitySlotPayload[];
+}>;
+
+export type DateOverridePayload = {
+  date: string;
+  type: 'blocked' | 'extra';
+  reason?: string;
+  slots?: AvailabilitySlotPayload[];
+};
 
 export type ParentCreateChildAndPlanPayload = {
   child: {
@@ -32,14 +65,40 @@ export type ParentCreateChildAndPlanPayload = {
   };
 
   goal_code: string | null;
-  exam_timeline?: string | null;
 
-  // IMPORTANT: these are the specific subject rows (each already tied to an exam_board_id)
-  subject_ids: string[];
+  // NEW FORMAT: Rich subject data with grades
+  subjects: SubjectWithGradesPayload[];
 
-  // backend expects this name (not "needs")
+  // Need clusters
   need_clusters: Array<{ cluster_code: string }>;
 
+  // NEW FORMAT: Concrete revision period
+  revision_period: RevisionPeriodPayload;
+
+  // NEW FORMAT: Weekly availability template
+  weekly_availability: WeeklyAvailabilityPayload;
+
+  // NEW FORMAT: Optional date overrides
+  date_overrides?: DateOverridePayload[];
+
+  // Legacy: settings object (for backward compatibility)
+  settings?: any;
+};
+
+// Legacy payload type (for backward compatibility)
+export type LegacyParentCreateChildAndPlanPayload = {
+  child: {
+    first_name: string;
+    last_name?: string;
+    preferred_name?: string;
+    country?: string;
+    year_group?: number;
+  };
+
+  goal_code: string | null;
+  exam_timeline?: string | null;
+  subject_ids: string[];
+  need_clusters: Array<{ cluster_code: string }>;
   settings: any;
 };
 
@@ -124,9 +183,14 @@ export async function rpcListNeedClusters(): Promise<NeedClusterRow[]> {
 
 /* =========================
    Create: Child + Plan
+   
+   Accepts both new and legacy payload formats.
+   The RPC handles backward compatibility.
 ========================= */
 
-export async function rpcParentCreateChildAndPlan(payload: ParentCreateChildAndPlanPayload): Promise<any> {
+export async function rpcParentCreateChildAndPlan(
+  payload: ParentCreateChildAndPlanPayload | LegacyParentCreateChildAndPlanPayload
+): Promise<any> {
   const { data, error } = await supabase.rpc("rpc_parent_create_child_and_plan", {
     p_payload: payload,
   });
