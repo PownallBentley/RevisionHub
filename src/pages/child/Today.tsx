@@ -83,6 +83,7 @@ export default function Today() {
     }
 
     loadData();
+
     return () => {
       mounted = false;
     };
