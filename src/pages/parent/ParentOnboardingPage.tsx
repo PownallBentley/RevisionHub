@@ -1,4 +1,6 @@
 // src/pages/parent/ParentOnboardingPage.tsx
+// Multi-step onboarding flow for parents to set up their child's revision plan
+// Steps: Child Details → Goal → Needs → Exam Type → Subjects → Pathways → Priority/Grades → Revision Period → Availability → Confirm → Invite
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +17,9 @@ import ExamTypeStep from "../../components/parentOnboarding/steps/ExamTypeStep";
 import SubjectBoardStep, {
   type SelectedSubject,
 } from "../../components/parentOnboarding/steps/SubjectBoardStep";
+import PathwaySelectionStep, {
+  type PathwaySelectionData,
+} from "../../components/parentOnboarding/steps/PathwaySelectionStep";
 import SubjectPriorityGradesStep, {
   type SubjectWithGrades,
 } from "../../components/parentOnboarding/steps/SubjectPriorityGradesStep";
@@ -100,15 +105,16 @@ async function copyToClipboard(text: string) {
 /* ============================
    Step Configuration
    
-   NEW ORDER:
-   1. Child Details
-   2. Goal
-   3. Needs (moved earlier - informs recommendations)
-   4. Exam Type
-   5. Subjects
-   6. Priority & Grades (NEW)
-   7. Revision Period (NEW - replaces ExamTimeline)
-   8. Availability (NEW - replaces old AvailabilityStep)
+   ORDER (updated with PATHWAYS step):
+   0. Child Details
+   1. Goal
+   2. Needs
+   3. Exam Type
+   4. Subjects
+   5. Pathways (NEW - tier/option selection)
+   6. Priority & Grades
+   7. Revision Period
+   8. Availability
    9. Confirm
    10. Invite
 ============================ */
@@ -116,14 +122,15 @@ async function copyToClipboard(text: string) {
 const STEPS = {
   CHILD_DETAILS: 0,
   GOAL: 1,
-  NEEDS: 2,           // Moved earlier
+  NEEDS: 2,
   EXAM_TYPE: 3,
   SUBJECTS: 4,
-  PRIORITY_GRADES: 5, // NEW
-  REVISION_PERIOD: 6, // NEW (replaces EXAM_TIMELINE)
-  AVAILABILITY: 7,    // NEW (replaces old availability)
-  CONFIRM: 8,
-  INVITE: 9,
+  PATHWAYS: 5,
+  PRIORITY_GRADES: 6,
+  REVISION_PERIOD: 7,
+  AVAILABILITY: 8,
+  CONFIRM: 9,
+  INVITE: 10,
 } as const;
 
 /* ============================
@@ -147,7 +154,7 @@ export default function ParentOnboardingPage() {
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Step 1: Child Details
+  // Step 0: Child Details
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
     last_name: "",
@@ -156,27 +163,30 @@ export default function ParentOnboardingPage() {
     year_group: 11,
   });
 
-  // Step 2: Goal
+  // Step 1: Goal
   const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
 
-  // Step 3: Needs (moved earlier)
+  // Step 2: Needs
   const [needClusters, setNeedClusters] = useState<NeedClusterSelection[]>([]);
 
-  // Step 4: Exam Types
+  // Step 3: Exam Types
   const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
 
-  // Step 5: Subjects (basic selection)
+  // Step 4: Subjects (basic selection)
   const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
 
-  // Step 6: Priority & Grades (NEW)
+  // Step 5: Pathways (NEW - tier/option selection)
+  const [pathwaySelections, setPathwaySelections] = useState<PathwaySelectionData[]>([]);
+
+  // Step 6: Priority & Grades
   const [subjectsWithGrades, setSubjectsWithGrades] = useState<SubjectWithGrades[]>([]);
 
-  // Step 7: Revision Period (NEW)
+  // Step 7: Revision Period
   const [revisionPeriod, setRevisionPeriod] = useState<RevisionPeriodData>(
     createDefaultRevisionPeriod()
   );
 
-  // Step 8: Availability (NEW)
+  // Step 8: Availability
   const [weeklyTemplate, setWeeklyTemplate] = useState<DayTemplate[]>(createEmptyTemplate());
   const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
 
@@ -188,7 +198,6 @@ export default function ParentOnboardingPage() {
      Navigate to dashboard when auth state confirms child was created
   ============================ */
   useEffect(() => {
-    // Only navigate if we're pending navigation AND parentChildCount > 0
     if (pendingDashboardNav && parentChildCount !== null && parentChildCount > 0) {
       setPendingDashboardNav(false);
       navigate("/parent", { replace: true });
@@ -241,7 +250,6 @@ export default function ParentOnboardingPage() {
       setRecommendation(result);
     } catch (err) {
       console.error('Error calculating recommendations:', err);
-      // Don't block progress - recommendations are helpful but not required
     } finally {
       setIsLoadingRecommendation(false);
     }
@@ -254,7 +262,7 @@ export default function ParentOnboardingPage() {
   }, [step, subjectsWithGrades, goalCode, recommendation, calculateRecommendations]);
 
   /* ============================
-     Build payload for RPC (NEW FORMAT)
+     Build payload for RPC (includes pathway_selections)
   ============================ */
   const payload = useMemo(() => {
     // Build weekly_availability in new format
@@ -284,11 +292,20 @@ export default function ParentOnboardingPage() {
       cluster_code: nc.cluster_code,
     }));
 
+    // Build pathway_selections (filter out 'skipped' markers for RPC)
+    const pathway_selections = pathwaySelections
+      .filter(ps => ps.pathway_id !== 'skipped')
+      .map(ps => ({
+        subject_id: ps.subject_id,
+        pathway_id: ps.pathway_id,
+      }));
+
     return {
       child,
       goal_code: goalCode ?? null,
       subjects,
       need_clusters,
+      pathway_selections,
       revision_period: {
         start_date: revisionPeriod.start_date,
         end_date: revisionPeriod.end_date,
@@ -299,7 +316,7 @@ export default function ParentOnboardingPage() {
       weekly_availability,
       date_overrides: dateOverrides.length > 0 ? dateOverrides : undefined,
     };
-  }, [child, goalCode, subjectsWithGrades, needClusters, revisionPeriod, weeklyTemplate, dateOverrides]);
+  }, [child, goalCode, subjectsWithGrades, needClusters, pathwaySelections, revisionPeriod, weeklyTemplate, dateOverrides]);
 
   /* ============================
      Validation
@@ -316,6 +333,8 @@ export default function ParentOnboardingPage() {
         return normaliseStringArray(examTypeIds).length > 0;
       case STEPS.SUBJECTS:
         return true; // SubjectBoardStep owns its nav
+      case STEPS.PATHWAYS:
+        return true; // PathwaySelectionStep owns its nav
       case STEPS.PRIORITY_GRADES:
         return subjectsWithGrades.length > 0 && subjectsWithGrades.every(s => s.target_grade !== null);
       case STEPS.REVISION_PERIOD:
@@ -344,7 +363,6 @@ export default function ParentOnboardingPage() {
       return "Please set a revision period.";
     }
     
-    // Check availability has at least one session
     const hasSession = Object.values(payload.weekly_availability).some(
       day => day.enabled && day.slots.length > 0
     );
@@ -420,25 +438,34 @@ export default function ParentOnboardingPage() {
     child.preferred_name?.trim() || child.first_name?.trim() || "your child";
 
   // Steps that manage their own navigation
-  const selfNavigatingSteps = [STEPS.SUBJECTS];
+  const selfNavigatingSteps = [STEPS.SUBJECTS, STEPS.PATHWAYS, STEPS.PRIORITY_GRADES, STEPS.REVISION_PERIOD, STEPS.AVAILABILITY];
   const showDefaultNav = !selfNavigatingSteps.includes(step) && step < STEPS.INVITE;
 
   /* ============================
      Step-specific navigation handlers
   ============================ */
   
+  const handlePathwaysNext = useCallback(() => {
+    setError(null);
+    setSubjectsWithGrades([]);
+    setStep(STEPS.PRIORITY_GRADES);
+  }, []);
+
+  const handlePathwaysBack = useCallback(() => {
+    setStep(STEPS.SUBJECTS);
+  }, []);
+
   const handlePriorityGradesNext = useCallback(() => {
     setError(null);
     setStep(STEPS.REVISION_PERIOD);
   }, []);
 
   const handlePriorityGradesBack = useCallback(() => {
-    setStep(STEPS.SUBJECTS);
+    setStep(STEPS.PATHWAYS);
   }, []);
 
   const handleRevisionPeriodNext = useCallback(() => {
     setError(null);
-    // Trigger recommendation calculation
     calculateRecommendations();
     setStep(STEPS.AVAILABILITY);
   }, [calculateRecommendations]);
@@ -455,6 +482,13 @@ export default function ParentOnboardingPage() {
   const handleAvailabilityBack = useCallback(() => {
     setStep(STEPS.REVISION_PERIOD);
   }, []);
+
+  /* ============================
+     Subject IDs for pathway lookup
+  ============================ */
+  const subjectIdsForPathways = useMemo(() => {
+    return selectedSubjects.map(s => s.subject_id);
+  }, [selectedSubjects]);
 
   /* ============================
      Render
@@ -476,7 +510,7 @@ export default function ParentOnboardingPage() {
         <GoalStep value={goalCode} onChange={setGoalCode} />
       )}
 
-      {/* Step 2: Needs (moved earlier) */}
+      {/* Step 2: Needs */}
       {step === STEPS.NEEDS && (
         <NeedsStep
           childName={childDisplayName}
@@ -491,8 +525,9 @@ export default function ParentOnboardingPage() {
           value={examTypeIds}
           onChange={(ids) => {
             setExamTypeIds(normaliseStringArray(ids));
-            setSelectedSubjects([]); // reset subjects if exams change
-            setSubjectsWithGrades([]); // reset grades too
+            setSelectedSubjects([]);
+            setPathwaySelections([]);
+            setSubjectsWithGrades([]);
           }}
         />
       )}
@@ -502,17 +537,30 @@ export default function ParentOnboardingPage() {
         <SubjectBoardStep
           examTypeIds={normaliseStringArray(examTypeIds)}
           value={selectedSubjects}
-          onChange={setSelectedSubjects}
+          onChange={(newSubjects) => {
+            setSelectedSubjects(newSubjects);
+            setPathwaySelections([]);
+          }}
           onBackToExamTypes={() => setStep(STEPS.EXAM_TYPE)}
           onDone={() => {
-            // Reset grades when subjects change
             setSubjectsWithGrades([]);
-            setStep(STEPS.PRIORITY_GRADES);
+            setStep(STEPS.PATHWAYS);
           }}
         />
       )}
 
-      {/* Step 5: Priority & Grades (NEW) */}
+      {/* Step 5: Pathway Selection (tier/option selection) */}
+      {step === STEPS.PATHWAYS && (
+        <PathwaySelectionStep
+          subjectIds={subjectIdsForPathways}
+          value={pathwaySelections}
+          onChange={setPathwaySelections}
+          onBack={handlePathwaysBack}
+          onNext={handlePathwaysNext}
+        />
+      )}
+
+      {/* Step 6: Priority & Grades */}
       {step === STEPS.PRIORITY_GRADES && (
         <SubjectPriorityGradesStep
           subjects={subjectsWithGrades}
@@ -522,7 +570,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 6: Revision Period (NEW - replaces ExamTimeline) */}
+      {/* Step 7: Revision Period */}
       {step === STEPS.REVISION_PERIOD && (
         <RevisionPeriodStep
           revisionPeriod={revisionPeriod}
@@ -532,7 +580,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 7: Availability (NEW) */}
+      {/* Step 8: Availability */}
       {step === STEPS.AVAILABILITY && (
         <AvailabilityBuilderStep
           weeklyTemplate={weeklyTemplate}
@@ -546,12 +594,12 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 8: Confirm */}
+      {/* Step 9: Confirm */}
       {step === STEPS.CONFIRM && (
         <ConfirmStep payload={payload} busy={busy} onSubmit={submit} />
       )}
 
-      {/* Step 9: Invite */}
+      {/* Step 10: Invite */}
       {step === STEPS.INVITE && invite && (
         <div className="mt-2">
           <h3 className="text-lg font-semibold">Invite {childDisplayName}</h3>
@@ -596,12 +644,8 @@ export default function ParentOnboardingPage() {
                 type="button"
                 className="rounded-lg border px-4 py-2 text-sm"
                 onClick={async () => {
-                  // Set pending navigation flag
                   setPendingDashboardNav(true);
-                  // Refresh auth state to update parentChildCount
                   await refresh();
-                  // If parentChildCount is already > 0, useEffect will navigate
-                  // Otherwise, we wait for the state to update
                 }}
               >
                 Go to dashboard
@@ -618,7 +662,7 @@ export default function ParentOnboardingPage() {
       )}
 
       {/* Default navigation for steps that don't manage their own */}
-      {showDefaultNav && step !== STEPS.PRIORITY_GRADES && step !== STEPS.REVISION_PERIOD && step !== STEPS.AVAILABILITY && (
+      {showDefaultNav && (
         <div className="mt-6 flex items-center justify-between">
           <button
             type="button"
