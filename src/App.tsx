@@ -8,6 +8,7 @@ import Signup from "./pages/SignUp";
 import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
 import ParentDashboard from "./pages/ParentDashboard";
 import SubjectProgress from "./pages/parent/SubjectProgress";
+import Timetable from "./pages/parent/Timetable";
 import Today from "./pages/child/Today";
 import SessionOverview from "./pages/child/SessionOverview";
 import SessionRun from "./pages/child/SessionRun";
@@ -15,19 +16,19 @@ import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 
 function HomeGate() {
-  const { 
-    loading, 
+  const {
+    loading,
     hydrating,
-    user, 
-    isParent, 
-    isChild, 
-    parentChildCount 
+    user,
+    isParent,
+    isChild,
+    parentChildCount,
   } = useAuth();
 
   // Still checking auth - show loading
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
+      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
         Loading…
       </div>
     );
@@ -39,10 +40,9 @@ function HomeGate() {
   }
 
   // User is logged in but we're still fetching their profile/role
-  // Show a brief loading state rather than making wrong routing decisions
   if (hydrating && !isParent && !isChild) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
+      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
         Loading…
       </div>
     );
@@ -55,8 +55,7 @@ function HomeGate() {
 
   // Parent user
   if (isParent) {
-    // parentChildCount is null during hydration - only redirect to onboarding 
-    // if we KNOW they have 0 children (not null)
+    // Only redirect to onboarding if we KNOW they have 0 children (not null)
     if (parentChildCount === 0) {
       return <Navigate to="/parent/onboarding" replace />;
     }
@@ -65,7 +64,6 @@ function HomeGate() {
   }
 
   // Fallback - user exists but role not determined
-  // This shouldn't happen normally, but show Landing as safe fallback
   return <Landing />;
 }
 
@@ -88,6 +86,7 @@ export default function App() {
           <Route path="/parent/onboarding" element={<ParentOnboardingPage />} />
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
+          <Route path="/parent/timetable" element={<Timetable />} />
 
           {/* Child routes */}
           <Route path="/child/today" element={<Today />} />
