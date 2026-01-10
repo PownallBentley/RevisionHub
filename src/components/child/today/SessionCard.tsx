@@ -30,7 +30,7 @@ export default function SessionCard({
   const colorClass = getSubjectColorClass(session.subject_name);
 
   // Get topics from preview
-  const topics = session.topics_preview?.map((t) => t.topic_name) || [];
+  const topics = session.topics_preview?.map((t: { topic_name: string }) => t.topic_name) || [];
 
   return (
     <div
@@ -129,7 +129,7 @@ export default function SessionCard({
         {topics.length > 0 && (
           <div className="mb-4">
             <div className="flex flex-wrap gap-2">
-              {topics.slice(0, 3).map((topic, idx) => (
+              {topics.slice(0, 3).map((topic: string, idx: number) => (
                 <span
                   key={idx}
                   className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"

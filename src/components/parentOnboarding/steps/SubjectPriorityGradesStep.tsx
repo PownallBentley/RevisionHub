@@ -1,7 +1,7 @@
 // src/components/parentOnboarding/steps/SubjectPriorityGradesStep.tsx
 // Card sort for subject priority + current/target grade per subject
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,

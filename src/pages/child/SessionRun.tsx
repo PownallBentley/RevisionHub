@@ -134,7 +134,7 @@ export default function SessionRun() {
   
   // Topic transition state
   const [showTopicComplete, setShowTopicComplete] = useState(false);
-  const [nextTopicName, setNextTopicName] = useState<string | null>(null);
+  const [, setNextTopicName] = useState<string | null>(null);
 
   // GAMIFICATION STATE (NEW in v3.3)
   const [gamificationResult, setGamificationResult] = useState<SessionGamificationResult | null>(null);
@@ -644,7 +644,6 @@ export default function SessionRun() {
   const gp = plannedPayload ?? {};
 
   // Macro payload, plus any runtime patches for the current step
-  const currentTopicId = topicsList[currentTopicIndex]?.topic_id;
   const currentTopicNameForDisplay = topicsList[currentTopicIndex]?.topic_name ?? overview?.topic_name ?? "this topic";
 
   const effectivePayloadForStep = {

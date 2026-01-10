@@ -137,7 +137,7 @@ export default function SubjectCard({ subject }: SubjectCardProps) {
               {subject.coming_up.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4">No upcoming sessions scheduled</p>
               ) : (
-                subject.coming_up.slice(0, 4).map((topic, index) => (
+                subject.coming_up.slice(0, 4).map((topic) => (
                   <div 
                     key={topic.topic_id} 
                     className={`p-4 rounded-lg border ${

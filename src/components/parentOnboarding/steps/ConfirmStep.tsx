@@ -8,13 +8,6 @@ import { faExclamationTriangle } from "@fortawesome/free-solid-svg-icons";
    Types
 ============================ */
 
-interface SubjectPayload {
-  subject_id: string;
-  sort_order: number;
-  current_grade: number | null;
-  target_grade: number | null;
-  grade_confidence: string;
-}
 
 interface PathwaySelectionPayload {
   subject_id: string;
@@ -165,11 +158,6 @@ export default function ConfirmStep(props: {
     ? payload.pathway_selections as PathwaySelectionPayload[]
     : [];
   const pathwayCount = pathwaySelections.length;
-
-  // Check for skipped pathways (from the full pathway data if available)
-  // Note: skipped pathways have pathway_id = 'skipped' but are filtered out of payload
-  // We show a warning if subjects require pathways but none selected
-  const hasPathwayWarning = false; // Would need full context to determine
 
   // Get availability rows based on format
   let availRows: Array<{ day: string; sessions: number; details: string }> = [];

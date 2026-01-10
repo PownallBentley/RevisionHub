@@ -142,7 +142,7 @@ export default function ParentOnboardingPage() {
   const { refresh, user, parentChildCount } = useAuth();
   
   // Track if we've completed onboarding (to prevent redirect loops)
-  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [, setOnboardingComplete] = useState(false);
   
   // Track if we're waiting to navigate to dashboard
   const [pendingDashboardNav, setPendingDashboardNav] = useState(false);
@@ -192,7 +192,7 @@ export default function ParentOnboardingPage() {
 
   // Recommendation state (calculated when entering availability step)
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
-  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
+  const [, setIsLoadingRecommendation] = useState(false);
 
   /* ============================
      Navigate to dashboard when auth state confirms child was created
@@ -266,14 +266,20 @@ export default function ParentOnboardingPage() {
   ============================ */
   const payload = useMemo(() => {
     // Build weekly_availability in new format
-    const weekly_availability: Record<string, { enabled: boolean; slots: Array<{ time_of_day: string; session_pattern: string }> }> = {};
-    
+    const weekly_availability: Record<string, {
+      enabled: boolean;
+      slots: Array<{
+        time_of_day: 'before_school' | 'after_school' | 'evening';
+        session_pattern: 'p20' | 'p45' | 'p70';
+      }>
+    }> = {};
+
     for (const day of weeklyTemplate) {
       weekly_availability[day.day_of_week.toString()] = {
         enabled: day.is_enabled,
         slots: day.slots.map(s => ({
-          time_of_day: s.time_of_day,
-          session_pattern: s.session_pattern,
+          time_of_day: s.time_of_day as 'before_school' | 'after_school' | 'evening',
+          session_pattern: s.session_pattern as 'p20' | 'p45' | 'p70',
         })),
       };
     }
@@ -439,7 +445,7 @@ export default function ParentOnboardingPage() {
 
   // Steps that manage their own navigation
   const selfNavigatingSteps = [STEPS.SUBJECTS, STEPS.PATHWAYS, STEPS.PRIORITY_GRADES, STEPS.REVISION_PERIOD, STEPS.AVAILABILITY];
-  const showDefaultNav = !selfNavigatingSteps.includes(step) && step < STEPS.INVITE;
+  const showDefaultNav = !selfNavigatingSteps.includes(step as typeof STEPS.SUBJECTS) && step < STEPS.INVITE;
 
   /* ============================
      Step-specific navigation handlers

@@ -14,7 +14,7 @@ type UpcomingDayCardProps = {
 
 export default function UpcomingDayCard({ day }: UpcomingDayCardProps) {
   const totalMinutes = day.sessions.reduce(
-    (sum, s) => sum + (s.session_duration_minutes || 20),
+    (sum: number, s) => sum + (s.session_duration_minutes || 20),
     0
   );
 
@@ -29,7 +29,7 @@ export default function UpcomingDayCard({ day }: UpcomingDayCardProps) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {day.sessions.map((session) => (
+        {day.sessions.map((session: UpcomingDay['sessions'][0]) => (
           <div
             key={session.planned_session_id}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${getSubjectColorClass(

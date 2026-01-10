@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import PointsDisplay from "./PointsDisplay";
 import { StreakCelebration } from "./StreakCounter";
 import AchievementUnlockModal from "./AchievementUnlockModal";
-import type { SessionGamificationResult, NewlyEarnedAchievement } from "../../types/gamification";
+import type { SessionGamificationResult } from "../../types/gamification";
 
 type SessionCompleteWithGamificationProps = {
   subjectName: string;
@@ -52,8 +52,9 @@ export default function SessionCompleteWithGamification({
     onMarkAchievementsNotified?.();
   };
 
-  const isNewStreakRecord =
-    streak && streak.current_streak === streak.longest_streak && streak.current_streak > 1;
+  const isNewStreakRecord = Boolean(
+    streak && streak.current_streak === streak.longest_streak && streak.current_streak > 1
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 via-white to-indigo-50 relative overflow-hidden">

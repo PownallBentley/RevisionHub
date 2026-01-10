@@ -1,7 +1,7 @@
 // src/components/parentOnboarding/steps/AvailabilityBuilderStep.tsx
 // Weekly availability template builder with recommendations and feasibility checking
 
-import React, { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faLightbulb, 
@@ -64,7 +64,6 @@ const SESSION_PATTERN_OPTIONS: { value: AvailabilitySlot['session_pattern']; lab
   { value: 'p70', label: '70 min (3 topics)', minutes: 70 },
 ];
 
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /* ============================
    Helper Functions

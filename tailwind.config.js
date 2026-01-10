@@ -7,13 +7,66 @@ export default {
   theme: {
     extend: {
       colors: {
-        'brand-purple': '#8B5CF6',
-        'brand-purple-light': '#A78BFA',
-        'brand-purple-dark': '#7C3AED',
-        'calm-purple': '#8B5CF6',
-        'calm-purple-dark': '#7C3AED',
-        'soft-green': '#10B981',
-        'neutral-bg': '#F9FAFB',
+        primary: {
+          50:  "#F7F4FF",
+          100: "#EAE3FF",
+          200: "#D6C7FF",
+          300: "#C3B5FF",
+          400: "#9A84FF",
+          500: "#744FFF",
+          600: "#5B2CFF",
+          700: "#4520C5",
+          800: "#32168E",
+          900: "#2A185E",
+        },
+        neutral: {
+          0:   "#FFFFFF",
+          50:  "#F9FAFC",
+          100: "#F6F7FB",
+          200: "#E1E4EE",
+          300: "#CFD3E0",
+          400: "#A8AEBD",
+          500: "#6C7280",
+          600: "#4B5161",
+          700: "#1F2330",
+          800: "#121420",
+          900: "#050611",
+        },
+        accent: {
+          green: "#1EC592",
+          amber: "#FFB547",
+          red:   "#F05151",
+        },
+      },
+      fontFamily: {
+        sans: [
+          "Inter",
+          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif",
+        ],
+      },
+      borderRadius: {
+        xl: "1rem",
+        "2xl": "1.5rem",
+        pill: "999px",
+      },
+      boxShadow: {
+        card: "0 18px 45px rgba(15, 23, 42, 0.06)",
+        soft: "0 10px 30px rgba(15, 23, 42, 0.04)",
+      },
+      backgroundImage: {
+        "hero-soft":
+          "linear-gradient(135deg, #F7F4FF 0%, #F0F7FF 50%, #FFFFFF 100%)",
+      },
+      spacing: {
+        18: "4.5rem",
+        22: "5.5rem",
+      },
+      maxWidth: {
+        "content": "1120px",
       },
       keyframes: {
         'bounce-in': {

@@ -36,7 +36,7 @@ export async function markAchievementsNotified(
   achievementIds?: string[]
 ): Promise<{ success: boolean; error: string | null }> {
   try {
-    const { data, error } = await supabase.rpc("rpc_mark_achievements_notified", {
+    const { error } = await supabase.rpc("rpc_mark_achievements_notified", {
       p_child_id: childId,
       p_achievement_ids: achievementIds ?? null,
     });

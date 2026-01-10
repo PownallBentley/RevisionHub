@@ -1,7 +1,7 @@
 // src/components/parentOnboarding/steps/RevisionPeriodStep.tsx
 // Start/end date selection with contingency and feeling/history capture
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faCalendarAlt, 

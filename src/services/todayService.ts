@@ -175,7 +175,6 @@ function calculateNextAchievement(
   data: any
 ): { name: string; description: string; icon: string; progress: number } | null {
   const currentStreak = data.streak?.current ?? 0;
-  const totalEarned = data.achievements?.total_earned ?? 0;
 
   // Streak-based achievements
   if (currentStreak < 3) {
