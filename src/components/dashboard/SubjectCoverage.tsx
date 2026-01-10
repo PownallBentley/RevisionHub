@@ -12,13 +12,13 @@ export default function SubjectCoverage({ coverage }: SubjectCoverageProps) {
 
   if (coverage.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-2xl shadow-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Subject Coverage This Week</h2>
+          <h2 className="text-lg font-semibold text-neutral-700">Subject Coverage This Week</h2>
         </div>
         <div className="text-center py-6">
-          <p className="text-gray-500">No subject activity this week yet.</p>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-neutral-500">No subject activity this week yet.</p>
+          <p className="text-sm text-neutral-400 mt-1">
             Coverage will appear once sessions are completed.
           </p>
         </div>
@@ -70,12 +70,12 @@ export default function SubjectCoverage({ coverage }: SubjectCoverageProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+    <div className="bg-white rounded-2xl shadow-card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Subject Coverage This Week</h2>
+        <h2 className="text-lg font-semibold text-neutral-700">Subject Coverage This Week</h2>
         <button
-          onClick={() => navigate("/subjects")}
-          className="text-sm text-brand-purple font-medium hover:underline flex items-center gap-1"
+          onClick={() => navigate("/parent/subjects")}
+          className="text-sm text-primary-600 font-medium hover:underline flex items-center gap-1"
         >
           View All Subjects
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,7 +88,7 @@ export default function SubjectCoverage({ coverage }: SubjectCoverageProps) {
         {coverage.map((item) => (
           <div
             key={`${item.child_id}-${item.subject_id}`}
-            className="p-4 rounded-xl border border-gray-100 hover:border-gray-200 transition"
+            className="p-4 rounded-xl border border-neutral-200 hover:border-primary-200 transition"
           >
             {/* Subject Header */}
             <div className="flex items-center gap-2 mb-3">
@@ -101,22 +101,22 @@ export default function SubjectCoverage({ coverage }: SubjectCoverageProps) {
                 </span>
               </div>
               <div className="min-w-0">
-                <p className="font-medium text-gray-900 text-sm truncate">
+                <p className="font-medium text-neutral-700 text-sm truncate">
                   {item.subject_name}
                 </p>
-                <p className="text-xs text-gray-500 truncate">{item.child_name}</p>
+                <p className="text-xs text-neutral-500 truncate">{item.child_name}</p>
               </div>
             </div>
 
             {/* Stats */}
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Sessions</span>
-                <span className="font-medium text-gray-900">{item.sessions_completed}</span>
+                <span className="text-neutral-500">Sessions</span>
+                <span className="font-medium text-neutral-700">{item.sessions_completed}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Topics</span>
-                <span className="font-medium text-gray-900">{item.topics_covered}</span>
+                <span className="text-neutral-500">Topics</span>
+                <span className="font-medium text-neutral-700">{item.topics_covered}</span>
               </div>
             </div>
           </div>
