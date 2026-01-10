@@ -1,6 +1,8 @@
 // src/components/dashboard/GentleReminders.tsx
 
 import { useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faLightbulb } from "@fortawesome/free-solid-svg-icons";
 import type { GentleReminder } from "../../types/parentDashboard";
 
 interface GentleRemindersProps {
@@ -12,103 +14,113 @@ export default function GentleReminders({ reminders }: GentleRemindersProps) {
 
   if (reminders.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Gentle Reminders</h2>
+      <div className="bg-white rounded-2xl shadow-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-neutral-700">Gentle Reminders</h3>
+          <FontAwesomeIcon icon={faLightbulb} className="text-primary-600" />
+        </div>
         <div className="text-center py-6">
-          <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-12 h-12 bg-accent-green bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg className="w-6 h-6 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="text-gray-600">All caught up! No reminders right now.</p>
+          <p className="text-neutral-600">All caught up! No reminders right now.</p>
         </div>
       </div>
     );
   }
 
-  // Get icon and colors based on reminder type
+  // Get style based on reminder type
   const getReminderStyle = (type: GentleReminder["type"]) => {
     switch (type) {
       case "mocks_coming_up":
         return {
           icon: "📅",
-          bgColor: "bg-orange-50",
-          borderColor: "border-orange-100",
-          textColor: "text-orange-700",
-          subtextColor: "text-orange-600",
+          bgColor: "bg-accent-amber bg-opacity-10",
+          borderColor: "border-accent-amber",
+          titleColor: "text-neutral-700",
+          textColor: "text-neutral-600",
         };
       case "topic_to_revisit":
         return {
           icon: "🔄",
-          bgColor: "bg-blue-50",
-          borderColor: "border-blue-100",
-          textColor: "text-blue-700",
-          subtextColor: "text-blue-600",
+          bgColor: "bg-primary-50",
+          borderColor: "border-primary-600",
+          titleColor: "text-neutral-700",
+          textColor: "text-neutral-600",
         };
       case "building_momentum":
         return {
           icon: "🔥",
-          bgColor: "bg-green-50",
-          borderColor: "border-green-100",
-          textColor: "text-green-700",
-          subtextColor: "text-green-600",
+          bgColor: "bg-accent-green bg-opacity-10",
+          borderColor: "border-accent-green",
+          titleColor: "text-neutral-700",
+          textColor: "text-neutral-600",
         };
       case "subject_neglected":
         return {
           icon: "📚",
-          bgColor: "bg-yellow-50",
-          borderColor: "border-yellow-100",
-          textColor: "text-yellow-700",
-          subtextColor: "text-yellow-600",
+          bgColor: "bg-accent-amber bg-opacity-10",
+          borderColor: "border-accent-amber",
+          titleColor: "text-neutral-700",
+          textColor: "text-neutral-600",
         };
       default:
         return {
           icon: "💡",
-          bgColor: "bg-gray-50",
-          borderColor: "border-gray-100",
-          textColor: "text-gray-700",
-          subtextColor: "text-gray-600",
+          bgColor: "bg-neutral-50",
+          borderColor: "border-neutral-300",
+          titleColor: "text-neutral-700",
+          textColor: "text-neutral-600",
         };
     }
   };
 
+  // Get title based on reminder type
+  const getReminderTitle = (type: GentleReminder["type"]) => {
+    switch (type) {
+      case "mocks_coming_up":
+        return "Mocks approaching";
+      case "topic_to_revisit":
+        return "Topic to revisit";
+      case "building_momentum":
+        return "Great progress!";
+      case "subject_neglected":
+        return "Needs attention";
+      default:
+        return "Reminder";
+    }
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Gentle Reminders</h2>
-      <div className="space-y-3">
-        {reminders.map((reminder, index) => {
+    <div className="bg-white rounded-2xl shadow-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-neutral-700">Gentle Reminders</h3>
+        <FontAwesomeIcon icon={faLightbulb} className="text-primary-600" />
+      </div>
+
+      <div className="space-y-4">
+        {reminders.slice(0, 3).map((reminder, index) => {
           const style = getReminderStyle(reminder.type);
-          
+
           return (
             <div
               key={`${reminder.type}-${reminder.child_id}-${index}`}
-              className={`p-4 rounded-xl ${style.bgColor} border ${style.borderColor}`}
+              className={`${style.bgColor} border-l-4 ${style.borderColor} p-3 rounded`}
             >
-              <div className="flex items-start gap-3">
-                <span className="text-xl flex-shrink-0">{style.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={`font-medium ${style.textColor}`}>
-                    {reminder.type === "mocks_coming_up" && "Mocks coming up"}
-                    {reminder.type === "topic_to_revisit" && "Topic to revisit"}
-                    {reminder.type === "building_momentum" && "Building momentum"}
-                    {reminder.type === "subject_neglected" && "Subject needs attention"}
-                  </p>
-                  <p className={`text-sm ${style.subtextColor} mt-0.5`}>
-                    {reminder.message}
-                  </p>
-                  {reminder.action_label && reminder.action_route && (
-                    <button
-                      onClick={() => navigate(reminder.action_route!)}
-                      className={`text-sm font-medium ${style.textColor} mt-2 flex items-center gap-1 hover:underline`}
-                    >
-                      {reminder.action_label}
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+              <div className="text-sm font-medium text-neutral-700 mb-1">
+                {getReminderTitle(reminder.type)}
               </div>
+              <div className="text-xs text-neutral-600">{reminder.message}</div>
+              {reminder.action_label && reminder.action_route && (
+                <button
+                  onClick={() => navigate(reminder.action_route!)}
+                  className="text-xs font-medium text-primary-600 mt-2 hover:underline"
+                >
+                  {reminder.action_label} →
+                </button>
+              )}
             </div>
           );
         })}
