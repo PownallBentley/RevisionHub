@@ -10,88 +10,60 @@ import {
 export default function Landing() {
   return (
     <div className="bg-neutral-0">
-      <header className="bg-neutral-0 border-b border-neutral-200">
-        <div className="max-w-content mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <FontAwesomeIcon icon={faGraduationCap} className="text-white text-lg" />
-              </div>
-              <span className="text-xl font-bold text-primary-900">ReviseWise</span>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Link
-                to="/login"
-                className="px-4 py-2 text-neutral-600 hover:text-primary-600 transition-colors"
-              >
-                Log in
-              </Link>
-              <Link
-                to="/signup"
-                className="px-6 py-2 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors"
-              >
-                Sign up
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <section className="bg-gradient-to-br from-primary-50 via-neutral-50 to-neutral-0 min-h-[600px]">
-        <div className="max-w-content mx-auto px-6 pt-16 pb-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <section className="bg-gradient-to-br from-primary-50/30 via-white to-white pt-12 pb-20">
+        <div className="max-w-content mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-6">
-              <h1 className="text-5xl font-bold text-primary-900 leading-tight">
+              <h1 className="text-5xl font-bold text-neutral-800 leading-tight">
                 Confident revision,<br />
                 <span className="text-primary-600">without the stress</span>
               </h1>
-              <p className="text-xl text-neutral-600 leading-relaxed">
+              <p className="text-lg text-neutral-600 leading-relaxed">
                 Help your child stay on track with personalized GCSE revision plans.
                 Get clear insights into their progress and never worry about exam prep again.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <Link
                   to="/signup"
-                  className="px-8 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-medium text-center"
+                  className="px-7 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-semibold text-center shadow-sm"
                 >
                   Get started free
                 </Link>
-                <button className="px-8 py-3 border border-neutral-300 text-neutral-700 rounded-pill hover:border-primary-300 hover:text-primary-600 transition-colors font-medium">
+                <button className="px-7 py-3 border-2 border-neutral-200 text-neutral-700 rounded-pill hover:border-neutral-300 hover:bg-neutral-50 transition-colors font-semibold">
                   Watch demo
                 </button>
               </div>
             </div>
 
             <div className="relative">
-              <div className="bg-white rounded-2xl shadow-card p-6 space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-neutral-700">Emma's Progress</h3>
-                  <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-pill">On Track</span>
+              <div className="bg-white rounded-2xl shadow-lg border border-neutral-100 p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-neutral-700">Emma's Progress</h3>
+                  <span className="px-3 py-1 bg-accent-green text-white text-xs font-medium rounded-full">On Track</span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-neutral-50 p-3 rounded-xl text-center">
-                    <div className="text-2xl font-bold text-primary-600">85%</div>
-                    <div className="text-sm text-neutral-500">Maths</div>
+                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
+                    <div className="text-3xl font-bold text-primary-600 mb-1">85%</div>
+                    <div className="text-xs text-neutral-500 font-medium">Maths</div>
                   </div>
-                  <div className="bg-neutral-50 p-3 rounded-xl text-center">
-                    <div className="text-2xl font-bold text-primary-600">92%</div>
-                    <div className="text-sm text-neutral-500">English</div>
+                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
+                    <div className="text-3xl font-bold text-primary-600 mb-1">92%</div>
+                    <div className="text-xs text-neutral-500 font-medium">English</div>
                   </div>
-                  <div className="bg-neutral-50 p-3 rounded-xl text-center">
-                    <div className="text-2xl font-bold text-accent-amber">78%</div>
-                    <div className="text-sm text-neutral-500">Science</div>
+                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
+                    <div className="text-3xl font-bold text-accent-amber mb-1">78%</div>
+                    <div className="text-xs text-neutral-500 font-medium">Science</div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-neutral-600">This week's sessions</span>
-                    <span className="font-medium text-neutral-700">8 of 10 completed</span>
+                    <span className="text-neutral-600 font-medium">This week's sessions</span>
+                    <span className="font-semibold text-neutral-700">8 of 10 completed</span>
                   </div>
-                  <div className="w-full bg-neutral-200 rounded-full h-2">
-                    <div className="bg-primary-600 h-2 rounded-full" style={{ width: '80%' }}></div>
+                  <div className="w-full bg-neutral-200 rounded-full h-2.5">
+                    <div className="bg-primary-600 h-2.5 rounded-full transition-all" style={{ width: '80%' }}></div>
                   </div>
                 </div>
               </div>
