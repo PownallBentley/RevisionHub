@@ -37,6 +37,10 @@ export default {
           amber: "#FFB547",
           red:   "#F05151",
         },
+        brand: {
+          purple: "#5B2CFF",
+          "purple-dark": "#4520C5",
+        },
       },
       fontFamily: {
         sans: [

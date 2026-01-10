@@ -36,33 +36,33 @@ export default function Landing() {
             </div>
 
             <div className="relative">
-              <div className="bg-white rounded-2xl shadow-lg border border-neutral-100 p-6 space-y-5">
+              <div className="bg-primary-50 rounded-2xl shadow-lg border border-primary-100 p-6 space-y-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-neutral-700">Emma's Progress</h3>
-                  <span className="px-3 py-1 bg-accent-green text-white text-xs font-medium rounded-full">On Track</span>
+                  <h3 className="text-base font-semibold text-neutral-800">Emma's Progress</h3>
+                  <span className="px-3 py-1.5 bg-accent-green text-white text-xs font-semibold rounded-full">On Track</span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
-                    <div className="text-3xl font-bold text-primary-600 mb-1">85%</div>
-                    <div className="text-xs text-neutral-500 font-medium">Maths</div>
+                  <div className="bg-white p-4 rounded-xl text-center border border-neutral-200/50 shadow-sm">
+                    <div className="text-3xl font-bold text-accent-green mb-1">85%</div>
+                    <div className="text-xs text-neutral-600 font-medium">Maths</div>
                   </div>
-                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
+                  <div className="bg-white p-4 rounded-xl text-center border border-neutral-200/50 shadow-sm">
                     <div className="text-3xl font-bold text-primary-600 mb-1">92%</div>
-                    <div className="text-xs text-neutral-500 font-medium">English</div>
+                    <div className="text-xs text-neutral-600 font-medium">English</div>
                   </div>
-                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/50 p-4 rounded-xl text-center border border-neutral-200/50">
+                  <div className="bg-white p-4 rounded-xl text-center border border-neutral-200/50 shadow-sm">
                     <div className="text-3xl font-bold text-accent-amber mb-1">78%</div>
-                    <div className="text-xs text-neutral-500 font-medium">Science</div>
+                    <div className="text-xs text-neutral-600 font-medium">Science</div>
                   </div>
                 </div>
 
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-neutral-600 font-medium">This week's sessions</span>
-                    <span className="font-semibold text-neutral-700">8 of 10 completed</span>
+                    <span className="text-neutral-700 font-medium">This week's sessions</span>
+                    <span className="font-semibold text-neutral-800">8 of 10 completed</span>
                   </div>
-                  <div className="w-full bg-neutral-200 rounded-full h-2.5">
+                  <div className="w-full bg-primary-200/40 rounded-full h-2.5">
                     <div className="bg-primary-600 h-2.5 rounded-full transition-all" style={{ width: '80%' }}></div>
                   </div>
                 </div>
@@ -80,15 +80,15 @@ export default function Landing() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-white border-2 border-primary-200 rounded-2xl p-8 text-center hover:border-primary-400 transition-colors shadow-soft">
+            <div className="bg-white border-2 border-primary-200 rounded-2xl p-8 text-center hover:border-primary-400 hover:shadow-lg transition-all shadow-soft">
               <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <FontAwesomeIcon icon={faHeart} className="text-primary-600 text-2xl" />
               </div>
-              <h3 className="text-xl font-semibold text-primary-900 mb-3">I'm a parent</h3>
+              <h3 className="text-xl font-semibold text-neutral-800 mb-3">I'm a parent</h3>
               <p className="text-neutral-600 mb-6">Monitor your child's progress, get insights, and ensure they're prepared for their GCSEs.</p>
               <Link
                 to="/signup"
-                className="block w-full px-6 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors"
+                className="block w-full px-6 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-semibold shadow-sm"
               >
                 Start as parent
               </Link>
