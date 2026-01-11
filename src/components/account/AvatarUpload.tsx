@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCamera, faTrash, faUpload, faSpinner } from "@fortawesome/free-solid-svg-icons";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabase";
 
 interface AvatarUploadProps {
   currentAvatarUrl: string | null;
