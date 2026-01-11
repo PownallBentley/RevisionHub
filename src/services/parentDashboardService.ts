@@ -5,6 +5,7 @@ import type { ParentDashboardData } from "../types/parentDashboard";
 
 /**
  * Fetches complete parent dashboard data in a single RPC call
+ * Calls rpc_get_parent_dashboard_summary
  */
 export async function fetchParentDashboard(
   parentId: string,
@@ -21,10 +22,76 @@ export async function fetchParentDashboard(
       return { data: null, error: error.message };
     }
 
-    return { data: data as ParentDashboardData, error: null };
-  } catch (e) {
+    if (!data) {
+      // Return empty structure if no data
+      return {
+        data: {
+          children: [],
+          week_summary: {
+            total_sessions_completed: 0,
+            sessions_previous_week: 0,
+            sessions_difference: 0,
+            topics_covered: 0,
+            subjects_active: 0,
+            total_minutes: 0,
+            average_session_minutes: 0,
+            days_active: 0,
+          },
+          daily_pattern: [],
+          gentle_reminders: [],
+          coming_up_next: [],
+          subject_coverage: [],
+        },
+        error: null,
+      };
+    }
+
+    // Map the RPC response to our types
+    // Handle potential field name differences between RPC and frontend
+    const result: ParentDashboardData = {
+      children: (data.children || []).map((child: any) => ({
+        child_id: child.child_id,
+        child_name: child.child_name,
+        year_group: child.year_group,
+        exam_type: child.exam_type || "GCSE",
+        subjects: child.subjects || [],
+        mocks_flag: {
+          show: child.mocks_flag ?? false,
+          message: child.mocks_message || null,
+        },
+        next_focus: child.next_focus || null,
+        week_sessions_completed: child.week_sessions_completed || 0,
+        week_sessions_total: child.week_sessions_total || 0,
+        week_topics_covered: child.week_topics_covered || 0,
+        prev_week_sessions_completed: child.prev_week_sessions_completed || 0,
+        gamification: child.gamification || {
+          points_balance: 0,
+          lifetime_points: 0,
+          current_streak: 0,
+          longest_streak: 0,
+          recent_achievement: null,
+        },
+      })),
+      week_summary: {
+        total_sessions_completed: data.week_summary?.sessions_completed || data.week_summary?.total_sessions_completed || 0,
+        sessions_previous_week: data.week_summary?.sessions_previous_week || 0,
+        sessions_difference: data.week_summary?.sessions_difference || 0,
+        topics_covered: data.week_summary?.topics_covered || 0,
+        subjects_active: data.week_summary?.subjects_active || 0,
+        total_minutes: data.week_summary?.total_minutes || 0,
+        average_session_minutes: data.week_summary?.average_session_minutes || 0,
+        days_active: data.week_summary?.days_active || 0,
+      },
+      daily_pattern: data.daily_pattern || [],
+      gentle_reminders: data.gentle_reminders || [],
+      coming_up_next: data.coming_up_next || [],
+      subject_coverage: data.subject_coverage || [],
+    };
+
+    return { data: result, error: null };
+  } catch (e: any) {
     console.error("[parentDashboardService] Unexpected error:", e);
-    return { data: null, error: "Failed to load dashboard data" };
+    return { data: null, error: e.message || "Failed to load dashboard data" };
   }
 }
 
@@ -74,11 +141,9 @@ export function formatSessionDate(dateString: string): string {
   if (date.toDateString() === today.toDateString()) {
     return "Today";
   }
-
   if (date.toDateString() === tomorrow.toDateString()) {
     return "Tomorrow";
   }
-
   return date.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "numeric",
