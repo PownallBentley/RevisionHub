@@ -2,22 +2,31 @@
 
 import { supabase } from "../lib/supabase";
 
-export interface TimetableSession {
+// Types matching RPC output
+export interface TopicPreview {
   id: string;
-  plan_id: string;
-  child_id: string;
+  topic_name: string;
+  order_index: number;
+}
+
+export interface TimetableSession {
+  planned_session_id: string;
   session_date: string;
-  day_of_week: string;
+  session_index: number;
   session_pattern: string;
   session_duration_minutes: number;
+  status: "planned" | "completed" | "skipped";
   subject_id: string;
   subject_name: string;
-  subject_color: string;
-  subject_icon: string;
-  topic_ids: string[];
-  topic_name: string | null;
-  status: "planned" | "completed" | "skipped";
-  session_index: number;
+  icon: string;
+  color: string;
+  topic_count: number;
+  topics_preview: TopicPreview[];
+}
+
+export interface WeekDayData {
+  day_date: string;
+  sessions: TimetableSession[];
 }
 
 export interface ChildOption {
@@ -62,66 +71,31 @@ export async function fetchChildrenForParent(
 }
 
 /**
- * Fetch planned sessions for a child within a date range
+ * Fetch week plan using rpc_get_week_plan RPC
+ * Returns structured day-by-day data with sessions
  */
-export async function fetchTimetableSessions(
+export async function fetchWeekPlan(
   childId: string,
-  startDate: string,
-  endDate: string
-): Promise<{ data: TimetableSession[] | null; error: string | null }> {
+  weekStartDate: string
+): Promise<{ data: WeekDayData[] | null; error: string | null }> {
   try {
-    const { data, error } = await supabase
-      .from("planned_sessions")
-      .select(`
-        id,
-        plan_id,
-        child_id,
-        session_date,
-        day_of_week,
-        session_pattern,
-        session_duration_minutes,
-        subject_id,
-        topic_ids,
-        status,
-        session_index,
-        subjects!inner (
-          id,
-          subject_name,
-          color,
-          icon
-        )
-      `)
-      .eq("child_id", childId)
-      .gte("session_date", startDate)
-      .lte("session_date", endDate)
-      .order("session_date", { ascending: true })
-      .order("session_index", { ascending: true });
+    const { data, error } = await supabase.rpc("rpc_get_week_plan", {
+      p_child_id: childId,
+      p_week_start_date: weekStartDate,
+    });
 
     if (error) {
-      console.error("[timetableService] Error fetching sessions:", error);
+      console.error("[timetableService] Error fetching week plan:", error);
       return { data: null, error: error.message };
     }
 
-    // Transform the data
-    const sessions: TimetableSession[] = (data || []).map((row: any) => ({
-      id: row.id,
-      plan_id: row.plan_id,
-      child_id: row.child_id,
-      session_date: row.session_date,
-      day_of_week: row.day_of_week,
-      session_pattern: row.session_pattern,
-      session_duration_minutes: row.session_duration_minutes,
-      subject_id: row.subject_id,
-      subject_name: row.subjects?.subject_name || "Unknown",
-      subject_color: row.subjects?.color || "#5B2CFF",
-      subject_icon: row.subjects?.icon || "book",
-      topic_ids: row.topic_ids || [],
-      topic_name: null, // Would need to join topics table for this
-      status: row.status,
-      session_index: row.session_index,
+    // Transform RPC response - sessions come as jsonb
+    const weekData: WeekDayData[] = (data || []).map((row: any) => ({
+      day_date: row.day_date,
+      sessions: row.sessions || [],
     }));
 
-    return { data: sessions, error: null };
+    return { data: weekData, error: null };
   } catch (e: any) {
     console.error("[timetableService] Unexpected error:", e);
     return { data: null, error: e.message };
@@ -129,102 +103,209 @@ export async function fetchTimetableSessions(
 }
 
 /**
- * Get unique subjects from sessions for legend
+ * Fetch today's sessions using rpc_get_todays_sessions RPC
  */
-export function extractSubjectLegend(sessions: TimetableSession[]): SubjectLegend[] {
-  const subjectMap = new Map<string, SubjectLegend>();
-  
-  sessions.forEach((session) => {
-    if (!subjectMap.has(session.subject_id)) {
-      subjectMap.set(session.subject_id, {
-        subject_id: session.subject_id,
-        subject_name: session.subject_name,
-        subject_color: session.subject_color,
-      });
+export async function fetchTodaysSessions(
+  childId: string,
+  sessionDate?: string
+): Promise<{ data: TimetableSession[] | null; error: string | null }> {
+  try {
+    const params: any = { p_child_id: childId };
+    if (sessionDate) {
+      params.p_session_date = sessionDate;
     }
+
+    const { data, error } = await supabase.rpc("rpc_get_todays_sessions", params);
+
+    if (error) {
+      console.error("[timetableService] Error fetching today's sessions:", error);
+      return { data: null, error: error.message };
+    }
+
+    return { data: data || [], error: null };
+  } catch (e: any) {
+    console.error("[timetableService] Unexpected error:", e);
+    return { data: null, error: e.message };
+  }
+}
+
+/**
+ * Flatten week data into a single sessions array
+ */
+export function flattenWeekSessions(weekData: WeekDayData[]): TimetableSession[] {
+  return weekData.flatMap((day) => day.sessions);
+}
+
+/**
+ * Get unique subjects from week data for legend
+ */
+export function extractSubjectLegend(weekData: WeekDayData[]): SubjectLegend[] {
+  const subjectMap = new Map<string, SubjectLegend>();
+
+  weekData.forEach((day) => {
+    day.sessions.forEach((session) => {
+      if (!subjectMap.has(session.subject_id)) {
+        subjectMap.set(session.subject_id, {
+          subject_id: session.subject_id,
+          subject_name: session.subject_name,
+          subject_color: session.color,
+        });
+      }
+    });
   });
 
   return Array.from(subjectMap.values());
 }
 
 /**
- * Get date range for different view modes
+ * Get sessions for a specific date from week data
  */
-export function getDateRange(
-  viewMode: "today" | "week" | "month",
-  referenceDate: Date
-): { startDate: string; endDate: string } {
-  const start = new Date(referenceDate);
-  const end = new Date(referenceDate);
+export function getSessionsForDate(
+  weekData: WeekDayData[],
+  dateStr: string
+): TimetableSession[] {
+  const dayData = weekData.find((d) => d.day_date === dateStr);
+  return dayData?.sessions || [];
+}
 
-  if (viewMode === "today") {
-    // Just today
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-  } else if (viewMode === "week") {
-    // Get Monday of the week
-    const dayOfWeek = start.getDay();
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    start.setDate(start.getDate() + diff);
-    start.setHours(0, 0, 0, 0);
-    // Sunday
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-  } else if (viewMode === "month") {
-    // First day of month
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    // Last day of month
-    end.setMonth(end.getMonth() + 1);
-    end.setDate(0);
-    end.setHours(23, 59, 59, 999);
-  }
+/**
+ * Calculate week start (Monday) from a date
+ */
+export function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday = 0
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
+/**
+ * Format date to ISO string (YYYY-MM-DD)
+ */
+export function formatDateISO(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+/**
+ * Get date range for month view
+ */
+export function getMonthDateRange(date: Date): { start: string; end: string } {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
   return {
-    startDate: start.toISOString().split("T")[0],
-    endDate: end.toISOString().split("T")[0],
+    start: formatDateISO(start),
+    end: formatDateISO(end),
   };
 }
 
 /**
- * Format date for display
+ * Fetch sessions for a month (multiple week calls)
  */
-export function formatDateRange(
-  viewMode: "today" | "week" | "month",
-  startDate: Date,
-  endDate: Date
-): string {
-  const options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  
-  if (viewMode === "today") {
-    return startDate.toLocaleDateString("en-GB", { 
-      weekday: "long", 
-      day: "numeric", 
-      month: "long" 
-    });
-  } else if (viewMode === "week") {
-    const startStr = startDate.toLocaleDateString("en-GB", options);
-    const endStr = endDate.toLocaleDateString("en-GB", options);
-    return `${startStr} - ${endStr}`;
-  } else {
-    return startDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+export async function fetchMonthSessions(
+  childId: string,
+  year: number,
+  month: number
+): Promise<{ data: TimetableSession[] | null; error: string | null }> {
+  try {
+    // Get first Monday on or before start of month
+    const firstOfMonth = new Date(year, month, 1);
+    const lastOfMonth = new Date(year, month + 1, 0);
+    
+    // Find first Monday
+    let weekStart = getWeekStart(firstOfMonth);
+    
+    const allSessions: TimetableSession[] = [];
+    
+    // Fetch week by week until we pass end of month
+    while (weekStart <= lastOfMonth) {
+      const { data: weekData, error } = await fetchWeekPlan(
+        childId,
+        formatDateISO(weekStart)
+      );
+      
+      if (error) {
+        return { data: null, error };
+      }
+      
+      if (weekData) {
+        // Only include sessions within the month
+        weekData.forEach((day) => {
+          const dayDate = new Date(day.day_date);
+          if (dayDate.getMonth() === month && dayDate.getFullYear() === year) {
+            allSessions.push(...day.sessions);
+          }
+        });
+      }
+      
+      // Move to next week
+      weekStart.setDate(weekStart.getDate() + 7);
+    }
+    
+    return { data: allSessions, error: null };
+  } catch (e: any) {
+    console.error("[timetableService] Unexpected error:", e);
+    return { data: null, error: e.message };
   }
 }
 
 /**
- * Get time slot from session pattern
+ * Format date display for UI
  */
-export function getTimeSlotFromPattern(pattern: string): "morning" | "afternoon" | "evening" {
-  // Based on session_pattern enum values
-  // This is a simplification - actual logic would depend on revision_schedules
-  return "afternoon"; // Default to after school
+export function formatDateRange(
+  viewMode: "today" | "week" | "month",
+  date: Date
+): string {
+  if (viewMode === "today") {
+    return date.toLocaleDateString("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  } else if (viewMode === "week") {
+    const weekStart = getWeekStart(date);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    
+    const startMonth = weekStart.toLocaleDateString("en-GB", { month: "short" });
+    const endMonth = weekEnd.toLocaleDateString("en-GB", { month: "short" });
+    
+    if (startMonth === endMonth) {
+      return `${weekStart.getDate()} - ${weekEnd.getDate()} ${startMonth}`;
+    }
+    return `${weekStart.getDate()} ${startMonth} - ${weekEnd.getDate()} ${endMonth}`;
+  } else {
+    return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  }
 }
 
 /**
- * Get day index (0 = Monday) from date
+ * Get topic names as comma-separated string
  */
-export function getDayIndex(dateString: string): number {
-  const date = new Date(dateString);
-  const day = date.getDay();
-  return day === 0 ? 6 : day - 1; // Convert Sunday=0 to Monday=0 format
+export function getTopicNames(session: TimetableSession): string {
+  if (!session.topics_preview || session.topics_preview.length === 0) {
+    return "Topics TBD";
+  }
+  return session.topics_preview.map((t) => t.topic_name).join(", ");
+}
+
+/**
+ * Calculate statistics from week data
+ */
+export function calculateWeekStats(weekData: WeekDayData[]): {
+  totalSessions: number;
+  completedSessions: number;
+  plannedSessions: number;
+  skippedSessions: number;
+  totalMinutes: number;
+} {
+  const sessions = flattenWeekSessions(weekData);
+  
+  return {
+    totalSessions: sessions.length,
+    completedSessions: sessions.filter((s) => s.status === "completed").length,
+    plannedSessions: sessions.filter((s) => s.status === "planned").length,
+    skippedSessions: sessions.filter((s) => s.status === "skipped").length,
+    totalMinutes: sessions.reduce((sum, s) => sum + s.session_duration_minutes, 0),
+  };
 }
