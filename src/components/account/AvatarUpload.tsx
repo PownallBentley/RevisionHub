@@ -4,7 +4,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faCamera, 
-  faTrash, 
   faUpload, 
   faSpinner,
   faSearchPlus,
@@ -23,6 +22,7 @@ interface AvatarUploadProps {
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png"];
 const CROP_SIZE = 200; // Output size in pixels
+const PREVIEW_SIZE = 200; // Preview circle size
 
 export default function AvatarUpload({
   currentAvatarUrl,
@@ -41,11 +41,10 @@ export default function AvatarUpload({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
 
   // Generate initials for fallback avatar
   const initials = userName
@@ -77,24 +76,28 @@ export default function AvatarUpload({
     const reader = new FileReader();
     reader.onload = (e) => {
       const src = e.target?.result as string;
-      setImageSrc(src);
-      setZoom(1);
-      setPosition({ x: 0, y: 0 });
-      setShowCropper(true);
+      
+      // Load image to get natural dimensions
+      const img = new Image();
+      img.onload = () => {
+        setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+        
+        // Calculate initial zoom to fit image in preview
+        const minDimension = Math.min(img.naturalWidth, img.naturalHeight);
+        const initialZoom = PREVIEW_SIZE / minDimension;
+        
+        // Clamp to our zoom range
+        const clampedZoom = Math.max(0.3, Math.min(3, initialZoom));
+        
+        setImageSrc(src);
+        setZoom(clampedZoom);
+        setPosition({ x: 0, y: 0 });
+        setShowCropper(true);
+      };
+      img.src = src;
     };
     reader.readAsDataURL(file);
   }, []);
-
-  // Load image dimensions when source changes
-  useEffect(() => {
-    if (imageSrc && imageRef.current) {
-      const img = new Image();
-      img.onload = () => {
-        setImageSize({ width: img.width, height: img.height });
-      };
-      img.src = imageSrc;
-    }
-  }, [imageSrc]);
 
   // Handle mouse/touch drag for repositioning
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -155,15 +158,18 @@ export default function AvatarUpload({
         canvas.width = CROP_SIZE;
         canvas.height = CROP_SIZE;
 
-        // Calculate the visible area dimensions
-        const previewSize = 200; // Size of the preview circle
-        const scaledWidth = img.width * zoom;
-        const scaledHeight = img.height * zoom;
+        // Calculate the source region based on zoom and position
+        const scaledWidth = img.naturalWidth * zoom;
+        const scaledHeight = img.naturalHeight * zoom;
         
-        // Calculate source coordinates
-        const sourceX = (previewSize / 2 - position.x) / zoom - (img.width / 2) + (img.width / 2);
-        const sourceY = (previewSize / 2 - position.y) / zoom - (img.height / 2) + (img.height / 2);
-        const sourceSize = previewSize / zoom;
+        // Center of the preview area
+        const centerX = PREVIEW_SIZE / 2;
+        const centerY = PREVIEW_SIZE / 2;
+        
+        // The visible area in source image coordinates
+        const sourceX = (centerX - position.x - scaledWidth / 2) / zoom + img.naturalWidth / 2;
+        const sourceY = (centerY - position.y - scaledHeight / 2) / zoom + img.naturalHeight / 2;
+        const sourceSize = PREVIEW_SIZE / zoom;
 
         // Draw circular clip
         ctx.beginPath();
@@ -174,8 +180,8 @@ export default function AvatarUpload({
         // Draw the cropped portion
         ctx.drawImage(
           img,
-          (img.width - sourceSize) / 2 - (position.x / zoom),
-          (img.height - sourceSize) / 2 - (position.y / zoom),
+          sourceX - sourceSize / 2,
+          sourceY - sourceSize / 2,
           sourceSize,
           sourceSize,
           0,
@@ -311,6 +317,10 @@ export default function AvatarUpload({
     }
   };
 
+  // Calculate displayed image size
+  const displayWidth = naturalSize.width * zoom;
+  const displayHeight = naturalSize.height * zoom;
+
   return (
     <div className="flex flex-col items-center">
       {/* Hidden canvas for cropping */}
@@ -403,8 +413,8 @@ export default function AvatarUpload({
               <div 
                 className="relative overflow-hidden rounded-full cursor-move"
                 style={{ 
-                  width: 200, 
-                  height: 200, 
+                  width: PREVIEW_SIZE, 
+                  height: PREVIEW_SIZE, 
                   backgroundColor: "#F6F7FB",
                   border: "3px solid #5B2CFF"
                 }}
@@ -412,19 +422,16 @@ export default function AvatarUpload({
                 onTouchStart={handleDragStart}
               >
                 <img
-                  ref={imageRef}
                   src={imageSrc}
                   alt="Crop preview"
-                  className="absolute select-none"
+                  className="absolute select-none pointer-events-none"
                   style={{
-                    transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
-                    transformOrigin: "center center",
-                    left: "50%",
-                    top: "50%",
-                    marginLeft: "-50%",
-                    marginTop: "-50%",
+                    width: displayWidth,
+                    height: displayHeight,
+                    left: `calc(50% + ${position.x}px)`,
+                    top: `calc(50% + ${position.y}px)`,
+                    transform: "translate(-50%, -50%)",
                     maxWidth: "none",
-                    pointerEvents: "none",
                   }}
                   draggable={false}
                 />
@@ -433,26 +440,31 @@ export default function AvatarUpload({
 
             {/* Instructions */}
             <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
-              Drag to reposition • Use slider to zoom
+              Drag to reposition • Use slider to zoom in/out
             </p>
 
-            {/* Zoom slider */}
+            {/* Zoom slider - range 0.3 to 3 */}
             <div className="flex items-center gap-3 mb-6 px-4">
               <FontAwesomeIcon icon={faSearchMinus} style={{ color: "#A8AEBD" }} />
               <input
                 type="range"
-                min="1"
+                min="0.3"
                 max="3"
-                step="0.1"
+                step="0.05"
                 value={zoom}
                 onChange={(e) => setZoom(parseFloat(e.target.value))}
                 className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                 style={{ 
-                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 1) / 2) * 100}%, #E1E4EE ${((zoom - 1) / 2) * 100}%, #E1E4EE 100%)` 
+                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 0.3) / 2.7) * 100}%, #E1E4EE ${((zoom - 0.3) / 2.7) * 100}%, #E1E4EE 100%)` 
                 }}
               />
               <FontAwesomeIcon icon={faSearchPlus} style={{ color: "#A8AEBD" }} />
             </div>
+
+            {/* Zoom percentage display */}
+            <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
+              Zoom: {Math.round(zoom * 100)}%
+            </p>
 
             {/* Actions */}
             <div className="flex gap-3">
