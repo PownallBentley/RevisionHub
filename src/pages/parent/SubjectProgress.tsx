@@ -227,17 +227,16 @@ export default function SubjectProgress() {
                 Child:
               </span>
               <div
-                className="flex items-center space-x-2 px-4 py-2 rounded-full border cursor-pointer"
+                className="relative flex items-center px-4 py-2 rounded-full border cursor-pointer"
                 style={{
                   backgroundColor: "#F7F4FF",
                   borderColor: "#EAE3FF",
-                  color: COLORS.primary[600],
                 }}
               >
                 <select
                   value={selectedChildId || ""}
                   onChange={(e) => handleChildChange(e.target.value)}
-                  className="bg-transparent border-none font-medium focus:outline-none cursor-pointer"
+                  className="appearance-none bg-transparent border-none font-medium focus:outline-none cursor-pointer pr-6"
                   style={{ color: COLORS.primary[600] }}
                 >
                   {children.map((child) => (
@@ -246,7 +245,11 @@ export default function SubjectProgress() {
                     </option>
                   ))}
                 </select>
-                <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
+                <FontAwesomeIcon 
+                  icon={faChevronDown} 
+                  className="absolute right-4 text-xs pointer-events-none" 
+                  style={{ color: COLORS.primary[600] }}
+                />
               </div>
             </div>
           </div>
