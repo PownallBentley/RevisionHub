@@ -9,6 +9,7 @@ import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
 import ParentDashboard from "./pages/ParentDashboard";
 import SubjectProgress from "./pages/parent/SubjectProgress";
 import Timetable from "./pages/parent/Timetable";
+import Account from "./pages/Account";
 import Today from "./pages/child/Today";
 import SessionOverview from "./pages/child/SessionOverview";
 import SessionRun from "./pages/child/SessionRun";
@@ -87,6 +88,9 @@ export default function App() {
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
+
+          {/* Shared routes (parent & child) */}
+          <Route path="/account" element={<Account />} />
 
           {/* Child routes */}
           <Route path="/child/today" element={<Today />} />
