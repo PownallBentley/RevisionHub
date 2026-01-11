@@ -189,30 +189,46 @@ export default function AvatarUpload({
         canvas.width = CROP_SIZE;
         canvas.height = CROP_SIZE;
 
-        // Calculate the source region based on current zoom and position
+        // Clear canvas
+        ctx.clearRect(0, 0, CROP_SIZE, CROP_SIZE);
+
+        // Calculate the scaled dimensions
         const scaledWidth = img.naturalWidth * actualZoom;
         const scaledHeight = img.naturalHeight * actualZoom;
-        
-        // Center of the preview area
-        const centerX = PREVIEW_SIZE / 2;
-        const centerY = PREVIEW_SIZE / 2;
-        
-        // The visible area in source image coordinates
-        const sourceX = (centerX - position.x - scaledWidth / 2) / actualZoom + img.naturalWidth / 2;
-        const sourceY = (centerY - position.y - scaledHeight / 2) / actualZoom + img.naturalHeight / 2;
+
+        // Calculate where the image center should be in the preview
+        // position.x and position.y represent the offset of the image from center
+        const imageCenterX = PREVIEW_SIZE / 2 + position.x;
+        const imageCenterY = PREVIEW_SIZE / 2 + position.y;
+
+        // Calculate the top-left corner of the scaled image in preview coordinates
+        const imageLeft = imageCenterX - scaledWidth / 2;
+        const imageTop = imageCenterY - scaledHeight / 2;
+
+        // Calculate what portion of the original image is visible in the preview circle
+        // The preview circle goes from (0, 0) to (PREVIEW_SIZE, PREVIEW_SIZE)
+        // We need to find the corresponding region in the original image
+
+        // In preview coordinates, the circle is at (0, 0) to (PREVIEW_SIZE, PREVIEW_SIZE)
+        // We want to know which part of the original image this corresponds to
+
+        // Convert preview coordinates to original image coordinates
+        const sourceX = (0 - imageLeft) / actualZoom;
+        const sourceY = (0 - imageTop) / actualZoom;
         const sourceSize = PREVIEW_SIZE / actualZoom;
 
         // Draw circular clip
+        ctx.save();
         ctx.beginPath();
         ctx.arc(CROP_SIZE / 2, CROP_SIZE / 2, CROP_SIZE / 2, 0, Math.PI * 2);
         ctx.closePath();
         ctx.clip();
 
-        // Draw the cropped portion
+        // Draw the cropped portion from the original image
         ctx.drawImage(
           img,
-          sourceX - sourceSize / 2,
-          sourceY - sourceSize / 2,
+          sourceX,
+          sourceY,
           sourceSize,
           sourceSize,
           0,
@@ -220,6 +236,8 @@ export default function AvatarUpload({
           CROP_SIZE,
           CROP_SIZE
         );
+
+        ctx.restore();
 
         canvas.toBlob(
           (blob) => {
