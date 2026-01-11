@@ -4,6 +4,30 @@ import { useNavigate } from "react-router-dom";
 import type { ChildSummary } from "../../types/parentDashboard";
 import { getAchievementIcon } from "../../services/gamificationService";
 
+// Design system colors - inline for guaranteed rendering
+const COLORS = {
+  primary: {
+    50: "#F7F4FF",
+    100: "#EAE3FF",
+    600: "#5B2CFF",
+    700: "#4520C5",
+  },
+  neutral: {
+    50: "#F9FAFC",
+    100: "#F6F7FB",
+    200: "#E1E4EE",
+    400: "#A8AEBD",
+    500: "#6C7280",
+    600: "#4B5161",
+    700: "#1F2330",
+  },
+  accent: {
+    green: "#1EC592",
+    amber: "#FFB547",
+    red: "#F05151",
+  },
+};
+
 interface ChildCardProps {
   child: ChildSummary;
 }
@@ -30,31 +54,60 @@ export default function ChildCard({ child }: ChildCardProps) {
   // Determine status
   const getStatus = () => {
     if (sessionsDiff < 0) {
-      return { label: "Needs Attention", bgColor: "bg-accent-amber", textColor: "text-white" };
+      return { label: "Needs Attention", color: COLORS.accent.amber };
     }
-    return { label: "On Track", bgColor: "bg-accent-green", textColor: "text-white" };
+    return { label: "On Track", color: COLORS.accent.green };
   };
 
   const status = getStatus();
 
   return (
-    <div className="bg-white rounded-2xl shadow-card p-6">
+    <div 
+      className="rounded-2xl p-6"
+      style={{ 
+        backgroundColor: "#FFFFFF",
+        boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)"
+      }}
+    >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-            <span className="text-primary-600 font-semibold text-lg">{initials}</span>
+          {/* Avatar */}
+          <div 
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: COLORS.primary[100] }}
+          >
+            <span 
+              className="font-semibold text-lg"
+              style={{ color: COLORS.primary[600] }}
+            >
+              {initials}
+            </span>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-neutral-700">{child.child_name}</h3>
-            <span className={`px-3 py-1 ${status.bgColor} ${status.textColor} text-xs rounded-pill`}>
+            <h3 
+              className="text-lg font-semibold"
+              style={{ color: COLORS.neutral[700] }}
+            >
+              {child.child_name}
+            </h3>
+            {/* Status Badge */}
+            <span 
+              className="inline-block px-3 py-1 text-xs text-white font-medium"
+              style={{ 
+                backgroundColor: status.color,
+                borderRadius: "999px"
+              }}
+            >
               {status.label}
             </span>
           </div>
         </div>
+        {/* View Details Link */}
         <button
           onClick={() => navigate(`/parent/child/${child.child_id}`)}
-          className="text-primary-600 text-sm font-medium hover:text-primary-700 hover:underline transition-colors"
+          className="text-sm font-medium hover:underline transition-colors"
+          style={{ color: COLORS.primary[600] }}
         >
           View Details
         </button>
@@ -64,65 +117,72 @@ export default function ChildCard({ child }: ChildCardProps) {
       <GamificationBar gamification={gamification} />
 
       {/* Stats */}
-      <div className="space-y-4 mb-4">
-        <div>
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-neutral-600">Next Exam</span>
-            <span className="font-medium text-neutral-700">
-              {child.next_focus?.subject_name || "—"} - {child.mocks_flag.show ? child.mocks_flag.message : "Coming soon"}
-            </span>
-          </div>
+      <div className="space-y-3 mb-4">
+        {/* Weekly Progress - only show if there's data */}
+        {(child.week_sessions_completed > 0 || child.week_sessions_total > 0) && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-neutral-600">This Week</span>
-            <span className="font-medium text-neutral-700">
-              {child.week_sessions_completed} sessions completed
+            <span style={{ color: COLORS.neutral[600] }}>This week</span>
+            <span className="font-medium" style={{ color: COLORS.neutral[700] }}>
+              {child.week_sessions_completed}/{child.week_sessions_total} sessions
               {sessionsDiff !== 0 && (
-                <span className={`ml-2 text-xs ${sessionsDiff > 0 ? "text-accent-green" : "text-accent-amber"}`}>
+                <span 
+                  className="ml-2 text-xs"
+                  style={{ color: sessionsDiff > 0 ? COLORS.accent.green : COLORS.accent.amber }}
+                >
                   ({sessionsDiff > 0 ? "+" : ""}{sessionsDiff} vs last week)
                 </span>
               )}
             </span>
           </div>
-        </div>
+        )}
 
-        {/* Subjects */}
-        <div className="flex flex-wrap gap-2">
-          {child.subjects.length > 0 ? (
-            <>
-              {child.subjects.slice(0, 2).map((subject) => (
+        {/* Subjects - show all */}
+        {child.subjects.length > 0 && (
+          <div>
+            <div className="text-xs uppercase tracking-wide mb-2" style={{ color: COLORS.neutral[500] }}>
+              {child.subjects.length} Subject{child.subjects.length !== 1 ? 's' : ''}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {child.subjects.map((subject) => (
                 <span
                   key={subject.subject_id}
-                  className="px-2 py-1 bg-primary-100 text-primary-600 text-xs rounded"
+                  className="px-2 py-1 text-xs rounded"
+                  style={{ 
+                    backgroundColor: `${subject.color || COLORS.primary[600]}15`,
+                    color: subject.color || COLORS.primary[600]
+                  }}
                 >
                   {subject.subject_name}
                 </span>
               ))}
-              {child.subjects.length > 2 && (
-                <span className="px-2 py-1 bg-neutral-100 text-neutral-600 text-xs rounded">
-                  +{child.subjects.length - 2} more
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-sm text-neutral-400">No subjects assigned</span>
-          )}
-        </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Next Focus */}
       {child.next_focus && (
-        <div className="mb-4 p-3 bg-neutral-50 rounded-xl">
+        <div 
+          className="mb-4 p-3 rounded-xl"
+          style={{ backgroundColor: COLORS.neutral[50] }}
+        >
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 bg-primary-600 rounded-full" />
-            <p className="text-xs text-neutral-500 uppercase tracking-wide">
+            <div 
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: COLORS.primary[600] }}
+            />
+            <p 
+              className="text-xs uppercase tracking-wide"
+              style={{ color: COLORS.neutral[500] }}
+            >
               Next Focus
             </p>
           </div>
-          <p className="font-medium text-neutral-700">
+          <p className="font-medium" style={{ color: COLORS.neutral[700] }}>
             {child.next_focus.subject_name}:{" "}
             {child.next_focus.topic_name || "Topic TBD"}
           </p>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm" style={{ color: COLORS.neutral[500] }}>
             Scheduled for{" "}
             {new Date(child.next_focus.session_date).toLocaleDateString(
               "en-GB",
@@ -153,8 +213,8 @@ export default function ChildCard({ child }: ChildCardProps) {
         </div>
       )}
 
-      {/* Mocks Alert */}
-      {child.mocks_flag.show && (
+      {/* Mocks Alert - only show if there's an actual message */}
+      {child.mocks_flag.show && child.mocks_flag.message && (
         <div className="mb-4 p-3 bg-orange-50 rounded-xl border border-orange-100">
           <div className="flex items-center gap-2">
             <span className="text-orange-500">📅</span>
@@ -189,44 +249,53 @@ function GamificationBar({
   }
 
   return (
-    <div className="flex items-center gap-3 mb-4 p-3 bg-neutral-50 rounded-xl">
+    <div 
+      className="flex items-center gap-3 mb-4 p-3 rounded-xl"
+      style={{ backgroundColor: COLORS.neutral[50] }}
+    >
       {/* Points */}
       <div className="flex items-center gap-1.5">
-        <span className="text-accent-amber">✦</span>
-        <span className="font-semibold text-neutral-700">{points_balance}</span>
-        <span className="text-xs text-neutral-500">pts</span>
+        <span style={{ color: COLORS.accent.amber }}>✦</span>
+        <span className="font-semibold" style={{ color: COLORS.neutral[700] }}>
+          {points_balance}
+        </span>
+        <span className="text-xs" style={{ color: COLORS.neutral[500] }}>pts</span>
       </div>
 
-      <div className="w-px h-4 bg-neutral-200" />
+      <div className="w-px h-4" style={{ backgroundColor: COLORS.neutral[200] }} />
 
       {/* Streak */}
       {current_streak > 0 ? (
         <div className="flex items-center gap-1.5">
           <span className="text-orange-500">🔥</span>
-          <span className="font-semibold text-neutral-700">{current_streak}</span>
-          <span className="text-xs text-neutral-500">
+          <span className="font-semibold" style={{ color: COLORS.neutral[700] }}>
+            {current_streak}
+          </span>
+          <span className="text-xs" style={{ color: COLORS.neutral[500] }}>
             day{current_streak !== 1 ? "s" : ""}
           </span>
           {current_streak === longest_streak && current_streak >= 3 && (
-            <span className="text-xs text-orange-600 font-medium">Best!</span>
+            <span className="text-xs font-medium text-orange-600">Best!</span>
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-1.5 text-neutral-400">
+        <div className="flex items-center gap-1.5" style={{ color: COLORS.neutral[400] }}>
           <span>🔥</span>
           <span className="text-sm">No streak</span>
         </div>
       )}
 
-      <div className="w-px h-4 bg-neutral-200" />
+      <div className="w-px h-4" style={{ backgroundColor: COLORS.neutral[200] }} />
 
       {/* Level */}
       <div className="flex items-center gap-1.5">
-        <span className="text-primary-500">⭐</span>
-        <span className="text-sm font-medium text-neutral-700">
+        <span style={{ color: COLORS.primary[600] }}>⭐</span>
+        <span className="text-sm font-medium" style={{ color: COLORS.neutral[700] }}>
           Lv.{level.level}
         </span>
-        <span className="text-xs text-neutral-500">{level.title}</span>
+        <span className="text-xs" style={{ color: COLORS.neutral[500] }}>
+          {level.title}
+        </span>
       </div>
     </div>
   );
