@@ -18,9 +18,6 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
     color: subject.subject_color,
   }));
 
-  // Calculate total for percentages
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
-
   return (
     <div className="bg-white rounded-2xl shadow-soft p-6">
       <h3 className="text-lg font-semibold text-neutral-700 mb-4">Coverage Distribution</h3>

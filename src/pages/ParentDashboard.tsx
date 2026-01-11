@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus, faDownload, faEllipsis } from "@fortawesome/free-solid-svg-icons";
+import { faEllipsis } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { fetchParentDashboard } from "../services/parentDashboardService";
 import type { ParentDashboardData } from "../types/parentDashboard";
@@ -117,9 +117,6 @@ export default function ParentDashboard() {
       </div>
     );
   }
-
-  // Get first name for greeting
-  const firstName = profile.full_name?.split(" ")[0] || "there";
 
   // Determine overall status
   const getOverallStatus = () => {
