@@ -63,7 +63,7 @@ interface ChildProfileData {
 
 export default function Account() {
   const navigate = useNavigate();
-  const { user, profile, isChild, isParent, loading: authLoading, refresh } = useAuth();
+  const { user, isChild, isParent, loading: authLoading, refresh } = useAuth();
 
   const [parentData, setParentData] = useState<ProfileData | null>(null);
   const [childData, setChildData] = useState<ChildProfileData | null>(null);
@@ -110,6 +110,8 @@ export default function Account() {
     if (!user) return;
 
     async function loadData() {
+      if (!user) return;
+
       setLoading(true);
       setError(null);
 

@@ -18,7 +18,7 @@ import {
 
 export default function ParentDashboard() {
   const navigate = useNavigate();
-  const { user, profile, activeChildId, parentChildCount, loading: authLoading, hydrating } = useAuth();
+  const { user, profile, activeChildId, parentChildCount, loading: authLoading } = useAuth();
 
   const [dashboardData, setDashboardData] = useState<ParentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,14 +44,14 @@ export default function ParentDashboard() {
 
   // Handle redirect to onboarding for parents with no children
   useEffect(() => {
-    if (authLoading || hydrating || redirected) return;
+    if (authLoading || redirected) return;
     if (!user || !profile) return;
 
     if (parentChildCount === 0) {
       setRedirected(true);
       navigate("/parent/onboarding", { replace: true });
     }
-  }, [authLoading, hydrating, user, profile, parentChildCount, navigate, redirected]);
+  }, [authLoading, user, profile, parentChildCount, navigate, redirected]);
 
   // Load dashboard data
   useEffect(() => {
@@ -85,7 +85,7 @@ export default function ParentDashboard() {
   }, [user, profile]);
 
   // Loading state
-  if (authLoading || hydrating || loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-[calc(100vh-73px)] bg-neutral-100 flex items-center justify-center">
         <div className="text-center">

@@ -210,7 +210,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resolveAuth(source: string, opts?: { showLoading?: boolean }) {
-    if (resolvingRef.current) return;
+    if (resolvingRef.current) {
+      console.log("[auth] resolveAuth skipped - already resolving");
+      return;
+    }
     resolvingRef.current = true;
 
     const showLoading = opts?.showLoading ?? false;
@@ -229,7 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hydratedOnceRef.current = true;
       // Don't wipe state on error - leave whatever we had
     } finally {
-      if (showLoading) setLoading(false);
+      console.log("[auth] resolveAuth complete:", source);
+      setLoading(false);
       resolvingRef.current = false;
     }
   }
@@ -248,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
 
     // Listen for auth state changes (sign in, sign out, token refresh)
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
 
       console.log("[auth] onAuthStateChange:", event);
@@ -267,16 +271,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // For other events (SIGNED_IN, TOKEN_REFRESHED, etc.)
       // Only update if we haven't hydrated yet, or if this is a new sign-in
       if (event === "SIGNED_IN" || !hydratedOnceRef.current) {
-        try {
-          await hydrateFromSession(newSession);
-          hydratedOnceRef.current = true;
-        } catch (e) {
-          console.warn("[auth] onAuthStateChange hydrate failed:", e);
-          // DON'T wipe state on error - the user might still be valid
-          // Just log and continue with existing state
-        } finally {
-          setLoading(false);
-        }
+        (async () => {
+          try {
+            await hydrateFromSession(newSession);
+            hydratedOnceRef.current = true;
+          } catch (e) {
+            console.warn("[auth] onAuthStateChange hydrate failed:", e);
+            // DON'T wipe state on error - the user might still be valid
+            // Just log and continue with existing state
+          } finally {
+            setLoading(false);
+          }
+        })();
       } else if (event === "TOKEN_REFRESHED") {
         // Just update session/user, don't re-fetch everything
         setSession(newSession);

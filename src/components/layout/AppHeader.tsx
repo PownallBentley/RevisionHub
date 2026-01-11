@@ -38,7 +38,7 @@ function getDisplayName(profile: any, isChild: boolean): string {
 
 export default function AppHeader() {
   const navigate = useNavigate();
-  const { user, profile, isChild, isParent, loading, signOut } = useAuth();
+  const { profile, isChild, isParent, loading, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
