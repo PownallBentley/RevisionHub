@@ -82,16 +82,21 @@ export default function AvatarUpload({
       img.onload = () => {
         setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
         
-        // Calculate initial zoom to fit image in preview
+        // Calculate initial zoom so image fits SLIGHTLY LARGER than the preview circle
+        // This means the smallest dimension fills the circle plus a bit extra (10%)
         const minDimension = Math.min(img.naturalWidth, img.naturalHeight);
-        const initialZoom = PREVIEW_SIZE / minDimension;
+        const fitZoom = PREVIEW_SIZE / minDimension;
         
-        // Clamp to our zoom range
-        const clampedZoom = Math.max(0.3, Math.min(3, initialZoom));
+        // Start at 110% of fit size - image slightly larger than circle
+        // This gives users room to zoom out or in from a reasonable starting point
+        const initialZoom = fitZoom * 1.1;
+        
+        // Clamp to zoom range (0.2 to 3)
+        const clampedZoom = Math.max(0.2, Math.min(3, initialZoom));
         
         setImageSrc(src);
         setZoom(clampedZoom);
-        setPosition({ x: 0, y: 0 });
+        setPosition({ x: 0, y: 0 }); // Center the image
         setShowCropper(true);
       };
       img.src = src;
@@ -443,26 +448,26 @@ export default function AvatarUpload({
               Drag to reposition • Use slider to zoom in/out
             </p>
 
-            {/* Zoom slider - range 0.3 to 3 */}
-            <div className="flex items-center gap-3 mb-6 px-4">
+            {/* Zoom slider - range 0.2 to 3 */}
+            <div className="flex items-center gap-3 mb-4 px-4">
               <FontAwesomeIcon icon={faSearchMinus} style={{ color: "#A8AEBD" }} />
               <input
                 type="range"
-                min="0.3"
+                min="0.2"
                 max="3"
                 step="0.05"
                 value={zoom}
                 onChange={(e) => setZoom(parseFloat(e.target.value))}
                 className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                 style={{ 
-                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 0.3) / 2.7) * 100}%, #E1E4EE ${((zoom - 0.3) / 2.7) * 100}%, #E1E4EE 100%)` 
+                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 0.2) / 2.8) * 100}%, #E1E4EE ${((zoom - 0.2) / 2.8) * 100}%, #E1E4EE 100%)` 
                 }}
               />
               <FontAwesomeIcon icon={faSearchPlus} style={{ color: "#A8AEBD" }} />
             </div>
 
             {/* Zoom percentage display */}
-            <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
+            <p className="text-xs text-center mb-6" style={{ color: "#6C7280" }}>
               Zoom: {Math.round(zoom * 100)}%
             </p>
 
