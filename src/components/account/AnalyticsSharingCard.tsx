@@ -10,6 +10,7 @@ import {
   faInfoCircle,
   faChevronDown,
   faChevronUp,
+  faSpinner,
 } from "@fortawesome/free-solid-svg-icons";
 
 interface ChildSharingOption {
@@ -27,6 +28,7 @@ interface AnalyticsSharingSettings {
 interface AnalyticsSharingCardProps {
   settings: AnalyticsSharingSettings;
   onSettingsChange: (settings: AnalyticsSharingSettings) => void;
+  onSave: () => Promise<void>;
   saving?: boolean;
 }
 
@@ -39,11 +41,32 @@ const SCOPE_OPTIONS = [
 export default function AnalyticsSharingCard({
   settings,
   onSettingsChange,
+  onSave,
   saving = false,
 }: AnalyticsSharingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [backupSettings, setBackupSettings] = useState<AnalyticsSharingSettings | null>(null);
+
+  const handleEdit = () => {
+    setBackupSettings({ ...settings });
+    setEditing(true);
+  };
+
+  const handleCancel = () => {
+    if (backupSettings) {
+      onSettingsChange(backupSettings);
+    }
+    setEditing(false);
+  };
+
+  const handleSave = async () => {
+    await onSave();
+    setEditing(false);
+  };
 
   const handleMainToggle = () => {
+    if (!editing) return;
     onSettingsChange({
       ...settings,
       enabled: !settings.enabled,
@@ -51,6 +74,7 @@ export default function AnalyticsSharingCard({
   };
 
   const handleScopeChange = (scope: AnalyticsSharingSettings["scope"]) => {
+    if (!editing) return;
     onSettingsChange({
       ...settings,
       scope,
@@ -58,6 +82,7 @@ export default function AnalyticsSharingCard({
   };
 
   const handleChildToggle = (childId: string) => {
+    if (!editing) return;
     onSettingsChange({
       ...settings,
       children: settings.children.map((c) =>
@@ -74,7 +99,7 @@ export default function AnalyticsSharingCard({
         boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)",
       }}
     >
-      {/* Header */}
+      {/* Header with edit/save */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-4">
           <div
@@ -93,14 +118,60 @@ export default function AnalyticsSharingCard({
           </div>
         </div>
 
-        {/* Main toggle */}
+        {/* Edit/Save buttons */}
+        {!editing ? (
+          <button
+            onClick={handleEdit}
+            className="flex items-center gap-2 text-sm font-medium hover:underline"
+            style={{ color: "#5B2CFF" }}
+          >
+            <FontAwesomeIcon icon={faPencil} className="text-xs" />
+            Edit
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCancel}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg border"
+              style={{ borderColor: "#E1E4EE", color: "#4B5161" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg text-white flex items-center gap-2"
+              style={{ backgroundColor: "#5B2CFF" }}
+            >
+              {saving ? (
+                <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+              ) : (
+                <FontAwesomeIcon icon={faCheck} />
+              )}
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Main toggle */}
+      <div className="flex items-center justify-between mb-4 p-4 rounded-xl" style={{ backgroundColor: "#F9FAFC" }}>
+        <div>
+          <p className="text-sm font-medium" style={{ color: "#1F2330" }}>
+            Enable analytics sharing
+          </p>
+          <p className="text-xs" style={{ color: "#6C7280" }}>
+            Share your children's anonymised progress data
+          </p>
+        </div>
         <button
           onClick={handleMainToggle}
-          disabled={saving}
+          disabled={!editing || saving}
           className={`relative w-14 h-7 rounded-full transition-colors ${
-            settings.enabled ? "bg-green-500" : "bg-neutral-200"
+            !editing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
           }`}
-          style={settings.enabled ? { backgroundColor: "#1EC592" } : {}}
+          style={{ backgroundColor: settings.enabled ? "#1EC592" : "#E1E4EE" }}
         >
           <div
             className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
@@ -213,12 +284,12 @@ export default function AnalyticsSharingCard({
                 <button
                   key={option.value}
                   onClick={() => handleScopeChange(option.value)}
-                  disabled={saving}
+                  disabled={!editing || saving}
                   className={`p-3 rounded-xl border text-center transition-colors ${
                     settings.scope === option.value
                       ? "border-2"
                       : "border-neutral-200 hover:border-neutral-300"
-                  }`}
+                  } ${!editing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   style={
                     settings.scope === option.value
                       ? { borderColor: "#5B2CFF", backgroundColor: "#F7F4FF" }
@@ -259,11 +330,11 @@ export default function AnalyticsSharingCard({
                     </span>
                     <button
                       onClick={() => handleChildToggle(child.child_id)}
-                      disabled={saving}
+                      disabled={!editing || saving}
                       className={`relative w-10 h-5 rounded-full transition-colors ${
-                        child.enabled ? "" : "bg-neutral-200"
+                        !editing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
                       }`}
-                      style={child.enabled ? { backgroundColor: "#1EC592" } : {}}
+                      style={{ backgroundColor: child.enabled ? "#1EC592" : "#E1E4EE" }}
                     >
                       <div
                         className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
