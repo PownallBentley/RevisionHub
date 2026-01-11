@@ -1,8 +1,15 @@
 // src/components/account/AvatarUpload.tsx
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCamera, faTrash, faUpload, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { 
+  faCamera, 
+  faTrash, 
+  faUpload, 
+  faSpinner,
+  faSearchPlus,
+  faSearchMinus,
+} from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../../lib/supabase";
 
 interface AvatarUploadProps {
@@ -15,6 +22,7 @@ interface AvatarUploadProps {
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png"];
+const CROP_SIZE = 200; // Output size in pixels
 
 export default function AvatarUpload({
   currentAvatarUrl,
@@ -25,10 +33,19 @@ export default function AvatarUpload({
 }: AvatarUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showCropper, setShowCropper] = useState(false);
+  
+  // Image state for cropping
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   // Generate initials for fallback avatar
   const initials = userName
@@ -56,27 +73,146 @@ export default function AvatarUpload({
       return;
     }
 
-    setSelectedFile(file);
-    
-    // Create preview
+    // Create preview and open cropper
     const reader = new FileReader();
     reader.onload = (e) => {
-      setPreviewUrl(e.target?.result as string);
+      const src = e.target?.result as string;
+      setImageSrc(src);
+      setZoom(1);
+      setPosition({ x: 0, y: 0 });
       setShowCropper(true);
     };
     reader.readAsDataURL(file);
   }, []);
 
+  // Load image dimensions when source changes
+  useEffect(() => {
+    if (imageSrc && imageRef.current) {
+      const img = new Image();
+      img.onload = () => {
+        setImageSize({ width: img.width, height: img.height });
+      };
+      img.src = imageSrc;
+    }
+  }, [imageSrc]);
+
+  // Handle mouse/touch drag for repositioning
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setDragStart({ x: clientX - position.x, y: clientY - position.y });
+  };
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isDragging) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    setPosition({
+      x: clientX - dragStart.x,
+      y: clientY - dragStart.y,
+    });
+  }, [isDragging, dragStart]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDragMove);
+      window.addEventListener('mouseup', handleDragEnd);
+      window.addEventListener('touchmove', handleDragMove);
+      window.addEventListener('touchend', handleDragEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleDragMove);
+        window.removeEventListener('mouseup', handleDragEnd);
+        window.removeEventListener('touchmove', handleDragMove);
+        window.removeEventListener('touchend', handleDragEnd);
+      };
+    }
+  }, [isDragging, handleDragMove, handleDragEnd]);
+
+  // Generate cropped image
+  const getCroppedImage = (): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !imageSrc) {
+        reject(new Error("Canvas not ready"));
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Could not get canvas context"));
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        // Set canvas to output size
+        canvas.width = CROP_SIZE;
+        canvas.height = CROP_SIZE;
+
+        // Calculate the visible area dimensions
+        const previewSize = 200; // Size of the preview circle
+        const scaledWidth = img.width * zoom;
+        const scaledHeight = img.height * zoom;
+        
+        // Calculate source coordinates
+        const sourceX = (previewSize / 2 - position.x) / zoom - (img.width / 2) + (img.width / 2);
+        const sourceY = (previewSize / 2 - position.y) / zoom - (img.height / 2) + (img.height / 2);
+        const sourceSize = previewSize / zoom;
+
+        // Draw circular clip
+        ctx.beginPath();
+        ctx.arc(CROP_SIZE / 2, CROP_SIZE / 2, CROP_SIZE / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+
+        // Draw the cropped portion
+        ctx.drawImage(
+          img,
+          (img.width - sourceSize) / 2 - (position.x / zoom),
+          (img.height - sourceSize) / 2 - (position.y / zoom),
+          sourceSize,
+          sourceSize,
+          0,
+          0,
+          CROP_SIZE,
+          CROP_SIZE
+        );
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error("Failed to create blob"));
+            }
+          },
+          "image/jpeg",
+          0.9
+        );
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = imageSrc;
+    });
+  };
+
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!imageSrc) return;
 
     setUploading(true);
     setError(null);
 
     try {
+      // Get cropped image blob
+      const croppedBlob = await getCroppedImage();
+      
       // Generate unique filename
-      const fileExt = selectedFile.name.split(".").pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const fileName = `${userId}-${Date.now()}.jpg`;
       const filePath = `${userType}s/${fileName}`;
 
       // Delete old avatar if exists
@@ -90,9 +226,10 @@ export default function AvatarUpload({
       // Upload new avatar
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, selectedFile, {
+        .upload(filePath, croppedBlob, {
           cacheControl: "3600",
           upsert: false,
+          contentType: "image/jpeg",
         });
 
       if (uploadError) throw uploadError;
@@ -120,9 +257,7 @@ export default function AvatarUpload({
       }
 
       onAvatarChange(publicUrl);
-      setShowCropper(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
+      closeCropper();
     } catch (err: any) {
       console.error("Upload error:", err);
       setError(err.message || "Failed to upload avatar");
@@ -166,10 +301,11 @@ export default function AvatarUpload({
     }
   };
 
-  const cancelCrop = () => {
+  const closeCropper = () => {
     setShowCropper(false);
-    setSelectedFile(null);
-    setPreviewUrl(null);
+    setImageSrc(null);
+    setZoom(1);
+    setPosition({ x: 0, y: 0 });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -177,20 +313,23 @@ export default function AvatarUpload({
 
   return (
     <div className="flex flex-col items-center">
+      {/* Hidden canvas for cropping */}
+      <canvas ref={canvasRef} className="hidden" />
+      
       {/* Avatar Display */}
       <div className="relative mb-4">
         {currentAvatarUrl ? (
           <img
             src={currentAvatarUrl}
             alt={userName}
-            className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-card"
+            className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-card"
           />
         ) : (
           <div
-            className="w-24 h-24 rounded-full flex items-center justify-center border-4 border-white shadow-card"
+            className="w-32 h-32 rounded-full flex items-center justify-center border-4 border-white shadow-card"
             style={{ backgroundColor: "#EAE3FF" }}
           >
-            <span className="text-2xl font-semibold" style={{ color: "#5B2CFF" }}>
+            <span className="text-3xl font-semibold" style={{ color: "#5B2CFF" }}>
               {initials}
             </span>
           </div>
@@ -200,10 +339,10 @@ export default function AvatarUpload({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="absolute bottom-0 right-0 w-8 h-8 rounded-full flex items-center justify-center shadow-md transition-colors"
+          className="absolute bottom-1 right-1 w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-colors hover:opacity-90"
           style={{ backgroundColor: "#5B2CFF" }}
         >
-          <FontAwesomeIcon icon={faCamera} className="text-white text-sm" />
+          <FontAwesomeIcon icon={faCamera} className="text-white" />
         </button>
       </div>
 
@@ -217,7 +356,7 @@ export default function AvatarUpload({
       />
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 mb-2">
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
@@ -228,11 +367,12 @@ export default function AvatarUpload({
         </button>
         {currentAvatarUrl && (
           <>
-            <span className="text-neutral-300">•</span>
+            <span style={{ color: "#CFD3E0" }}>•</span>
             <button
               onClick={handleRemove}
               disabled={uploading}
-              className="text-sm font-medium text-red-500 hover:underline transition-colors"
+              className="text-sm font-medium hover:underline transition-colors"
+              style={{ color: "#F05151" }}
             >
               Remove
             </button>
@@ -242,37 +382,88 @@ export default function AvatarUpload({
 
       {/* Error message */}
       {error && (
-        <p className="text-sm text-red-500 mt-2">{error}</p>
+        <p className="text-sm mt-2" style={{ color: "#F05151" }}>{error}</p>
       )}
 
       {/* File requirements */}
-      <p className="text-xs text-neutral-500 mt-2">
+      <p className="text-xs mt-1" style={{ color: "#6C7280" }}>
         JPEG or PNG, max 2MB
       </p>
 
-      {/* Preview/Crop Modal */}
-      {showCropper && previewUrl && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {/* Crop Modal */}
+      {showCropper && imageSrc && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-neutral-700 mb-4">
-              Preview your photo
+            <h3 className="text-lg font-semibold mb-4" style={{ color: "#1F2330" }}>
+              Adjust your photo
             </h3>
 
-            {/* Preview */}
-            <div className="flex justify-center mb-6">
-              <img
-                src={previewUrl}
-                alt="Preview"
-                className="w-40 h-40 rounded-full object-cover border-4 border-neutral-100"
+            {/* Crop preview area */}
+            <div className="flex justify-center mb-4">
+              <div 
+                className="relative overflow-hidden rounded-full cursor-move"
+                style={{ 
+                  width: 200, 
+                  height: 200, 
+                  backgroundColor: "#F6F7FB",
+                  border: "3px solid #5B2CFF"
+                }}
+                onMouseDown={handleDragStart}
+                onTouchStart={handleDragStart}
+              >
+                <img
+                  ref={imageRef}
+                  src={imageSrc}
+                  alt="Crop preview"
+                  className="absolute select-none"
+                  style={{
+                    transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
+                    transformOrigin: "center center",
+                    left: "50%",
+                    top: "50%",
+                    marginLeft: "-50%",
+                    marginTop: "-50%",
+                    maxWidth: "none",
+                    pointerEvents: "none",
+                  }}
+                  draggable={false}
+                />
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
+              Drag to reposition • Use slider to zoom
+            </p>
+
+            {/* Zoom slider */}
+            <div className="flex items-center gap-3 mb-6 px-4">
+              <FontAwesomeIcon icon={faSearchMinus} style={{ color: "#A8AEBD" }} />
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.1"
+                value={zoom}
+                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
+                style={{ 
+                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 1) / 2) * 100}%, #E1E4EE ${((zoom - 1) / 2) * 100}%, #E1E4EE 100%)` 
+                }}
               />
+              <FontAwesomeIcon icon={faSearchPlus} style={{ color: "#A8AEBD" }} />
             </div>
 
             {/* Actions */}
             <div className="flex gap-3">
               <button
-                onClick={cancelCrop}
+                onClick={closeCropper}
                 disabled={uploading}
-                className="flex-1 py-2.5 border border-neutral-200 rounded-xl text-neutral-700 font-medium hover:bg-neutral-50 transition-colors"
+                className="flex-1 py-2.5 rounded-xl font-medium transition-colors"
+                style={{ 
+                  border: "1px solid #E1E4EE",
+                  color: "#4B5161"
+                }}
               >
                 Cancel
               </button>
@@ -285,7 +476,7 @@ export default function AvatarUpload({
                 {uploading ? (
                   <>
                     <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
-                    Uploading...
+                    Saving...
                   </>
                 ) : (
                   <>
