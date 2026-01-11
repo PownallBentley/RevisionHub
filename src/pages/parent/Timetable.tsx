@@ -13,10 +13,15 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import {
   fetchChildrenForParent,
-  fetchTimetableSessions,
+  fetchWeekPlan,
+  fetchMonthSessions,
   extractSubjectLegend,
-  getDateRange,
-  getDayIndex,
+  getWeekStart,
+  formatDateISO,
+  formatDateRange,
+  calculateWeekStats,
+  getTopicNames,
+  type WeekDayData,
   type TimetableSession,
   type ChildOption,
   type SubjectLegend,
@@ -30,11 +35,6 @@ const COLORS = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TIME_SLOTS = [
-  { id: "morning", label: "Morning", sublabel: "Before school" },
-  { id: "afternoon", label: "After School", sublabel: "15:30 - 17:30" },
-  { id: "evening", label: "Evening", sublabel: "18:00 onwards" },
-];
 
 type ViewMode = "today" | "week" | "month";
 
@@ -43,7 +43,9 @@ export default function Timetable() {
   const [searchParams] = useSearchParams();
   const { user, profile, activeChildId, loading: authLoading } = useAuth();
 
-  const [sessions, setSessions] = useState<TimetableSession[]>([]);
+  // State
+  const [weekData, setWeekData] = useState<WeekDayData[]>([]);
+  const [monthSessions, setMonthSessions] = useState<TimetableSession[]>([]);
   const [children, setChildren] = useState<ChildOption[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("week");
@@ -75,7 +77,7 @@ export default function Timetable() {
       const { data, error } = await fetchChildrenForParent(user!.id);
       if (data && data.length > 0) {
         setChildren(data);
-        
+
         // Check URL for child param
         const childFromUrl = searchParams.get("child");
         if (childFromUrl && data.some((c) => c.child_id === childFromUrl)) {
@@ -92,7 +94,7 @@ export default function Timetable() {
     loadChildren();
   }, [user, searchParams]);
 
-  // Load sessions when child or date range changes
+  // Load sessions when child or date changes
   useEffect(() => {
     if (!selectedChildId) return;
 
@@ -100,33 +102,56 @@ export default function Timetable() {
       setLoading(true);
       setError(null);
 
-      const { startDate, endDate } = getDateRange(viewMode, referenceDate);
-      const { data, error } = await fetchTimetableSessions(selectedChildId!, startDate, endDate);
+      if (viewMode === "month") {
+        // Fetch month sessions
+        const { data, error } = await fetchMonthSessions(
+          selectedChildId!,
+          referenceDate.getFullYear(),
+          referenceDate.getMonth()
+        );
 
-      if (error) {
-        setError(error);
-        setSessions([]);
+        if (error) {
+          setError(error);
+          setMonthSessions([]);
+        } else {
+          setMonthSessions(data || []);
+          // Build legend from month sessions
+          const legend: SubjectLegend[] = [];
+          const seen = new Set<string>();
+          (data || []).forEach((s) => {
+            if (!seen.has(s.subject_id)) {
+              seen.add(s.subject_id);
+              legend.push({
+                subject_id: s.subject_id,
+                subject_name: s.subject_name,
+                subject_color: s.color,
+              });
+            }
+          });
+          setSubjectLegend(legend);
+        }
       } else {
-        setSessions(data || []);
-        setSubjectLegend(extractSubjectLegend(data || []));
+        // Fetch week plan (works for both "today" and "week" views)
+        const weekStart = getWeekStart(referenceDate);
+        const { data, error } = await fetchWeekPlan(
+          selectedChildId!,
+          formatDateISO(weekStart)
+        );
+
+        if (error) {
+          setError(error);
+          setWeekData([]);
+        } else {
+          setWeekData(data || []);
+          setSubjectLegend(extractSubjectLegend(data || []));
+        }
       }
+
       setLoading(false);
     }
 
     loadSessions();
   }, [selectedChildId, viewMode, referenceDate]);
-
-  // Get week start for current reference date
-  const getWeekStart = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
-
-  const weekStart = getWeekStart(referenceDate);
 
   // Navigation
   const goToPrevious = () => {
@@ -158,47 +183,9 @@ export default function Timetable() {
     setViewMode("week");
   };
 
-  // Format the date range display
-  const formatDateDisplay = (): string => {
-    if (viewMode === "today") {
-      return referenceDate.toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-      });
-    } else if (viewMode === "week") {
-      const endOfWeek = new Date(weekStart);
-      endOfWeek.setDate(weekStart.getDate() + 6);
-      const startMonth = weekStart.toLocaleDateString("en-GB", { month: "short" });
-      const endMonth = endOfWeek.toLocaleDateString("en-GB", { month: "short" });
-      if (startMonth === endMonth) {
-        return `${weekStart.getDate()} - ${endOfWeek.getDate()} ${startMonth}`;
-      }
-      return `${weekStart.getDate()} ${startMonth} - ${endOfWeek.getDate()} ${endMonth}`;
-    } else {
-      return referenceDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-    }
-  };
-
-  // Get sessions for a specific day and time slot (week view)
-  const getSessionsForSlot = (dayIndex: number, timeSlot: string): TimetableSession[] => {
-    return sessions.filter((s) => {
-      const sessionDayIndex = getDayIndex(s.session_date);
-      // For now, put all sessions in "afternoon" slot
-      return sessionDayIndex === dayIndex;
-    });
-  };
-
-  // Get sessions for a specific date (today/month view)
-  const getSessionsForDate = (date: Date): TimetableSession[] => {
-    const dateStr = date.toISOString().split("T")[0];
-    return sessions.filter((s) => s.session_date === dateStr);
-  };
-
   // Calculate stats
-  const totalSessions = sessions.length;
-  const completedSessions = sessions.filter((s) => s.status === "completed").length;
-  const plannedSessions = sessions.filter((s) => s.status === "planned").length;
+  const stats = calculateWeekStats(weekData);
+  const weekStart = getWeekStart(referenceDate);
 
   // Loading state
   if (authLoading || loading) {
@@ -268,24 +255,24 @@ export default function Timetable() {
               <div className="flex items-center space-x-3 mb-3">
                 <span
                   className="px-4 py-1.5 text-white text-sm font-medium rounded-full"
-                  style={{ backgroundColor: plannedSessions > 0 ? COLORS.accent.green : COLORS.accent.amber }}
+                  style={{ backgroundColor: stats.plannedSessions > 0 ? COLORS.accent.green : COLORS.accent.amber }}
                 >
-                  {plannedSessions > 0 ? "Sessions Scheduled" : "No Sessions"}
+                  {stats.plannedSessions > 0 ? "Sessions Scheduled" : "No Sessions"}
                 </span>
                 <h2 className="text-xl font-semibold" style={{ color: COLORS.neutral[700] }}>
-                  {plannedSessions > 0
-                    ? `${plannedSessions} session${plannedSessions !== 1 ? "s" : ""} scheduled`
+                  {stats.plannedSessions > 0
+                    ? `${stats.plannedSessions} session${stats.plannedSessions !== 1 ? "s" : ""} scheduled`
                     : "No sessions scheduled for this period"}
                 </h2>
               </div>
               <p className="mb-4" style={{ color: COLORS.neutral[600] }}>
-                {completedSessions > 0
-                  ? `${completedSessions} of ${totalSessions} sessions completed.`
-                  : plannedSessions > 0
-                  ? "Sessions are ready to go!"
+                {stats.completedSessions > 0
+                  ? `${stats.completedSessions} of ${stats.totalSessions} sessions completed.`
+                  : stats.plannedSessions > 0
+                  ? `${stats.totalMinutes} minutes of revision planned.`
                   : "Add sessions to build a revision plan."}
               </p>
-              {plannedSessions === 0 && (
+              {stats.plannedSessions === 0 && (
                 <div className="border rounded-xl p-4" style={{ backgroundColor: COLORS.primary[50], borderColor: COLORS.primary[200] }}>
                   <div className="flex items-start space-x-3">
                     <FontAwesomeIcon icon={faLightbulb} className="mt-1" style={{ color: COLORS.primary[600] }} />
@@ -303,7 +290,7 @@ export default function Timetable() {
             </div>
             <div className="ml-6 text-right">
               <div className="text-4xl font-bold mb-1" style={{ color: COLORS.primary[600] }}>
-                {totalSessions}
+                {stats.totalSessions}
               </div>
               <div className="text-sm" style={{ color: COLORS.neutral[500] }}>Total sessions</div>
             </div>
@@ -321,7 +308,7 @@ export default function Timetable() {
                 <FontAwesomeIcon icon={faChevronLeft} style={{ color: COLORS.neutral[600] }} />
               </button>
               <h3 className="text-lg font-semibold min-w-[200px] text-center" style={{ color: COLORS.neutral[700] }}>
-                {formatDateDisplay()}
+                {formatDateRange(viewMode, referenceDate)}
               </h3>
               <button
                 onClick={goToNext}
@@ -389,7 +376,7 @@ export default function Timetable() {
               })}
             </div>
 
-            {/* Session Row (simplified - one row showing all sessions per day) */}
+            {/* Session Row */}
             <div className="grid grid-cols-8 min-h-[200px]">
               <div className="p-4 border-r flex items-start" style={{ backgroundColor: COLORS.neutral[50], borderColor: COLORS.neutral[200] }}>
                 <div>
@@ -400,7 +387,11 @@ export default function Timetable() {
               {DAYS.map((_, dayIndex) => {
                 const date = new Date(weekStart);
                 date.setDate(weekStart.getDate() + dayIndex);
-                const daySessions = getSessionsForDate(date);
+                const dateStr = formatDateISO(date);
+                
+                // Find sessions for this day from weekData
+                const dayData = weekData.find((d) => d.day_date === dateStr);
+                const daySessions = dayData?.sessions || [];
 
                 return (
                   <div key={dayIndex} className="p-3 border-r last:border-r-0" style={{ borderColor: COLORS.neutral[200] }}>
@@ -411,18 +402,18 @@ export default function Timetable() {
                     ) : (
                       daySessions.map((session) => (
                         <div
-                          key={session.id}
+                          key={session.planned_session_id}
                           className="rounded-lg p-3 mb-2 last:mb-0 cursor-pointer hover:opacity-90 transition-opacity"
                           style={{
-                            backgroundColor: `${session.subject_color}15`,
-                            borderLeft: `4px solid ${session.subject_color}`,
+                            backgroundColor: `${session.color}15`,
+                            borderLeft: `4px solid ${session.color}`,
                           }}
                         >
-                          <div className="text-sm font-semibold mb-1" style={{ color: session.subject_color }}>
+                          <div className="text-sm font-semibold mb-1" style={{ color: session.color }}>
                             {session.subject_name}
                           </div>
                           <div className="text-xs" style={{ color: COLORS.neutral[600] }}>
-                            {session.topic_name || "Topics TBD"}
+                            {getTopicNames(session)}
                           </div>
                           <div className="text-xs mt-2" style={{ color: COLORS.neutral[500] }}>
                             {session.session_duration_minutes} mins
@@ -448,7 +439,7 @@ export default function Timetable() {
             <div className="p-6">
               <MonthCalendar
                 referenceDate={referenceDate}
-                sessions={sessions}
+                sessions={monthSessions}
                 colors={COLORS}
               />
             </div>
@@ -473,7 +464,7 @@ export default function Timetable() {
         )}
 
         {/* Empty state */}
-        {sessions.length === 0 && !loading && (
+        {stats.totalSessions === 0 && !loading && viewMode === "week" && (
           <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
             <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: COLORS.primary[100] }}>
               <FontAwesomeIcon icon={faPlus} className="text-2xl" style={{ color: COLORS.primary[600] }} />
@@ -482,7 +473,7 @@ export default function Timetable() {
               No sessions scheduled
             </h3>
             <p className="mb-6 max-w-md mx-auto" style={{ color: COLORS.neutral[600] }}>
-              There are no revision sessions scheduled for this period. Generate a plan or add sessions manually.
+              There are no revision sessions scheduled for this week. Generate a plan or add sessions manually.
             </p>
             <button
               className="px-6 py-3 text-white rounded-full font-medium hover:opacity-90 transition-colors"
@@ -511,14 +502,14 @@ function MonthCalendar({
 }) {
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
-  
+
   // First day of month
   const firstDay = new Date(year, month, 1);
   const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Monday = 0
-  
+
   // Days in month
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
+
   // Build calendar grid
   const calendarDays: (number | null)[] = [];
   for (let i = 0; i < startDayOfWeek; i++) {
@@ -547,17 +538,17 @@ function MonthCalendar({
           </div>
         ))}
       </div>
-      
+
       {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-1">
         {calendarDays.map((day, index) => {
           if (day === null) {
             return <div key={`empty-${index}`} className="h-24" />;
           }
-          
+
           const daySessions = getSessionsForDay(day);
           const isToday = isCurrentMonth && today.getDate() === day;
-          
+
           return (
             <div
               key={day}
@@ -573,11 +564,11 @@ function MonthCalendar({
               <div className="space-y-1">
                 {daySessions.slice(0, 2).map((session) => (
                   <div
-                    key={session.id}
+                    key={session.planned_session_id}
                     className="text-xs px-1.5 py-0.5 rounded truncate"
                     style={{
-                      backgroundColor: `${session.subject_color}20`,
-                      color: session.subject_color,
+                      backgroundColor: `${session.color}20`,
+                      color: session.color,
                     }}
                   >
                     {session.subject_name}
