@@ -6,74 +6,84 @@ interface RecentActivityProps {
   subjects: SubjectProgress[];
 }
 
-export default function RecentActivity({ subjects }: RecentActivityProps) {
-  // Gather recent activities from all subjects
-  const activities: Array<{
-    id: string;
-    type: "completed" | "submitted" | "needs_practice";
-    subject: string;
-    topic: string;
-    color: string;
-    timeAgo: string;
-  }> = [];
+interface Activity {
+  id: string;
+  type: "completed" | "submitted" | "needs_practice";
+  subject: string;
+  topic: string;
+  color: string;
+  timeAgo: string;
+}
 
+export default function RecentActivity({ subjects }: RecentActivityProps) {
+  const activities: Activity[] = [];
+
+  // Gather recent activities from all subjects
   subjects.forEach((subject) => {
     // Add recently covered topics as "completed" activities
-    subject.recently_covered.slice(0, 1).forEach((topic) => {
+    const recentTopics = subject.recently_covered?.slice(0, 1) || [];
+    recentTopics.forEach((topic) => {
       activities.push({
         id: `${subject.subject_id}-${topic.topic_id}`,
         type: "completed",
         subject: subject.subject_name,
         topic: topic.topic_name,
-        color: subject.subject_color,
+        color: subject.subject_color || "#5B2CFF",
         timeAgo: formatDaysAgo(topic.days_since),
       });
     });
   });
 
-  // Add some placeholder activities if we don't have enough
-  if (activities.length < 3) {
-    subjects.forEach((subject) => {
-      if (subject.completion_percentage < 50 && activities.length < 3) {
+  // Add "needs practice" for subjects that need attention
+  subjects.forEach((subject) => {
+    if (subject.status === "needs_attention" && activities.length < 5) {
+      const upcomingTopic = subject.coming_up?.[0];
+      if (upcomingTopic) {
         activities.push({
           id: `${subject.subject_id}-practice`,
           type: "needs_practice",
           subject: subject.subject_name,
-          topic: subject.coming_up[0]?.topic_name || "upcoming topics",
-          color: subject.subject_color,
-          timeAgo: "soon",
+          topic: upcomingTopic.topic_name,
+          color: subject.subject_color || "#FFB547",
+          timeAgo: "review needed",
         });
       }
-    });
-  }
+    }
+  });
 
-  // Sort by most recent first and take top 3
+  // Sort and take top 3
   const recentActivities = activities.slice(0, 3);
 
   if (recentActivities.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-soft p-6">
-        <h3 className="text-lg font-semibold text-neutral-700 mb-4">Recent Activity</h3>
-        <p className="text-sm text-neutral-500 text-center py-4">No recent activity</p>
+        <h3 className="text-lg font-semibold mb-4" style={{ color: "#1F2330" }}>
+          Recent Activity
+        </h3>
+        <p className="text-sm text-center py-4" style={{ color: "#6C7280" }}>
+          No recent activity
+        </p>
       </div>
     );
   }
 
   return (
     <div className="bg-white rounded-2xl shadow-soft p-6">
-      <h3 className="text-lg font-semibold text-neutral-700 mb-4">Recent Activity</h3>
+      <h3 className="text-lg font-semibold mb-4" style={{ color: "#1F2330" }}>
+        Recent Activity
+      </h3>
       <div className="space-y-3">
         {recentActivities.map((activity) => (
           <div key={activity.id} className="flex items-start space-x-3">
             <div
-              className="w-2 h-2 rounded-full mt-2"
-              style={{ backgroundColor: getActivityColor(activity.type, activity.color) }}
+              className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
+              style={{ backgroundColor: getActivityColor(activity.type) }}
             />
             <div>
-              <div className="text-sm font-medium text-neutral-700">
+              <div className="text-sm font-medium" style={{ color: "#1F2330" }}>
                 {getActivityTitle(activity.type, activity.subject)}
               </div>
-              <div className="text-xs text-neutral-500">
+              <div className="text-xs" style={{ color: "#6C7280" }}>
                 {activity.topic} • {activity.timeAgo}
               </div>
             </div>
@@ -92,7 +102,7 @@ function formatDaysAgo(days: number): string {
   return `${Math.floor(days / 7)} weeks ago`;
 }
 
-function getActivityColor(type: string, subjectColor: string): string {
+function getActivityColor(type: string): string {
   switch (type) {
     case "completed":
       return "#1EC592"; // accent-green
@@ -101,7 +111,7 @@ function getActivityColor(type: string, subjectColor: string): string {
     case "needs_practice":
       return "#FFB547"; // accent-amber
     default:
-      return subjectColor;
+      return "#5B2CFF";
   }
 }
 
