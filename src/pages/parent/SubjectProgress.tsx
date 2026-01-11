@@ -17,6 +17,13 @@ import {
   RecentActivity,
 } from "../../components/subjects";
 
+// Design system colors
+const COLORS = {
+  primary: { 600: "#5B2CFF", 900: "#2A185E" },
+  neutral: { 50: "#F9FAFC", 100: "#F6F7FB", 200: "#E1E4EE", 500: "#6C7280", 600: "#4B5161", 700: "#1F2330" },
+  accent: { green: "#1EC592", amber: "#FFB547", red: "#F05151" },
+};
+
 export default function SubjectProgress() {
   const navigate = useNavigate();
   const { user, profile, activeChildId, loading: authLoading } = useAuth();
@@ -51,6 +58,8 @@ export default function SubjectProgress() {
       if (childrenData && childrenData.length > 0) {
         setChildren(childrenData);
         setSelectedChildId(childrenData[0].child_id);
+      } else {
+        setLoading(false);
       }
     }
 
@@ -91,10 +100,18 @@ export default function SubjectProgress() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <div className="min-h-[calc(100vh-73px)] bg-neutral-100 flex items-center justify-center">
+      <div
+        className="min-h-[calc(100vh-73px)] flex items-center justify-center"
+        style={{ backgroundColor: COLORS.neutral[100] }}
+      >
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-neutral-600">Loading subject progress...</p>
+          <div
+            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+            style={{ borderColor: COLORS.primary[600] }}
+          />
+          <p className="text-sm" style={{ color: COLORS.neutral[600] }}>
+            Loading subject progress...
+          </p>
         </div>
       </div>
     );
@@ -105,14 +122,25 @@ export default function SubjectProgress() {
   // Error state
   if (error) {
     return (
-      <div className="min-h-[calc(100vh-73px)] bg-neutral-100">
-        <div className="max-w-content mx-auto px-6 py-8">
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
-            <p className="text-accent-red font-medium">Failed to load subject progress</p>
-            <p className="text-red-600 text-sm mt-1">{error}</p>
+      <div
+        className="min-h-[calc(100vh-73px)]"
+        style={{ backgroundColor: COLORS.neutral[100] }}
+      >
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div
+            className="rounded-2xl p-6 text-center"
+            style={{ backgroundColor: "#FEE2E2", border: "1px solid #FECACA" }}
+          >
+            <p className="font-medium" style={{ color: COLORS.accent.red }}>
+              Failed to load subject progress
+            </p>
+            <p className="text-sm mt-1" style={{ color: "#B91C1C" }}>
+              {error}
+            </p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-accent-red text-white rounded-lg hover:opacity-90"
+              className="mt-4 px-4 py-2 text-white rounded-lg hover:opacity-90"
+              style={{ backgroundColor: COLORS.accent.red }}
             >
               Try Again
             </button>
@@ -125,13 +153,22 @@ export default function SubjectProgress() {
   // No data state
   if (!data || !data.child) {
     return (
-      <div className="min-h-[calc(100vh-73px)] bg-neutral-100">
-        <div className="max-w-content mx-auto px-6 py-8">
-          <div className="bg-white rounded-2xl shadow-card p-8 text-center">
-            <p className="text-neutral-600">No children found. Please add a child first.</p>
+      <div
+        className="min-h-[calc(100vh-73px)]"
+        style={{ backgroundColor: COLORS.neutral[100] }}
+      >
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div
+            className="bg-white rounded-2xl p-8 text-center"
+            style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}
+          >
+            <p style={{ color: COLORS.neutral[600] }}>
+              No children found. Please add a child first.
+            </p>
             <button
               onClick={() => navigate("/parent/onboarding")}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-pill hover:bg-primary-700"
+              className="mt-4 px-4 py-2 text-white rounded-full hover:opacity-90"
+              style={{ backgroundColor: COLORS.primary[600] }}
             >
               Add Child
             </button>
@@ -143,33 +180,65 @@ export default function SubjectProgress() {
 
   // Calculate stats
   const totalSubjects = data.subjects.length;
-  const subjectsOnTrack = data.subjects.filter((s) => s.status === "in_progress").length;
+  const subjectsOnTrack = data.subjects.filter(
+    (s) => s.status === "in_progress" || s.status === "completed"
+  ).length;
   const avgSessionsPerWeek = data.child.sessions_this_week || 0;
   const totalRevisionPeriods = data.subjects.reduce(
     (sum, s) => sum + s.topics_covered_total,
     0
   );
 
-  // Find any issues
+  // Find subjects needing attention
   const subjectsNeedingAttention = data.subjects.filter(
-    (s) => s.completion_percentage < 50
+    (s) => s.status === "needs_attention" || s.completion_percentage < 50
   );
   const hasIssues = subjectsNeedingAttention.length > 0;
 
+  // Calculate average coverage
+  const avgCoverage =
+    totalSubjects > 0
+      ? Math.round(
+          data.subjects.reduce((sum, s) => sum + s.completion_percentage, 0) /
+            totalSubjects
+        )
+      : 0;
+
+  // Calculate weeks until exams (placeholder - would come from revision_plans)
+  const weeksUntilExams = 12;
+
   return (
-    <div className="min-h-[calc(100vh-73px)] bg-neutral-100">
-      <main className="max-w-content mx-auto px-6 py-8">
+    <div
+      className="min-h-[calc(100vh-73px)]"
+      style={{ backgroundColor: COLORS.neutral[100] }}
+    >
+      <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Hero Card */}
-        <section className="bg-white rounded-2xl shadow-card p-8 mb-8">
+        <section
+          className="bg-white rounded-2xl p-8 mb-8"
+          style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}
+        >
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold text-primary-900">Subjects Overview</h1>
+            <h1 className="text-2xl font-bold" style={{ color: COLORS.primary[900] }}>
+              Subjects Overview
+            </h1>
             <div className="flex items-center space-x-3">
-              <span className="text-sm text-neutral-500">Child:</span>
-              <button className="flex items-center space-x-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-pill border border-primary-200 hover:bg-primary-100 transition-colors">
+              <span className="text-sm" style={{ color: COLORS.neutral[500] }}>
+                Child:
+              </span>
+              <div
+                className="flex items-center space-x-2 px-4 py-2 rounded-full border cursor-pointer"
+                style={{
+                  backgroundColor: "#F7F4FF",
+                  borderColor: "#EAE3FF",
+                  color: COLORS.primary[600],
+                }}
+              >
                 <select
                   value={selectedChildId || ""}
                   onChange={(e) => handleChildChange(e.target.value)}
                   className="bg-transparent border-none font-medium focus:outline-none cursor-pointer"
+                  style={{ color: COLORS.primary[600] }}
                 >
                   {children.map((child) => (
                     <option key={child.child_id} value={child.child_id}>
@@ -178,49 +247,82 @@ export default function SubjectProgress() {
                   ))}
                 </select>
                 <FontAwesomeIcon icon={faChevronDown} className="text-xs" />
-              </button>
+              </div>
             </div>
           </div>
 
           {/* Stats Row */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div className="flex items-center space-x-3">
-              <div className={`w-3 h-3 ${hasIssues ? "bg-accent-amber" : "bg-accent-green"} rounded-full`} />
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: hasIssues ? COLORS.accent.amber : COLORS.accent.green }}
+              />
               <div>
-                <div className={`text-sm font-medium ${hasIssues ? "text-accent-amber" : "text-accent-green"}`}>
+                <div
+                  className="text-sm font-medium"
+                  style={{ color: hasIssues ? COLORS.accent.amber : COLORS.accent.green }}
+                >
                   {hasIssues ? "Needs attention" : "Subjects on track"}
                 </div>
-                <div className="text-xs text-neutral-500">Overall status</div>
+                <div className="text-xs" style={{ color: COLORS.neutral[500] }}>
+                  Overall status
+                </div>
               </div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary-900">{totalSubjects}</div>
-              <div className="text-sm text-neutral-500">Total subjects</div>
+              <div className="text-2xl font-bold" style={{ color: COLORS.primary[900] }}>
+                {totalSubjects}
+              </div>
+              <div className="text-sm" style={{ color: COLORS.neutral[500] }}>
+                Total subjects
+              </div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary-900">{avgSessionsPerWeek}</div>
-              <div className="text-sm text-neutral-500">Avg sessions/week</div>
+              <div className="text-2xl font-bold" style={{ color: COLORS.primary[900] }}>
+                {avgSessionsPerWeek}
+              </div>
+              <div className="text-sm" style={{ color: COLORS.neutral[500] }}>
+                Avg sessions/week
+              </div>
             </div>
 
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary-900">{totalRevisionPeriods}</div>
-              <div className="text-sm text-neutral-500">Total revision periods</div>
+              <div className="text-2xl font-bold" style={{ color: COLORS.primary[900] }}>
+                {totalRevisionPeriods}
+              </div>
+              <div className="text-sm" style={{ color: COLORS.neutral[500] }}>
+                Total revision periods
+              </div>
             </div>
           </div>
 
           {/* Alert Box */}
-          {hasIssues && (
-            <div className="bg-neutral-50 rounded-xl p-4">
+          {hasIssues && subjectsNeedingAttention[0] && (
+            <div
+              className="rounded-xl p-4"
+              style={{ backgroundColor: COLORS.neutral[50] }}
+            >
               <div className="flex items-start space-x-3">
-                <FontAwesomeIcon icon={faInfoCircle} className="text-primary-600 mt-0.5" />
+                <FontAwesomeIcon
+                  icon={faInfoCircle}
+                  className="mt-0.5"
+                  style={{ color: COLORS.primary[600] }}
+                />
                 <div>
-                  <div className="text-sm font-medium text-neutral-700">Any issues</div>
-                  <div className="text-sm text-neutral-600">
-                    {subjectsNeedingAttention[0]?.subject_name} needs additional focus on{" "}
-                    {subjectsNeedingAttention[0]?.coming_up[0]?.topic_name || "upcoming topics"}.
-                    Consider extra practice sessions.
+                  <div
+                    className="text-sm font-medium"
+                    style={{ color: COLORS.neutral[700] }}
+                  >
+                    Any issues
+                  </div>
+                  <div className="text-sm" style={{ color: COLORS.neutral[600] }}>
+                    {subjectsNeedingAttention[0].subject_name} needs additional focus on{" "}
+                    {subjectsNeedingAttention[0].coming_up?.[0]?.topic_name ||
+                      "upcoming topics"}
+                    . Consider extra practice sessions.
                   </div>
                 </div>
               </div>
@@ -235,6 +337,17 @@ export default function SubjectProgress() {
             {data.subjects.map((subject) => (
               <SubjectCard key={subject.subject_id} subject={subject} />
             ))}
+
+            {data.subjects.length === 0 && (
+              <div
+                className="bg-white rounded-2xl p-8 text-center"
+                style={{ boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)" }}
+              >
+                <p style={{ color: COLORS.neutral[600] }}>
+                  No subjects set up yet for this child.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -247,11 +360,8 @@ export default function SubjectProgress() {
               subjectsOnTrack={subjectsOnTrack}
               totalSubjects={totalSubjects}
               needsAttention={subjectsNeedingAttention.length}
-              avgCoverage={Math.round(
-                data.subjects.reduce((sum, s) => sum + s.completion_percentage, 0) /
-                  data.subjects.length || 0
-              )}
-              weeksUntilExams={12}
+              avgCoverage={avgCoverage}
+              weeksUntilExams={weeksUntilExams}
             />
 
             {/* Recent Activity */}
