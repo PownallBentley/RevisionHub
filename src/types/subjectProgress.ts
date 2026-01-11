@@ -1,27 +1,21 @@
 // src/types/subjectProgress.ts
 
-// Child summary for the banner
+export interface ChildOption {
+  child_id: string;
+  child_name: string;
+}
+
 export interface ChildInfo {
   child_id: string;
   child_name: string;
-  year_group: number | null;
+  year_group: number;
   exam_type: string;
   active_subjects_count: number;
   sessions_this_week: number;
   topics_covered_this_week: number;
 }
 
-// Overview statistics
-export interface OverviewStats {
-  coverage_status: 'on_track' | 'needs_attention' | 'ahead';
-  coverage_message: string;
-  topics_revisited_count: number;
-  next_week_topics_count: number;
-  next_week_subjects_count: number;
-}
-
-// Recently covered topic
-export interface RecentTopic {
+export interface TopicCovered {
   topic_id: string;
   topic_name: string;
   theme_name: string;
@@ -32,8 +26,7 @@ export interface RecentTopic {
   confidence_level: string;
 }
 
-// Upcoming topic
-export interface UpcomingTopic {
+export interface TopicComingUp {
   topic_id: string;
   topic_name: string;
   theme_name: string;
@@ -42,51 +35,41 @@ export interface UpcomingTopic {
   is_tomorrow: boolean;
 }
 
-// Subject with topics
 export interface SubjectProgress {
   subject_id: string;
   subject_name: string;
   subject_color: string;
   subject_icon: string;
-  exam_board_name: string | null;
-  exam_type: string | null;
-  status: 'in_progress' | 'not_started' | 'needs_attention';
+  exam_board_name: string;
+  exam_type: string;
+  status: "in_progress" | "needs_attention" | "not_started" | "completed";
   topics_covered_total: number;
   topics_remaining: number;
   completion_percentage: number;
-  recently_covered: RecentTopic[];
-  coming_up: UpcomingTopic[];
+  recently_covered: TopicCovered[];
+  coming_up: TopicComingUp[];
 }
 
-// Timeline session
+export interface OverviewStats {
+  coverage_status: "on_track" | "needs_attention" | "ahead";
+  coverage_message: string;
+  topics_revisited_count: number;
+  next_week_topics_count: number;
+  next_week_subjects_count: number;
+}
+
 export interface TimelineSession {
+  session_date: string;
+  subject_name: string;
+  subject_color: string;
+  topic_name: string;
   planned_session_id: string;
-  subject_id: string;
-  subject_name: string;
-  subject_color: string;
-  topic_name: string | null;
-}
-
-// Timeline group
-export interface TimelineGroup {
-  group_label: string;
-  group_date: string;
   days_until: number;
-  sessions: TimelineSession[];
+  group_label: string;
 }
 
-// Focus area
-export interface FocusArea {
-  subject_id: string;
-  subject_name: string;
-  subject_color: string;
-  subject_icon: string;
-  focus_topics: string | null;
-}
-
-// Suggestion
 export interface Suggestion {
-  type: 'review_recommended' | 'needs_reinforcement';
+  type: "review_recommended";
   priority: number;
   title: string;
   message: string;
@@ -95,18 +78,10 @@ export interface Suggestion {
   topic_id: string;
 }
 
-// Complete response
 export interface SubjectProgressData {
   child: ChildInfo | null;
   overview: OverviewStats | null;
   subjects: SubjectProgress[];
-  timeline: TimelineGroup[];
-  focus_areas: FocusArea[];
+  timeline: TimelineSession[];
   suggestions: Suggestion[];
-}
-
-// For child selector dropdown
-export interface ChildOption {
-  child_id: string;
-  child_name: string;
 }
