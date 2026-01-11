@@ -17,14 +17,7 @@ import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 
 function HomeGate() {
-  const {
-    loading,
-    hydrating,
-    user,
-    isParent,
-    isChild,
-    parentChildCount,
-  } = useAuth();
+  const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
 
   // Still checking auth - show loading
   if (loading) {
@@ -40,13 +33,10 @@ function HomeGate() {
     return <Landing />;
   }
 
-  // User is logged in but we're still fetching their profile/role
-  if (hydrating && !isParent && !isChild) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
-        Loading…
-      </div>
-    );
+  // User exists but role not determined yet (profile didn't load)
+  // Show landing page with login/signup options
+  if (isUnresolved) {
+    return <Landing />;
   }
 
   // Child user - go to Today
@@ -64,7 +54,7 @@ function HomeGate() {
     return <Navigate to="/parent" replace />;
   }
 
-  // Fallback - user exists but role not determined
+  // Fallback - should not reach here, but show landing
   return <Landing />;
 }
 
