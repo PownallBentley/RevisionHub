@@ -17,29 +17,54 @@ import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 
 function HomeGate() {
-  const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
+  const {
+    loading,
+    hydrating,
+    user,
+    isParent,
+    isChild,
+    parentChildCount,
+  } = useAuth();
 
+  // Still checking auth - show loading
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-gray-600">
+      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
         Loading…
       </div>
     );
   }
 
-  // Logged out => Landing
-  if (!user) return <Landing />;
+  // Not logged in - show Landing
+  if (!user) {
+    return <Landing />;
+  }
 
-  // If unresolved, send to Landing for now
-  if (isUnresolved) return <Landing />;
+  // User is logged in but we're still fetching their profile/role
+  if (hydrating && !isParent && !isChild) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
+        Loading…
+      </div>
+    );
+  }
 
+  // Child user - go to Today
+  if (isChild) {
+    return <Navigate to="/child/today" replace />;
+  }
+
+  // Parent user
   if (isParent) {
-    if ((parentChildCount ?? 0) === 0) return <Navigate to="/parent/onboarding" replace />;
+    // Only redirect to onboarding if we KNOW they have 0 children (not null)
+    if (parentChildCount === 0) {
+      return <Navigate to="/parent/onboarding" replace />;
+    }
+    // Either has children or still loading count - go to dashboard
     return <Navigate to="/parent" replace />;
   }
 
-  if (isChild) return <Navigate to="/child/today" replace />;
-
+  // Fallback - user exists but role not determined
   return <Landing />;
 }
 
@@ -64,7 +89,7 @@ export default function App() {
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
 
-          {/* Shared routes */}
+          {/* Shared routes (parent & child) */}
           <Route path="/account" element={<Account />} />
 
           {/* Child routes */}
