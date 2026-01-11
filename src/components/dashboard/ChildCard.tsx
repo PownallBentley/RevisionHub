@@ -54,7 +54,7 @@ export default function ChildCard({ child }: ChildCardProps) {
         </div>
         <button
           onClick={() => navigate(`/parent/child/${child.child_id}`)}
-          className="px-4 py-2 text-primary-600 border border-primary-200 rounded-pill text-sm hover:bg-primary-50 transition-colors"
+          className="text-primary-600 text-sm font-medium hover:text-primary-700 hover:underline transition-colors"
         >
           View Details
         </button>
