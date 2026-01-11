@@ -54,6 +54,7 @@ export function useAuth() {
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
+  console.log("[auth] fetchProfile START", userId);
   const { data, error } = await supabase
     .from("profiles")
     .select("id, email, full_name, role, country, created_at, updated_at")
@@ -64,10 +65,12 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
     console.warn("[auth] fetchProfile error:", error);
     return null;
   }
+  console.log("[auth] fetchProfile DONE", data);
   return (data ?? null) as Profile | null;
 }
 
 async function fetchParentChildCount(parentId: string): Promise<number | null> {
+  console.log("[auth] fetchParentChildCount START", parentId);
   const { count, error } = await supabase
     .from("children")
     .select("id", { count: "exact", head: true })
@@ -77,20 +80,24 @@ async function fetchParentChildCount(parentId: string): Promise<number | null> {
     console.warn("[auth] fetchParentChildCount error:", error);
     return null;
   }
+  console.log("[auth] fetchParentChildCount DONE", count);
   return typeof count === "number" ? count : null;
 }
 
 async function fetchMyChildId(): Promise<string | null> {
+  console.log("[auth] fetchMyChildId START");
   const { data, error } = await supabase.rpc("rpc_get_my_child_id");
 
   if (error) {
     console.warn("[auth] rpc_get_my_child_id error:", error);
     return null;
   }
+  console.log("[auth] fetchMyChildId DONE", data);
   return data ? String(data) : null;
 }
 
 async function fetchChildProfile(childId: string): Promise<Partial<Profile> | null> {
+  console.log("[auth] fetchChildProfile START", childId);
   const { data, error } = await supabase
     .from("children")
     .select("id, first_name, preferred_name, avatar_url, email")
@@ -102,8 +109,12 @@ async function fetchChildProfile(childId: string): Promise<Partial<Profile> | nu
     return null;
   }
 
-  if (!data) return null;
+  if (!data) {
+    console.log("[auth] fetchChildProfile DONE - no data");
+    return null;
+  }
 
+  console.log("[auth] fetchChildProfile DONE", data);
   return {
     id: data.id,
     first_name: data.first_name,
@@ -147,9 +158,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Returns true if successful, false if session is null (logged out).
    */
   async function hydrateFromSession(s: Session | null): Promise<boolean> {
+    console.log("[auth] hydrateFromSession START");
     const u = s?.user ?? null;
 
     if (!u) {
+      console.log("[auth] hydrateFromSession - no user, clearing state");
       // User logged out - clear everything
       setSession(null);
       setUser(null);
@@ -160,20 +173,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // User is logged in - set session and user immediately
+    console.log("[auth] hydrateFromSession - user found:", u.id);
     setSession(s);
     setUser(u);
 
     // Fetch profile and childId in parallel
+    console.log("[auth] hydrateFromSession - fetching profile and childId");
     const [p, childId] = await Promise.all([
       fetchProfile(u.id),
       fetchMyChildId()
     ]);
+    console.log("[auth] hydrateFromSession - parallel fetch done", { profile: p, childId });
 
     // Set activeChildId (only children have this)
     setActiveChildId(childId);
 
     // If this is a child, fetch their details for display purposes
     if (childId) {
+      console.log("[auth] hydrateFromSession - is child, fetching child profile");
       const childProfile = await fetchChildProfile(childId);
       
       if (childProfile) {
@@ -194,11 +211,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setParentChildCount(null);
     } else {
+      console.log("[auth] hydrateFromSession - is parent");
       // Parent or unknown - set their profile
       setProfile(p);
       
       if (p) {
         // Parent - fetch their child count
+        console.log("[auth] hydrateFromSession - fetching child count");
         const count = await fetchParentChildCount(u.id);
         setParentChildCount(count);
       } else {
@@ -206,11 +225,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    console.log("[auth] hydrateFromSession DONE");
     return true;
   }
 
   async function resolveAuth(source: string, opts?: { showLoading?: boolean }) {
-    if (resolvingRef.current) return;
+    if (resolvingRef.current) {
+      console.log("[auth] resolveAuth - already resolving, skipping");
+      return;
+    }
     resolvingRef.current = true;
 
     const showLoading = opts?.showLoading ?? false;
@@ -218,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (showLoading) setLoading(true);
 
+      console.log("[auth] resolveAuth - getting session", source);
       const { data, error } = await supabase.auth.getSession();
 
       if (error) console.warn("[auth] getSession error:", source, error);
@@ -268,8 +292,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Only update if we haven't hydrated yet, or if this is a new sign-in
       if (event === "SIGNED_IN" || !hydratedOnceRef.current) {
         try {
+          console.log("[auth] onAuthStateChange - calling hydrateFromSession");
           await hydrateFromSession(newSession);
           hydratedOnceRef.current = true;
+          console.log("[auth] onAuthStateChange - hydration complete");
         } catch (e) {
           console.warn("[auth] onAuthStateChange hydrate failed:", e);
           // DON'T wipe state on error - the user might still be valid
