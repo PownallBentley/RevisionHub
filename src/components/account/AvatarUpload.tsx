@@ -37,11 +37,15 @@ export default function AvatarUpload({
   
   // Image state for cropping
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [sliderValue, setSliderValue] = useState(50); // 0-100 slider
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  
+  // Zoom bounds calculated from image size
+  const [minZoom, setMinZoom] = useState(0.1);
+  const [fitZoom, setFitZoom] = useState(1);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,6 +57,24 @@ export default function AvatarUpload({
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  // Convert slider (0-100) to actual zoom
+  // 0% = minZoom (see whole image)
+  // 50% = fitZoom (smallest dimension fills circle)
+  // 100% = fitZoom * 2 (zoomed in 2x)
+  const sliderToZoom = useCallback((slider: number): number => {
+    if (slider <= 50) {
+      // 0-50 maps to minZoom-fitZoom
+      const t = slider / 50;
+      return minZoom + (fitZoom - minZoom) * t;
+    } else {
+      // 50-100 maps to fitZoom to fitZoom*2
+      const t = (slider - 50) / 50;
+      return fitZoom + fitZoom * t;
+    }
+  }, [minZoom, fitZoom]);
+
+  const actualZoom = sliderToZoom(sliderValue);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,23 +102,27 @@ export default function AvatarUpload({
       // Load image to get natural dimensions
       const img = new Image();
       img.onload = () => {
-        setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+        const natWidth = img.naturalWidth;
+        const natHeight = img.naturalHeight;
         
-        // Calculate initial zoom so image fits SLIGHTLY LARGER than the preview circle
-        // This means the smallest dimension fills the circle plus a bit extra (10%)
-        const minDimension = Math.min(img.naturalWidth, img.naturalHeight);
-        const fitZoom = PREVIEW_SIZE / minDimension;
+        setNaturalSize({ width: natWidth, height: natHeight });
         
-        // Start at 110% of fit size - image slightly larger than circle
-        // This gives users room to zoom out or in from a reasonable starting point
-        const initialZoom = fitZoom * 1.0;
+        // Calculate zoom bounds
+        // fitZoom: smallest dimension fills the circle exactly
+        const minDim = Math.min(natWidth, natHeight);
+        const calculatedFitZoom = PREVIEW_SIZE / minDim;
         
-        // Clamp to zoom range (0.2 to 3)
-        const clampedZoom = Math.max(0.01, Math.min(3, initialZoom));
+        // minZoom: largest dimension fills the circle (see whole image)
+        const maxDim = Math.max(natWidth, natHeight);
+        const calculatedMinZoom = PREVIEW_SIZE / maxDim;
         
+        setFitZoom(calculatedFitZoom);
+        setMinZoom(calculatedMinZoom);
+        
+        // Start at 50% (fitZoom - image fills circle nicely)
+        setSliderValue(50);
+        setPosition({ x: 0, y: 0 });
         setImageSrc(src);
-        setZoom(clampedZoom);
-        setPosition({ x: 0, y: 0 }); // Center the image
         setShowCropper(true);
       };
       img.src = src;
@@ -142,7 +168,7 @@ export default function AvatarUpload({
     }
   }, [isDragging, handleDragMove, handleDragEnd]);
 
-  // Generate cropped image
+  // Generate cropped image at whatever zoom/position user has chosen
   const getCroppedImage = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const canvas = canvasRef.current;
@@ -163,18 +189,18 @@ export default function AvatarUpload({
         canvas.width = CROP_SIZE;
         canvas.height = CROP_SIZE;
 
-        // Calculate the source region based on zoom and position
-        const scaledWidth = img.naturalWidth * zoom;
-        const scaledHeight = img.naturalHeight * zoom;
+        // Calculate the source region based on current zoom and position
+        const scaledWidth = img.naturalWidth * actualZoom;
+        const scaledHeight = img.naturalHeight * actualZoom;
         
         // Center of the preview area
         const centerX = PREVIEW_SIZE / 2;
         const centerY = PREVIEW_SIZE / 2;
         
         // The visible area in source image coordinates
-        const sourceX = (centerX - position.x - scaledWidth / 2) / zoom + img.naturalWidth / 2;
-        const sourceY = (centerY - position.y - scaledHeight / 2) / zoom + img.naturalHeight / 2;
-        const sourceSize = PREVIEW_SIZE / zoom;
+        const sourceX = (centerX - position.x - scaledWidth / 2) / actualZoom + img.naturalWidth / 2;
+        const sourceY = (centerY - position.y - scaledHeight / 2) / actualZoom + img.naturalHeight / 2;
+        const sourceSize = PREVIEW_SIZE / actualZoom;
 
         // Draw circular clip
         ctx.beginPath();
@@ -219,7 +245,7 @@ export default function AvatarUpload({
     setError(null);
 
     try {
-      // Get cropped image blob
+      // Get cropped image blob at current composition
       const croppedBlob = await getCroppedImage();
       
       // Generate unique filename
@@ -315,7 +341,7 @@ export default function AvatarUpload({
   const closeCropper = () => {
     setShowCropper(false);
     setImageSrc(null);
-    setZoom(1);
+    setSliderValue(50);
     setPosition({ x: 0, y: 0 });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -323,8 +349,8 @@ export default function AvatarUpload({
   };
 
   // Calculate displayed image size
-  const displayWidth = naturalSize.width * zoom;
-  const displayHeight = naturalSize.height * zoom;
+  const displayWidth = naturalSize.width * actualZoom;
+  const displayHeight = naturalSize.height * actualZoom;
 
   return (
     <div className="flex flex-col items-center">
@@ -445,30 +471,30 @@ export default function AvatarUpload({
 
             {/* Instructions */}
             <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
-              Drag to reposition • Use slider to zoom in/out
+              Drag to reposition • Use slider to zoom
             </p>
 
-            {/* Zoom slider - range 0.2 to 3 */}
-            <div className="flex items-center gap-3 mb-4 px-4">
+            {/* Zoom slider - 0 to 100 */}
+            <div className="flex items-center gap-3 mb-2 px-4">
               <FontAwesomeIcon icon={faSearchMinus} style={{ color: "#A8AEBD" }} />
               <input
                 type="range"
-                min="0.2"
-                max="3"
-                step="0.05"
-                value={zoom}
-                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                min="0"
+                max="100"
+                step="1"
+                value={sliderValue}
+                onChange={(e) => setSliderValue(parseInt(e.target.value))}
                 className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                 style={{ 
-                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${((zoom - 0.2) / 2.8) * 100}%, #E1E4EE ${((zoom - 0.2) / 2.8) * 100}%, #E1E4EE 100%)` 
+                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${sliderValue}%, #E1E4EE ${sliderValue}%, #E1E4EE 100%)` 
                 }}
               />
               <FontAwesomeIcon icon={faSearchPlus} style={{ color: "#A8AEBD" }} />
             </div>
 
-            {/* Zoom percentage display */}
+            {/* Slider value display */}
             <p className="text-xs text-center mb-6" style={{ color: "#6C7280" }}>
-              Zoom: {Math.round(zoom * 100)}%
+              {sliderValue}%
             </p>
 
             {/* Actions */}
