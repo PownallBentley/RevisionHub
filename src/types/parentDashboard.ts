@@ -1,5 +1,10 @@
 // src/types/parentDashboard.ts
 
+/**
+ * Types for rpc_get_parent_dashboard_summary
+ * Based on PRD v3.4 and RPC Addendum specifications
+ */
+
 export interface ChildSubject {
   subject_id: string;
   subject_name: string;
@@ -7,19 +12,18 @@ export interface ChildSubject {
   icon: string;
 }
 
-export interface ChildNextFocus {
+export interface NextFocus {
   subject_name: string;
   topic_name: string | null;
   session_date: string;
 }
 
-export interface ChildMocksFlag {
+export interface MocksFlag {
   show: boolean;
-  weeks_until: number | null;
   message: string | null;
 }
 
-export interface ChildRecentAchievement {
+export interface RecentAchievement {
   code: string;
   name: string;
   icon: string;
@@ -31,38 +35,38 @@ export interface ChildGamification {
   lifetime_points: number;
   current_streak: number;
   longest_streak: number;
-  recent_achievement: ChildRecentAchievement | null;
+  recent_achievement: RecentAchievement | null;
 }
 
 export interface ChildSummary {
   child_id: string;
   child_name: string;
-  year_group: number | null;
+  year_group: number;
   exam_type: string;
   subjects: ChildSubject[];
+  mocks_flag: MocksFlag;
+  next_focus: NextFocus | null;
   week_sessions_completed: number;
   week_sessions_total: number;
-  prev_week_sessions_completed: number;
   week_topics_covered: number;
-  next_focus: ChildNextFocus | null;
-  mocks_flag: ChildMocksFlag;
+  prev_week_sessions_completed: number;
   gamification: ChildGamification;
 }
 
 export interface WeekSummary {
   total_sessions_completed: number;
-  total_sessions_planned: number;
-  comparison_to_last_week: number;
+  sessions_previous_week: number;
+  sessions_difference: number;
   topics_covered: number;
-  subjects_span: number;
-  time_spent_minutes: number;
+  subjects_active: number;
+  total_minutes: number;
   average_session_minutes: number;
   days_active: number;
 }
 
 export interface DailyPattern {
+  day_of_week: string;
   day_index: number;
-  day_name: string;
   sessions_completed: number;
   total_minutes: number;
   is_rest_day: boolean;
@@ -74,9 +78,10 @@ export interface GentleReminder {
   child_id: string;
   child_name: string;
   message: string;
-  action_label: string | null;
-  action_route: string | null;
-  metadata: Record<string, any>;
+  subject_id: string | null;
+  subject_name: string | null;
+  topic_id: string | null;
+  topic_name: string | null;
 }
 
 export interface UpcomingSession {
@@ -86,13 +91,12 @@ export interface UpcomingSession {
   subject_id: string;
   subject_name: string;
   subject_color: string;
-  topic_name: string | null;
+  topic_name: string;
   session_date: string;
   session_duration_minutes: number;
-  status: string;
 }
 
-export interface SubjectCoverageItem {
+export interface SubjectCoverageEntry {
   child_id: string;
   child_name: string;
   subject_id: string;
@@ -109,5 +113,5 @@ export interface ParentDashboardData {
   daily_pattern: DailyPattern[];
   gentle_reminders: GentleReminder[];
   coming_up_next: UpcomingSession[];
-  subject_coverage: SubjectCoverageItem[];
+  subject_coverage: SubjectCoverageEntry[];
 }
