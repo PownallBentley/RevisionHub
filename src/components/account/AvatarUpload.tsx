@@ -89,10 +89,10 @@ export default function AvatarUpload({
         
         // Start at 110% of fit size - image slightly larger than circle
         // This gives users room to zoom out or in from a reasonable starting point
-        const initialZoom = fitZoom * 1.1;
+        const initialZoom = fitZoom * 1.0;
         
         // Clamp to zoom range (0.2 to 3)
-        const clampedZoom = Math.max(0.2, Math.min(3, initialZoom));
+        const clampedZoom = Math.max(0.01, Math.min(3, initialZoom));
         
         setImageSrc(src);
         setZoom(clampedZoom);
