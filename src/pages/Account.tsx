@@ -14,7 +14,7 @@ import {
   faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabase";
 import AvatarUpload from "../components/account/AvatarUpload";
 import AnalyticsSharingCard from "../components/account/AnalyticsSharingCard";
 
