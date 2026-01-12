@@ -1,10 +1,9 @@
 // src/components/parentOnboarding/steps/AvailabilityBuilderStep.tsx
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   generateDefaultTemplate,
   checkFeasibility,
-  calculateSessionsFromTemplate,
   type RecommendationResult,
   type DayTemplate,
   type FeasibilityCheck,
@@ -52,23 +51,36 @@ const TIME_OF_DAY_OPTIONS: { value: TimeOfDay; label: string }[] = [
   { value: "evening", label: "Evening" },
 ];
 
-const SESSION_PATTERN_OPTIONS: { value: SessionPattern; label: string; minutes: number; topics: number }[] = [
+const SESSION_PATTERN_OPTIONS: {
+  value: SessionPattern;
+  label: string;
+  minutes: number;
+  topics: number;
+}[] = [
   { value: "p20", label: "20 min", minutes: 20, topics: 1 },
   { value: "p45", label: "45 min", minutes: 45, topics: 2 },
   { value: "p70", label: "70 min", minutes: 70, topics: 3 },
 ];
 
-const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
 
 /* ============================
    Helper Functions
 ============================ */
 
-function getMinutesForPattern(pattern: SessionPattern): number {
-  return SESSION_PATTERN_OPTIONS.find((p) => p.value === pattern)?.minutes ?? 45;
-}
-
-function calculateWeeklyStats(template: DayTemplate[]): { sessions: number; minutes: number; topics: number } {
+function calculateWeeklyStats(template: DayTemplate[]): {
+  sessions: number;
+  minutes: number;
+  topics: number;
+} {
   let sessions = 0;
   let minutes = 0;
   let topics = 0;
@@ -77,7 +89,9 @@ function calculateWeeklyStats(template: DayTemplate[]): { sessions: number; minu
     if (!day.is_enabled) continue;
     for (const slot of day.slots) {
       sessions += 1;
-      const opt = SESSION_PATTERN_OPTIONS.find((p) => p.value === slot.session_pattern);
+      const opt = SESSION_PATTERN_OPTIONS.find(
+        (p) => p.value === slot.session_pattern
+      );
       minutes += opt?.minutes ?? 45;
       topics += opt?.topics ?? 2;
     }
@@ -90,8 +104,14 @@ function calculateWeeksBetween(start: string, end: string): number {
   if (!start || !end) return 8;
   const startDate = new Date(start);
   const endDate = new Date(end);
-  const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
   return Math.max(1, Math.round((diffDays / 7) * 10) / 10);
+}
+
+function hasAnySlots(template: DayTemplate[]): boolean {
+  return template.some((day) => day.slots.length > 0);
 }
 
 /* ============================
@@ -103,16 +123,28 @@ interface DayCardProps {
   onToggle: () => void;
   onAddSlot: () => void;
   onRemoveSlot: (index: number) => void;
-  onUpdateSlot: (index: number, field: keyof AvailabilitySlot, value: string) => void;
+  onUpdateSlot: (
+    index: number,
+    field: keyof AvailabilitySlot,
+    value: string
+  ) => void;
 }
 
-function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCardProps) {
+function DayCard({
+  day,
+  onToggle,
+  onAddSlot,
+  onRemoveSlot,
+  onUpdateSlot,
+}: DayCardProps) {
   const stats = useMemo(() => {
     if (!day.is_enabled || day.slots.length === 0) return null;
     let minutes = 0;
     let topics = 0;
     for (const slot of day.slots) {
-      const opt = SESSION_PATTERN_OPTIONS.find((p) => p.value === slot.session_pattern);
+      const opt = SESSION_PATTERN_OPTIONS.find(
+        (p) => p.value === slot.session_pattern
+      );
       minutes += opt?.minutes ?? 45;
       topics += opt?.topics ?? 2;
     }
@@ -122,7 +154,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
   return (
     <div
       className={`border-2 rounded-xl transition-all ${
-        day.is_enabled ? "border-neutral-200 bg-white" : "border-neutral-100 bg-neutral-50"
+        day.is_enabled
+          ? "border-neutral-200 bg-white"
+          : "border-neutral-100 bg-neutral-50"
       }`}
     >
       {/* Day Header */}
@@ -135,7 +169,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
             className={`relative w-11 h-6 rounded-full transition-colors ${
               day.is_enabled ? "bg-primary-600" : "bg-neutral-200"
             }`}
-            aria-label={`${day.is_enabled ? "Disable" : "Enable"} ${day.day_name}`}
+            aria-label={`${day.is_enabled ? "Disable" : "Enable"} ${
+              day.day_name
+            }`}
           >
             <div
               className={`absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow transition-transform ${
@@ -145,7 +181,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
           </button>
 
           <span
-            className={`font-medium ${day.is_enabled ? "text-neutral-900" : "text-neutral-400"}`}
+            className={`font-medium ${
+              day.is_enabled ? "text-neutral-900" : "text-neutral-400"
+            }`}
           >
             {day.day_name}
           </span>
@@ -155,8 +193,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
           {/* Stats summary */}
           {stats && (
             <span className="text-xs text-neutral-500">
-              {day.slots.length} session{day.slots.length !== 1 ? "s" : ""} · {stats.minutes} min ·{" "}
-              {stats.topics} topic{stats.topics !== 1 ? "s" : ""}
+              {day.slots.length} session{day.slots.length !== 1 ? "s" : ""} ·{" "}
+              {stats.minutes} min · {stats.topics} topic
+              {stats.topics !== 1 ? "s" : ""}
             </span>
           )}
 
@@ -194,7 +233,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
                 </label>
                 <select
                   value={slot.time_of_day}
-                  onChange={(e) => onUpdateSlot(idx, "time_of_day", e.target.value)}
+                  onChange={(e) =>
+                    onUpdateSlot(idx, "time_of_day", e.target.value)
+                  }
                   className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
                   {TIME_OF_DAY_OPTIONS.map((opt) => (
@@ -212,7 +253,9 @@ function DayCard({ day, onToggle, onAddSlot, onRemoveSlot, onUpdateSlot }: DayCa
                 </label>
                 <select
                   value={slot.session_pattern}
-                  onChange={(e) => onUpdateSlot(idx, "session_pattern", e.target.value)}
+                  onChange={(e) =>
+                    onUpdateSlot(idx, "session_pattern", e.target.value)
+                  }
                   className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
                   {SESSION_PATTERN_OPTIONS.map((opt) => (
@@ -277,12 +320,40 @@ export default function AvailabilityBuilderStep({
   onBack,
 }: AvailabilityBuilderStepProps) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showAllDays, setShowAllDays] = useState(false);
+
+  // Get default session pattern from recommendation or use p45
+  const defaultPattern: SessionPattern =
+    recommendation?.recommended_session_pattern || "p45";
+
+  // Pre-populate Monday on first load if template is empty
+  useEffect(() => {
+    if (!hasAnySlots(weeklyTemplate)) {
+      const updated = weeklyTemplate.map((day, idx) => {
+        if (idx === 0) {
+          // Monday
+          return {
+            ...day,
+            is_enabled: true,
+            slots: [{ time_of_day: "afternoon" as TimeOfDay, session_pattern: defaultPattern }],
+            session_count: 1,
+          };
+        }
+        return day;
+      });
+      onTemplateChange(updated);
+    }
+  }, []); // Only run once on mount
 
   // Calculate totals
-  const weeklyStats = useMemo(() => calculateWeeklyStats(weeklyTemplate), [weeklyTemplate]);
+  const weeklyStats = useMemo(
+    () => calculateWeeklyStats(weeklyTemplate),
+    [weeklyTemplate]
+  );
 
   const totalWeeks = useMemo(
-    () => calculateWeeksBetween(revisionPeriod.start_date, revisionPeriod.end_date),
+    () =>
+      calculateWeeksBetween(revisionPeriod.start_date, revisionPeriod.end_date),
     [revisionPeriod.start_date, revisionPeriod.end_date]
   );
 
@@ -300,7 +371,56 @@ export default function AvailabilityBuilderStep({
     );
   }, [recommendation, totalPlannedSessions]);
 
-  // Handlers
+  // Get Monday's setup for copying
+  const mondaySetup = weeklyTemplate[0];
+
+  // Copy handlers
+  const handleCopyToWeekdays = useCallback(() => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      // Skip Monday (idx 0) and weekends (idx 5, 6)
+      if (idx === 0 || idx >= 5) return day;
+      return {
+        ...day,
+        is_enabled: mondaySetup.is_enabled,
+        slots: [...mondaySetup.slots],
+        session_count: mondaySetup.slots.length,
+      };
+    });
+    onTemplateChange(updated);
+    setShowAllDays(true);
+  }, [weeklyTemplate, mondaySetup, onTemplateChange]);
+
+  const handleCopyToWeekdaysAndSaturday = useCallback(() => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      // Skip Monday (idx 0) and Sunday (idx 6)
+      if (idx === 0 || idx === 6) return day;
+      return {
+        ...day,
+        is_enabled: mondaySetup.is_enabled,
+        slots: [...mondaySetup.slots],
+        session_count: mondaySetup.slots.length,
+      };
+    });
+    onTemplateChange(updated);
+    setShowAllDays(true);
+  }, [weeklyTemplate, mondaySetup, onTemplateChange]);
+
+  const handleCopyToAllDays = useCallback(() => {
+    const updated = weeklyTemplate.map((day, idx) => {
+      // Skip Monday (idx 0)
+      if (idx === 0) return day;
+      return {
+        ...day,
+        is_enabled: mondaySetup.is_enabled,
+        slots: [...mondaySetup.slots],
+        session_count: mondaySetup.slots.length,
+      };
+    });
+    onTemplateChange(updated);
+    setShowAllDays(true);
+  }, [weeklyTemplate, mondaySetup, onTemplateChange]);
+
+  // Day handlers
   const handleToggleDay = useCallback(
     (dayIndex: number) => {
       const updated = weeklyTemplate.map((day, idx) => {
@@ -319,7 +439,6 @@ export default function AvailabilityBuilderStep({
 
   const handleAddSlot = useCallback(
     (dayIndex: number) => {
-      const defaultPattern = recommendation?.recommended_session_pattern || "p45";
       const newSlot: AvailabilitySlot = {
         time_of_day: "afternoon",
         session_pattern: defaultPattern,
@@ -335,7 +454,7 @@ export default function AvailabilityBuilderStep({
       });
       onTemplateChange(updated);
     },
-    [weeklyTemplate, onTemplateChange, recommendation]
+    [weeklyTemplate, onTemplateChange, defaultPattern]
   );
 
   const handleRemoveSlot = useCallback(
@@ -355,7 +474,12 @@ export default function AvailabilityBuilderStep({
   );
 
   const handleUpdateSlot = useCallback(
-    (dayIndex: number, slotIndex: number, field: keyof AvailabilitySlot, value: string) => {
+    (
+      dayIndex: number,
+      slotIndex: number,
+      field: keyof AvailabilitySlot,
+      value: string
+    ) => {
       const updated = weeklyTemplate.map((day, idx) => {
         if (idx !== dayIndex) return day;
         const newSlots = day.slots.map((slot, i) => {
@@ -382,6 +506,7 @@ export default function AvailabilityBuilderStep({
 
       if (result?.template) {
         onTemplateChange(result.template);
+        setShowAllDays(true);
       }
     } catch (error) {
       console.error("Error generating template:", error);
@@ -393,13 +518,18 @@ export default function AvailabilityBuilderStep({
   // Validation
   const isValid = weeklyStats.sessions > 0;
 
+  // Check if Monday has been set up
+  const mondayHasSessions = mondaySetup?.slots?.length > 0;
+
   return (
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-neutral-900 mb-2">Set your schedule</h2>
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">
+          Set your weekly schedule
+        </h2>
         <p className="text-neutral-500 text-sm leading-relaxed">
-          Tell us how many sessions fit into each day and when they work best.
+          Start by setting up Monday, then copy to other days.
         </p>
       </div>
 
@@ -412,15 +542,18 @@ export default function AvailabilityBuilderStep({
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-primary-900 mb-1">
-                We recommend approximately {recommendation.total_recommended_sessions} sessions
+                We recommend approximately{" "}
+                {recommendation.total_recommended_sessions} sessions
               </h3>
               <p className="text-xs text-primary-700 leading-relaxed">
-                That's about {Math.round(recommendation.total_recommended_sessions / totalWeeks)}{" "}
-                sessions per week over {totalWeeks} weeks
-                {revisionPeriod.contingency_enabled && " with contingency buffer"}.
+                That's about{" "}
+                {Math.round(recommendation.total_recommended_sessions / totalWeeks)}{" "}
+                sessions per week over {totalWeeks} weeks.
               </p>
               {recommendation.needs_advice && (
-                <p className="text-xs text-primary-700 mt-2 italic">{recommendation.needs_advice}</p>
+                <p className="text-xs text-primary-700 mt-2 italic">
+                  {recommendation.needs_advice}
+                </p>
               )}
             </div>
           </div>
@@ -430,7 +563,7 @@ export default function AvailabilityBuilderStep({
             type="button"
             onClick={handleQuickSetup}
             disabled={isGenerating}
-            className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+            className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors disabled:opacity-50"
           >
             {isGenerating ? (
               <>
@@ -440,26 +573,137 @@ export default function AvailabilityBuilderStep({
             ) : (
               <>
                 <i className="fa-solid fa-wand-magic-sparkles" />
-                Quick setup
+                Auto-fill schedule
               </>
             )}
           </button>
         </div>
       )}
 
-      {/* Weekly Schedule */}
-      <div className="space-y-4 mb-6">
-        {weeklyTemplate.map((day, idx) => (
-          <DayCard
-            key={day.day_of_week}
-            day={day}
-            onToggle={() => handleToggleDay(idx)}
-            onAddSlot={() => handleAddSlot(idx)}
-            onRemoveSlot={(slotIdx) => handleRemoveSlot(idx, slotIdx)}
-            onUpdateSlot={(slotIdx, field, value) => handleUpdateSlot(idx, slotIdx, field, value)}
-          />
-        ))}
+      {/* Step 1: Set up Monday */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
+            1
+          </div>
+          <h3 className="text-sm font-semibold text-neutral-900">
+            Set up Monday
+          </h3>
+        </div>
+
+        <DayCard
+          day={weeklyTemplate[0]}
+          onToggle={() => handleToggleDay(0)}
+          onAddSlot={() => handleAddSlot(0)}
+          onRemoveSlot={(slotIdx) => handleRemoveSlot(0, slotIdx)}
+          onUpdateSlot={(slotIdx, field, value) =>
+            handleUpdateSlot(0, slotIdx, field, value)
+          }
+        />
       </div>
+
+      {/* Step 2: Copy to other days */}
+      {mondayHasSessions && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
+              2
+            </div>
+            <h3 className="text-sm font-semibold text-neutral-900">
+              Copy to other days
+            </h3>
+          </div>
+
+          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+            <p className="text-sm text-neutral-600 mb-4">
+              Copy Monday's {weeklyTemplate[0].slots.length} session
+              {weeklyTemplate[0].slots.length !== 1 ? "s" : ""} to:
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopyToWeekdays}
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+              >
+                <i className="fa-solid fa-briefcase mr-2 text-neutral-500" />
+                Weekdays only
+                <span className="ml-1.5 text-xs text-neutral-400">(Tue–Fri)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyToWeekdaysAndSaturday}
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+              >
+                <i className="fa-solid fa-calendar-plus mr-2 text-neutral-500" />
+                Weekdays + Saturday
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyToAllDays}
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+              >
+                <i className="fa-solid fa-calendar-week mr-2 text-neutral-500" />
+                All days
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Fine-tune (collapsible) */}
+      {mondayHasSessions && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
+                3
+              </div>
+              <h3 className="text-sm font-semibold text-neutral-900">
+                Fine-tune each day
+              </h3>
+              <span className="text-xs text-neutral-400">(optional)</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAllDays(!showAllDays)}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+            >
+              {showAllDays ? (
+                <>
+                  <i className="fa-solid fa-chevron-up text-xs" />
+                  Hide
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-chevron-down text-xs" />
+                  Show all days
+                </>
+              )}
+            </button>
+          </div>
+
+          {showAllDays && (
+            <div className="space-y-4">
+              {weeklyTemplate.slice(1).map((day, idx) => (
+                <DayCard
+                  key={day.day_of_week}
+                  day={day}
+                  onToggle={() => handleToggleDay(idx + 1)}
+                  onAddSlot={() => handleAddSlot(idx + 1)}
+                  onRemoveSlot={(slotIdx) => handleRemoveSlot(idx + 1, slotIdx)}
+                  onUpdateSlot={(slotIdx, field, value) =>
+                    handleUpdateSlot(idx + 1, slotIdx, field, value)
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Weekly Summary */}
       <div className="mb-6 p-4 bg-neutral-50 rounded-xl border border-neutral-200">
@@ -470,15 +714,21 @@ export default function AvailabilityBuilderStep({
 
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <div className="text-2xl font-bold text-neutral-900">{weeklyStats.sessions}</div>
+            <div className="text-2xl font-bold text-neutral-900">
+              {weeklyStats.sessions}
+            </div>
             <div className="text-xs text-neutral-500">sessions</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-neutral-900">{weeklyStats.minutes}</div>
+            <div className="text-2xl font-bold text-neutral-900">
+              {weeklyStats.minutes}
+            </div>
             <div className="text-xs text-neutral-500">minutes</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-neutral-900">{weeklyStats.topics}</div>
+            <div className="text-2xl font-bold text-neutral-900">
+              {weeklyStats.topics}
+            </div>
             <div className="text-xs text-neutral-500">topics</div>
           </div>
         </div>
@@ -532,32 +782,11 @@ export default function AvailabilityBuilderStep({
         </div>
       )}
 
-      {/* Session Duration Guide */}
-      <div className="mb-6 p-4 bg-primary-50 rounded-xl border border-primary-100">
-        <div className="flex items-start gap-3">
-          <i className="fa-solid fa-circle-info text-primary-600 mt-0.5" />
-          <div>
-            <h4 className="text-sm font-medium text-primary-900 mb-2">Session duration guide</h4>
-            <ul className="text-xs text-primary-700 space-y-1">
-              <li>
-                <strong>20 minutes:</strong> Quick review of 1 topic — great for busy days
-              </li>
-              <li>
-                <strong>45 minutes:</strong> 2 topics with a short break — balanced session
-              </li>
-              <li>
-                <strong>70 minutes:</strong> 3 topics with two breaks — deep revision
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
       {/* Helper text */}
       <div className="mb-6 text-center">
         <p className="text-xs text-neutral-500">
           <i className="fa-solid fa-gear text-neutral-400 mr-1.5" />
-          Don't worry — you can adjust this schedule anytime from your dashboard.
+          You can adjust this schedule anytime from your dashboard.
         </p>
       </div>
 
