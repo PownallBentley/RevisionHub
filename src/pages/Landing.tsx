@@ -1,20 +1,20 @@
+// src/pages/Landing.tsx
+
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-// Import at top
-import { PageLayout } from "../../components/layout";
-
 import {
-  faGraduationCap,
   faHeart,
   faUserGraduate,
   faChalkboardTeacher
 } from "@fortawesome/free-solid-svg-icons";
+import Footer from "../components/layout/Footer";
 
 export default function Landing() {
   return (
-    <div className="bg-neutral-0">
+    <div className="bg-neutral-0 flex flex-col min-h-screen">
+      {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary-50/30 via-white to-white pt-12 pb-20">
-        <div className="max-w-content mx-auto px-6">
+        <div className="max-w-[1120px] mx-auto px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-6">
               <h1 className="text-5xl font-bold text-neutral-800 leading-tight">
@@ -28,11 +28,11 @@ export default function Landing() {
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <Link
                   to="/signup"
-                  className="px-7 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-semibold text-center shadow-sm"
+                  className="px-7 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors font-semibold text-center shadow-sm"
                 >
                   Get started free
                 </Link>
-                <button className="px-7 py-3 border-2 border-neutral-200 text-neutral-700 rounded-pill hover:border-neutral-300 hover:bg-neutral-50 transition-colors font-semibold">
+                <button className="px-7 py-3 border-2 border-neutral-200 text-neutral-700 rounded-full hover:border-neutral-300 hover:bg-neutral-50 transition-colors font-semibold">
                   Watch demo
                 </button>
               </div>
@@ -75,8 +75,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Choose Your Path Section */}
       <section className="py-20 bg-neutral-0">
-        <div className="max-w-content mx-auto px-6">
+        <div className="max-w-[1120px] mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-primary-900 mb-4">Choose your path</h2>
             <p className="text-xl text-neutral-600">Get started with the experience that's right for you</p>
@@ -91,7 +92,7 @@ export default function Landing() {
               <p className="text-neutral-600 mb-6">Monitor your child's progress, get insights, and ensure they're prepared for their GCSEs.</p>
               <Link
                 to="/signup"
-                className="block w-full px-6 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-semibold shadow-sm"
+                className="block w-full px-6 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors font-semibold shadow-sm"
               >
                 Start as parent
               </Link>
@@ -105,7 +106,7 @@ export default function Landing() {
               <p className="text-neutral-600 mb-6">Access personalized revision plans, track your progress, and ace your GCSE exams.</p>
               <Link
                 to="/signup"
-                className="block w-full px-6 py-3 border border-neutral-300 text-neutral-700 rounded-pill hover:border-primary-300 hover:text-primary-600 transition-colors"
+                className="block w-full px-6 py-3 border border-neutral-300 text-neutral-700 rounded-full hover:border-primary-300 hover:text-primary-600 transition-colors"
               >
                 Start as student
               </Link>
@@ -119,7 +120,7 @@ export default function Landing() {
               <p className="text-neutral-600 mb-6">Help your students succeed with classroom tools and progress monitoring.</p>
               <Link
                 to="/signup"
-                className="block w-full px-6 py-3 border border-neutral-300 text-neutral-700 rounded-pill hover:border-primary-300 hover:text-primary-600 transition-colors"
+                className="block w-full px-6 py-3 border border-neutral-300 text-neutral-700 rounded-full hover:border-primary-300 hover:text-primary-600 transition-colors"
               >
                 Start as teacher
               </Link>
@@ -128,8 +129,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* How It Works Section */}
       <section className="py-20 bg-neutral-50">
-        <div className="max-w-content mx-auto px-6">
+        <div className="max-w-[1120px] mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-primary-900 mb-4">How it works</h2>
             <p className="text-xl text-neutral-600">Get your child exam-ready in three simple steps</p>
@@ -163,10 +165,11 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Testimonials Section */}
       <section className="py-20 bg-neutral-0">
-        <div className="max-w-content mx-auto px-6">
+        <div className="max-w-[1120px] mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-primary-900 mb-4">Why parents choose ReviseWise</h2>
+            <h2 className="text-3xl font-bold text-primary-900 mb-4">Why parents choose RevisionHub</h2>
             <p className="text-xl text-neutral-600">Trusted by thousands of families across the UK</p>
           </div>
 
@@ -207,8 +210,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* CTA Section */}
       <section className="py-20 bg-primary-50">
-        <div className="max-w-content mx-auto px-6 text-center">
+        <div className="max-w-[1120px] mx-auto px-6 text-center">
           <h2 className="text-3xl font-bold text-primary-900 mb-4">Ready to transform revision time?</h2>
           <p className="text-xl text-neutral-600 mb-8 max-w-2xl mx-auto">
             Join thousands of parents who've already taken the stress out of GCSE preparation.
@@ -217,11 +221,11 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/signup"
-              className="px-8 py-3 bg-primary-600 text-white rounded-pill hover:bg-primary-700 transition-colors font-medium"
+              className="px-8 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-colors font-medium"
             >
               Start free trial
             </Link>
-            <button className="px-8 py-3 border border-primary-300 text-primary-600 rounded-pill hover:bg-primary-100 transition-colors font-medium">
+            <button className="px-8 py-3 border border-primary-300 text-primary-600 rounded-full hover:bg-primary-100 transition-colors font-medium">
               Book a demo
             </button>
           </div>
@@ -229,52 +233,8 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="bg-neutral-700 text-neutral-300 py-12">
-        <div className="max-w-content mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                  <FontAwesomeIcon icon={faGraduationCap} className="text-white text-lg" />
-                </div>
-                <span className="text-xl font-bold text-white">ReviseWise</span>
-              </div>
-              <p className="text-neutral-400">Helping students achieve their best in GCSE and IGCSE exams.</p>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-white mb-3">Product</h4>
-              <ul className="space-y-2">
-                <li><a href="#" className="hover:text-white transition-colors">How it works</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-white mb-3">Support</h4>
-              <ul className="space-y-2">
-                <li><a href="#" className="hover:text-white transition-colors">Help center</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Contact us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Community</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-white mb-3">Company</h4>
-              <ul className="space-y-2">
-                <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border-t border-neutral-600 mt-8 pt-8 text-center text-neutral-400">
-            <p>&copy; {new Date().getFullYear()} ReviseWise. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      {/* Shared Footer Component */}
+      <Footer />
     </div>
   );
 }
