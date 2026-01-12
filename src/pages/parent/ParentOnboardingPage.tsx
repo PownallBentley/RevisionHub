@@ -1,5 +1,3 @@
-
-
 // src/pages/parent/ParentOnboardingPage.tsx
 // Multi-step onboarding flow for parents to set up their child's revision plan
 // Steps: Child Details → Goal → Needs → Exam Type → Subjects → Pathways → Priority/Grades → Revision Period → Availability → Confirm → Invite
@@ -32,6 +30,7 @@ import AvailabilityBuilderStep, {
   type DateOverride,
 } from "../../components/parentOnboarding/steps/AvailabilityBuilderStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
+import InviteChildStep from "../../components/parentOnboarding/steps/InviteChildStep";
 
 import { rpcParentCreateChildAndPlan } from "../../services/parentOnboarding/parentOnboardingService";
 import {
@@ -95,15 +94,6 @@ function formatSupabaseError(e: any): string {
   return `${msg}${details}${hint}`;
 }
 
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /* ============================
    Step Configuration
 ============================ */
@@ -136,7 +126,7 @@ const STEP_TITLES: Record<number, string> = {
   [STEPS.INVITE]: "Invite your child",
 };
 
-const PROGRESS_STEPS = 10;
+const PROGRESS_STEPS = 11;
 
 /* ============================
    Main Component
@@ -154,7 +144,6 @@ export default function ParentOnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
@@ -241,7 +230,7 @@ export default function ParentOnboardingPage() {
   }, [step, subjectsWithGrades, goalCode, recommendation, calculateRecommendations]);
 
   /* ============================
-     Payload - UPDATED to include subject_name and exam_board_name
+     Payload
   ============================ */
   const payload = useMemo(() => {
     const weekly_availability: Record<string, {
@@ -262,7 +251,6 @@ export default function ParentOnboardingPage() {
       };
     }
 
-    // UPDATED: Now includes subject_name and exam_board_name for ConfirmStep display
     const subjects = subjectsWithGrades.map(s => ({
       subject_id: s.subject_id,
       subject_name: s.subject_name,
@@ -386,7 +374,6 @@ export default function ParentOnboardingPage() {
     setBusy(true);
     setError(null);
     setInvite(null);
-    setCopied(null);
 
     try {
       const result: any = await rpcParentCreateChildAndPlan(payload);
@@ -416,17 +403,21 @@ export default function ParentOnboardingPage() {
     }
   }
 
-  const inviteUrl = useMemo(() => {
-    if (!invite?.invitation_link) return "";
-    return `${window.location.origin}${invite.invitation_link}`;
-  }, [invite]);
-
   const childDisplayName =
-    child.preferred_name?.trim() || child.first_name?.trim() || "your child";
+    child.preferred_name?.trim() || child.first_name?.trim() || "Your child";
 
   /* ============================
-     Navigation
+     Navigation Handlers
   ============================ */
+  const handleDashboard = useCallback(async () => {
+    setPendingDashboardNav(true);
+    await refresh();
+  }, [refresh]);
+
+  const handleSkip = useCallback(() => {
+    navigate("/parent", { replace: true });
+  }, [navigate]);
+
   const selfNavigatingSteps = [STEPS.SUBJECTS, STEPS.PATHWAYS, STEPS.PRIORITY_GRADES, STEPS.REVISION_PERIOD, STEPS.AVAILABILITY];
   const showDefaultNav = !selfNavigatingSteps.includes(step as typeof STEPS.SUBJECTS) && step < STEPS.INVITE;
 
@@ -610,64 +601,12 @@ export default function ParentOnboardingPage() {
 
       {/* Step 10: Invite */}
       {step === STEPS.INVITE && invite && (
-        <div className="mt-2">
-          <h3 className="text-lg font-semibold">Invite {childDisplayName}</h3>
-          <p className="mt-1 text-sm text-neutral-600">
-            Send this link to your child. They'll set a password and land straight in
-            Today.
-          </p>
-
-          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
-            <div className="text-xs text-neutral-500">Invite link</div>
-            <div className="mt-1 break-all font-medium text-neutral-900">{inviteUrl}</div>
-
-            <div className="mt-4 text-xs text-neutral-500">Invite code</div>
-            <div className="mt-1 font-mono text-base text-neutral-900">{invite.invitation_code}</div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
-                onClick={async () => {
-                  const ok = await copyToClipboard(inviteUrl);
-                  setCopied(ok ? "link" : null);
-                  if (!ok) setError("Could not copy link. Please copy it manually.");
-                }}
-              >
-                Copy link
-              </button>
-
-              <button
-                type="button"
-                className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
-                onClick={async () => {
-                  const ok = await copyToClipboard(invite.invitation_code);
-                  setCopied(ok ? "code" : null);
-                  if (!ok) setError("Could not copy code. Please copy it manually.");
-                }}
-              >
-                Copy code
-              </button>
-
-              <button
-                type="button"
-                className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
-                onClick={async () => {
-                  setPendingDashboardNav(true);
-                  await refresh();
-                }}
-              >
-                Go to dashboard
-              </button>
-            </div>
-
-            {copied && (
-              <div className="mt-3 text-xs text-neutral-600">
-                {copied === "link" ? "Link copied." : "Code copied."}
-              </div>
-            )}
-          </div>
-        </div>
+        <InviteChildStep
+          invite={invite}
+          childName={childDisplayName}
+          onDashboard={handleDashboard}
+          onSkip={handleSkip}
+        />
       )}
     </OnboardingModal>
   );
