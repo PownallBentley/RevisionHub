@@ -18,7 +18,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
 import { fetchTodayData } from "../../services/todayService";
-import type { TodayData, SessionRow, UpcomingDay } from "../../types/today";
+import type { TodayData, SessionRow } from "../../types/today";
 
 // Subject icon mapping
 const SUBJECT_ICONS: Record<string, any> = {
@@ -58,7 +58,6 @@ function formatDayLabel(dateStr: string): string {
     return "Tomorrow";
   }
   
-  // Return day name for dates within a week
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return days[date.getDay()];
 }
@@ -169,7 +168,7 @@ export default function Today() {
   if (error) {
     return (
       <PageLayout bgColor="bg-neutral-100">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-[1120px] mx-auto px-6 py-8">
           <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
             <p className="text-accent-red font-medium">{error}</p>
             <button
@@ -197,7 +196,7 @@ export default function Today() {
           </p>
         </div>
 
-        {/* Gamification Bar - if has data */}
+        {/* Gamification Bar - only show if has meaningful data */}
         {gamification && (gamification.streak.current > 0 || gamification.points.balance > 0) && (
           <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-2xl shadow-soft">
             {gamification.streak.current > 0 && (
@@ -209,7 +208,7 @@ export default function Today() {
             )}
             {gamification.points.balance > 0 && (
               <>
-                <div className="w-px h-6 bg-neutral-200" />
+                {gamification.streak.current > 0 && <div className="w-px h-6 bg-neutral-200" />}
                 <div className="flex items-center gap-2">
                   <FontAwesomeIcon icon={faStar} className="text-accent-amber" />
                   <span className="font-semibold text-neutral-700">{gamification.points.balance}</span>
@@ -250,14 +249,69 @@ export default function Today() {
           ) : (
             <>
               <div className="space-y-4 mb-6">
-                {todaySessions.map((session) => (
-                  <SessionItem
-                    key={session.planned_session_id}
-                    session={session}
-                    isNext={nextSession?.planned_session_id === session.planned_session_id}
-                    onStart={() => handleStartSession(session.planned_session_id)}
-                  />
-                ))}
+                {todaySessions.map((session, index) => {
+                  const isCompleted = session.status === "completed";
+                  const isNext = nextSession?.planned_session_id === session.planned_session_id;
+                  const isScheduled = !isCompleted && !isNext;
+                  
+                  // Container styles - matching design exactly
+                  const containerClass = isNext
+                    ? "bg-primary-50 border-2 border-primary-200"
+                    : "bg-neutral-50";
+                  
+                  // Icon background - matching design exactly
+                  const iconBgClass = isCompleted
+                    ? "bg-primary-100"
+                    : isNext
+                    ? "bg-primary-600"
+                    : "bg-neutral-200";
+                  
+                  // Icon color
+                  const iconColorClass = isNext ? "text-white" : isCompleted ? "text-primary-600" : "text-neutral-500";
+                  
+                  // Topic display
+                  const topicDisplay = session.topic_names?.[0] || "Topic TBD";
+                  
+                  return (
+                    <div
+                      key={session.planned_session_id}
+                      className={`flex items-center justify-between p-4 rounded-xl ${containerClass}`}
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBgClass}`}>
+                          <FontAwesomeIcon
+                            icon={getSubjectIcon(session.subject_name)}
+                            className={iconColorClass}
+                          />
+                        </div>
+                        <div>
+                          <div className="font-medium text-neutral-700">{session.subject_name}</div>
+                          <div className="text-sm text-neutral-500">{topicDisplay}</div>
+                          <div className="text-sm text-neutral-400">
+                            {isNext ? "Any time today" : `${session.session_duration_minutes} mins`}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Status badges - matching design exactly */}
+                      {isCompleted && (
+                        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
+                          Completed
+                        </span>
+                      )}
+                      {isNext && (
+                        <span className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full">
+                          {session.status === "started" ? "Continue" : "Ready"}
+                        </span>
+                      )}
+                      {isScheduled && (
+                        <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
+                          Scheduled
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {nextSession && (
@@ -377,88 +431,5 @@ export default function Today() {
         </div>
       </main>
     </PageLayout>
-  );
-}
-
-/**
- * Session Item Component
- */
-function SessionItem({
-  session,
-  isNext,
-  onStart,
-}: {
-  session: SessionRow;
-  isNext: boolean;
-  onStart: () => void;
-}) {
-  const isCompleted = session.status === "completed";
-  const isStarted = session.status === "started";
-  const isNotStarted = session.status === "not_started";
-  const isReady = isNext && (isNotStarted || isStarted);
-
-  // Determine styles based on state
-  const containerStyles = isReady
-    ? "bg-primary-50 border-2 border-primary-200"
-    : "bg-neutral-50";
-
-  const iconBgStyles = isCompleted
-    ? "bg-accent-green"
-    : isReady
-    ? "bg-primary-600"
-    : "bg-neutral-200";
-
-  const iconColorStyles = isCompleted || isReady ? "text-white" : "text-neutral-500";
-
-  // Get first topic name for display
-  const topicDisplay = session.topic_names?.[0] || "Topic TBD";
-
-  // Status badge
-  const getStatusBadge = () => {
-    if (isCompleted) {
-      return (
-        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
-          Completed
-        </span>
-      );
-    }
-    if (isReady) {
-      return (
-        <button
-          onClick={onStart}
-          className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full hover:bg-primary-700 transition-colors"
-        >
-          {isStarted ? "Continue" : "Ready"}
-        </button>
-      );
-    }
-    return (
-      <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
-        Scheduled
-      </span>
-    );
-  };
-
-  return (
-    <div className={`flex items-center justify-between p-4 rounded-xl ${containerStyles}`}>
-      <div className="flex items-center space-x-4">
-        <div
-          className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBgStyles}`}
-        >
-          <FontAwesomeIcon
-            icon={getSubjectIcon(session.subject_name)}
-            className={iconColorStyles}
-          />
-        </div>
-        <div>
-          <div className="font-medium text-neutral-700">{session.subject_name}</div>
-          <div className="text-sm text-neutral-500">{topicDisplay}</div>
-          <div className="text-sm text-neutral-400">
-            {session.session_duration_minutes} mins
-          </div>
-        </div>
-      </div>
-      {getStatusBadge()}
-    </div>
   );
 }
