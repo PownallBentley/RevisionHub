@@ -84,6 +84,10 @@ export default function RevisionPeriodStep({
 
   const isValid = validationError === null;
 
+  // Ensure we have safe values for controlled inputs
+  const currentScore = revisionPeriod.current_revision_score ?? 3;
+  const pastScore = revisionPeriod.past_revision_score ?? 3;
+
   return (
     <div>
       {/* Header */}
@@ -107,7 +111,7 @@ export default function RevisionPeriodStep({
           <input
             type="date"
             id="start-date"
-            value={revisionPeriod.start_date}
+            value={revisionPeriod.start_date || ''}
             onChange={(e) => handleChange("start_date", e.target.value)}
             className="w-full px-4 py-3 border border-neutral-200 rounded-xl text-neutral-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
           />
@@ -127,9 +131,9 @@ export default function RevisionPeriodStep({
           <input
             type="date"
             id="end-date"
-            value={revisionPeriod.end_date}
+            value={revisionPeriod.end_date || ''}
             onChange={(e) => handleChange("end_date", e.target.value)}
-            min={revisionPeriod.start_date}
+            min={revisionPeriod.start_date || ''}
             className="w-full px-4 py-3 border border-neutral-200 rounded-xl text-neutral-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
           />
           <p className="mt-1.5 text-xs text-neutral-500">
@@ -263,16 +267,16 @@ export default function RevisionPeriodStep({
               id="current-revision"
               min="1"
               max="5"
-              value={revisionPeriod.current_revision_score}
+              value={currentScore}
               onChange={(e) =>
                 handleChange("current_revision_score", parseInt(e.target.value, 10))
               }
               className="w-full h-2 bg-neutral-200 rounded-full appearance-none cursor-pointer accent-primary-600"
               style={{
                 background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${
-                  ((revisionPeriod.current_revision_score - 1) / 4) * 100
+                  ((currentScore - 1) / 4) * 100
                 }%, #E1E4EE ${
-                  ((revisionPeriod.current_revision_score - 1) / 4) * 100
+                  ((currentScore - 1) / 4) * 100
                 }%, #E1E4EE 100%)`,
               }}
             />
@@ -281,7 +285,7 @@ export default function RevisionPeriodStep({
                 <span
                   key={n}
                   className={`text-xs ${
-                    revisionPeriod.current_revision_score === n
+                    currentScore === n
                       ? "text-primary-600 font-semibold"
                       : "text-neutral-400"
                   }`}
@@ -308,7 +312,7 @@ export default function RevisionPeriodStep({
               id="past-revision"
               min="1"
               max="5"
-              value={revisionPeriod.past_revision_score}
+              value={pastScore}
               onChange={(e) =>
                 handleChange("past_revision_score", parseInt(e.target.value, 10))
               }
@@ -320,9 +324,9 @@ export default function RevisionPeriodStep({
                 background: revisionPeriod.is_first_time
                   ? "#E1E4EE"
                   : `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${
-                      ((revisionPeriod.past_revision_score - 1) / 4) * 100
+                      ((pastScore - 1) / 4) * 100
                     }%, #E1E4EE ${
-                      ((revisionPeriod.past_revision_score - 1) / 4) * 100
+                      ((pastScore - 1) / 4) * 100
                     }%, #E1E4EE 100%)`,
               }}
             />
@@ -331,7 +335,7 @@ export default function RevisionPeriodStep({
                 <span
                   key={n}
                   className={`text-xs ${
-                    !revisionPeriod.is_first_time && revisionPeriod.past_revision_score === n
+                    !revisionPeriod.is_first_time && pastScore === n
                       ? "text-primary-600 font-semibold"
                       : "text-neutral-400"
                   }`}
@@ -357,7 +361,7 @@ export default function RevisionPeriodStep({
             </div>
             <input
               type="checkbox"
-              checked={revisionPeriod.is_first_time}
+              checked={revisionPeriod.is_first_time ?? false}
               onChange={(e) => handleChange("is_first_time", e.target.checked)}
               className="sr-only"
             />
