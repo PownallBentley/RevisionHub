@@ -5,7 +5,8 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-import StepShell from "../../components/parentOnboarding/StepShell";
+// CHANGED: Import OnboardingModal instead of StepShell
+import OnboardingModal from "../../components/parentOnboarding/OnboardingModal";
 import ChildDetailsStep, {
   ChildDetails,
 } from "../../components/parentOnboarding/steps/ChildDetailsStep";
@@ -26,7 +27,7 @@ import SubjectPriorityGradesStep, {
 import RevisionPeriodStep, {
   type RevisionPeriodData,
 } from "../../components/parentOnboarding/steps/RevisionPeriodStep";
-import AvailabilityBuilderStep, {
+import AvailabilityBuilderStep,
   type DateOverride,
 } from "../../components/parentOnboarding/steps/AvailabilityBuilderStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
@@ -46,6 +47,7 @@ import { useAuth } from "../../contexts/AuthContext";
 
 /* ============================
    Constants & Helpers
+   (ALL UNCHANGED)
 ============================ */
 
 function createEmptyTemplate(): DayTemplate[] {
@@ -53,7 +55,7 @@ function createEmptyTemplate(): DayTemplate[] {
   return dayNames.map((name, index) => ({
     day_of_week: index,
     day_name: name,
-    is_enabled: index < 5, // Weekdays enabled by default
+    is_enabled: index < 5,
     slots: [],
     session_count: 0,
   }));
@@ -68,7 +70,7 @@ function createDefaultRevisionPeriod(): RevisionPeriodData {
   startDate.setDate(today.getDate() + daysUntilMonday);
   
   const endDate = new Date(startDate);
-  endDate.setDate(startDate.getDate() + 56); // 8 weeks
+  endDate.setDate(startDate.getDate() + 56);
 
   return {
     start_date: startDate.toISOString().split('T')[0],
@@ -103,20 +105,7 @@ async function copyToClipboard(text: string) {
 }
 
 /* ============================
-   Step Configuration
-   
-   ORDER (updated with PATHWAYS step):
-   0. Child Details
-   1. Goal
-   2. Needs
-   3. Exam Type
-   4. Subjects
-   5. Pathways (NEW - tier/option selection)
-   6. Priority & Grades
-   7. Revision Period
-   8. Availability
-   9. Confirm
-   10. Invite
+   Step Configuration (UNCHANGED)
 ============================ */
 
 const STEPS = {
@@ -134,6 +123,27 @@ const STEPS = {
 } as const;
 
 /* ============================
+   NEW: Step display config for modal
+============================ */
+
+const STEP_TITLES: Record<number, string> = {
+  [STEPS.CHILD_DETAILS]: "Add your child",
+  [STEPS.GOAL]: "Set a goal",
+  [STEPS.NEEDS]: "Learning support",
+  [STEPS.EXAM_TYPE]: "Exam type",
+  [STEPS.SUBJECTS]: "Choose subjects",
+  [STEPS.PATHWAYS]: "Subject options",
+  [STEPS.PRIORITY_GRADES]: "Grades & priority",
+  [STEPS.REVISION_PERIOD]: "Revision period",
+  [STEPS.AVAILABILITY]: "Weekly schedule",
+  [STEPS.CONFIRM]: "Review & confirm",
+  [STEPS.INVITE]: "Invite your child",
+};
+
+// Steps shown in progress bar (1-10, excludes INVITE)
+const PROGRESS_STEPS = 10;
+
+/* ============================
    Main Component
 ============================ */
 
@@ -141,10 +151,7 @@ export default function ParentOnboardingPage() {
   const navigate = useNavigate();
   const { refresh, user, parentChildCount } = useAuth();
   
-  // Track if we've completed onboarding (to prevent redirect loops)
   const [, setOnboardingComplete] = useState(false);
-  
-  // Track if we're waiting to navigate to dashboard
   const [pendingDashboardNav, setPendingDashboardNav] = useState(false);
 
   const [step, setStep] = useState(0);
@@ -154,7 +161,7 @@ export default function ParentOnboardingPage() {
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Step 0: Child Details
+  // ALL STATE UNCHANGED
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
     last_name: "",
@@ -163,40 +170,24 @@ export default function ParentOnboardingPage() {
     year_group: 11,
   });
 
-  // Step 1: Goal
   const [goalCode, setGoalCode] = useState<string | undefined>(undefined);
-
-  // Step 2: Needs
   const [needClusters, setNeedClusters] = useState<NeedClusterSelection[]>([]);
-
-  // Step 3: Exam Types
   const [examTypeIds, setExamTypeIds] = useState<string[]>([]);
-
-  // Step 4: Subjects (basic selection)
   const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>([]);
-
-  // Step 5: Pathways (NEW - tier/option selection)
   const [pathwaySelections, setPathwaySelections] = useState<PathwaySelectionData[]>([]);
-
-  // Step 6: Priority & Grades
   const [subjectsWithGrades, setSubjectsWithGrades] = useState<SubjectWithGrades[]>([]);
-
-  // Step 7: Revision Period
   const [revisionPeriod, setRevisionPeriod] = useState<RevisionPeriodData>(
     createDefaultRevisionPeriod()
   );
-
-  // Step 8: Availability
   const [weeklyTemplate, setWeeklyTemplate] = useState<DayTemplate[]>(createEmptyTemplate());
   const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
-
-  // Recommendation state (calculated when entering availability step)
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [, setIsLoadingRecommendation] = useState(false);
 
   /* ============================
-     Navigate to dashboard when auth state confirms child was created
+     ALL useEffects UNCHANGED
   ============================ */
+  
   useEffect(() => {
     if (pendingDashboardNav && parentChildCount !== null && parentChildCount > 0) {
       setPendingDashboardNav(false);
@@ -204,9 +195,6 @@ export default function ParentOnboardingPage() {
     }
   }, [pendingDashboardNav, parentChildCount, navigate]);
 
-  /* ============================
-     Convert subjects to grades format when moving to priority step
-  ============================ */
   useEffect(() => {
     if (step === STEPS.PRIORITY_GRADES && selectedSubjects.length > 0 && subjectsWithGrades.length === 0) {
       const converted: SubjectWithGrades[] = selectedSubjects.map((s, index) => ({
@@ -222,9 +210,6 @@ export default function ParentOnboardingPage() {
     }
   }, [step, selectedSubjects, subjectsWithGrades.length]);
 
-  /* ============================
-     Calculate recommendations when entering availability step
-  ============================ */
   const calculateRecommendations = useCallback(async () => {
     if (subjectsWithGrades.length === 0 || !goalCode) return;
 
@@ -262,10 +247,9 @@ export default function ParentOnboardingPage() {
   }, [step, subjectsWithGrades, goalCode, recommendation, calculateRecommendations]);
 
   /* ============================
-     Build payload for RPC (includes pathway_selections)
+     payload useMemo UNCHANGED
   ============================ */
   const payload = useMemo(() => {
-    // Build weekly_availability in new format
     const weekly_availability: Record<string, {
       enabled: boolean;
       slots: Array<{
@@ -284,7 +268,6 @@ export default function ParentOnboardingPage() {
       };
     }
 
-    // Build subjects in new format (with grades)
     const subjects = subjectsWithGrades.map(s => ({
       subject_id: s.subject_id,
       sort_order: s.sort_order,
@@ -293,12 +276,10 @@ export default function ParentOnboardingPage() {
       grade_confidence: s.grade_confidence,
     }));
 
-    // Build need_clusters
     const need_clusters = needClusters.map((nc) => ({
       cluster_code: nc.cluster_code,
     }));
 
-    // Build pathway_selections (filter out 'skipped' markers for RPC)
     const pathway_selections = pathwaySelections
       .filter(ps => ps.pathway_id !== 'skipped')
       .map(ps => ({
@@ -325,7 +306,7 @@ export default function ParentOnboardingPage() {
   }, [child, goalCode, subjectsWithGrades, needClusters, pathwaySelections, revisionPeriod, weeklyTemplate, dateOverrides]);
 
   /* ============================
-     Validation
+     canNext useMemo UNCHANGED
   ============================ */
   const canNext = useMemo(() => {
     switch (step) {
@@ -334,13 +315,13 @@ export default function ParentOnboardingPage() {
       case STEPS.GOAL:
         return !!goalCode;
       case STEPS.NEEDS:
-        return true; // Optional step
+        return true;
       case STEPS.EXAM_TYPE:
         return normaliseStringArray(examTypeIds).length > 0;
       case STEPS.SUBJECTS:
-        return true; // SubjectBoardStep owns its nav
+        return true;
       case STEPS.PATHWAYS:
-        return true; // PathwaySelectionStep owns its nav
+        return true;
       case STEPS.PRIORITY_GRADES:
         return subjectsWithGrades.length > 0 && subjectsWithGrades.every(s => s.target_grade !== null);
       case STEPS.REVISION_PERIOD:
@@ -352,6 +333,9 @@ export default function ParentOnboardingPage() {
     }
   }, [step, child.first_name, goalCode, examTypeIds, subjectsWithGrades, revisionPeriod, weeklyTemplate]);
 
+  /* ============================
+     ALL validation & submit functions UNCHANGED
+  ============================ */
   function validatePayload(): string | null {
     if (!payload.child?.first_name?.trim()) {
       return "Please enter your child's first name.";
@@ -443,14 +427,12 @@ export default function ParentOnboardingPage() {
   const childDisplayName =
     child.preferred_name?.trim() || child.first_name?.trim() || "your child";
 
-  // Steps that manage their own navigation
+  /* ============================
+     ALL navigation handlers UNCHANGED
+  ============================ */
   const selfNavigatingSteps = [STEPS.SUBJECTS, STEPS.PATHWAYS, STEPS.PRIORITY_GRADES, STEPS.REVISION_PERIOD, STEPS.AVAILABILITY];
   const showDefaultNav = !selfNavigatingSteps.includes(step as typeof STEPS.SUBJECTS) && step < STEPS.INVITE;
 
-  /* ============================
-     Step-specific navigation handlers
-  ============================ */
-  
   const handlePathwaysNext = useCallback(() => {
     setError(null);
     setSubjectsWithGrades([]);
@@ -489,22 +471,47 @@ export default function ParentOnboardingPage() {
     setStep(STEPS.REVISION_PERIOD);
   }, []);
 
-  /* ============================
-     Subject IDs for pathway lookup
-  ============================ */
   const subjectIdsForPathways = useMemo(() => {
     return selectedSubjects.map(s => s.subject_id);
   }, [selectedSubjects]);
 
   /* ============================
-     Render
+     CHANGED: Render with OnboardingModal
   ============================ */
 
+  // Calculate display step (1-based) for progress bar
+  const displayStep = Math.min(step + 1, PROGRESS_STEPS);
+  const showProgress = step < STEPS.INVITE;
+
+  // Determine button labels
+  const continueLabel = step === STEPS.NEEDS && needClusters.length === 0 ? "Skip" : "Continue";
+
   return (
-    <StepShell
-      title="Set up your child's revision plan"
-      subtitle="A few steps. You can change things later."
+    <OnboardingModal
+      title={STEP_TITLES[step] ?? "Set up revision plan"}
+      currentStep={displayStep}
+      totalSteps={PROGRESS_STEPS}
+      showProgress={showProgress}
       error={error}
+      onClose={() => navigate("/")}
+      backButton={
+        showDefaultNav
+          ? {
+              disabled: step === 0 || busy,
+              onClick: () => setStep((s) => Math.max(0, s - 1)),
+            }
+          : null
+      }
+      continueButton={
+        showDefaultNav && step < STEPS.CONFIRM
+          ? {
+              label: continueLabel,
+              disabled: !canNext || busy,
+              loading: busy,
+              onClick: () => setStep((s) => Math.min(STEPS.CONFIRM, s + 1)),
+            }
+          : null
+      }
     >
       {/* Step 0: Child Details */}
       {step === STEPS.CHILD_DETAILS && (
@@ -555,7 +562,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 5: Pathway Selection (tier/option selection) */}
+      {/* Step 5: Pathway Selection (self-navigating) */}
       {step === STEPS.PATHWAYS && (
         <PathwaySelectionStep
           subjectIds={subjectIdsForPathways}
@@ -566,7 +573,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 6: Priority & Grades */}
+      {/* Step 6: Priority & Grades (self-navigating) */}
       {step === STEPS.PRIORITY_GRADES && (
         <SubjectPriorityGradesStep
           subjects={subjectsWithGrades}
@@ -576,7 +583,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 7: Revision Period */}
+      {/* Step 7: Revision Period (self-navigating) */}
       {step === STEPS.REVISION_PERIOD && (
         <RevisionPeriodStep
           revisionPeriod={revisionPeriod}
@@ -586,7 +593,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 8: Availability */}
+      {/* Step 8: Availability (self-navigating) */}
       {step === STEPS.AVAILABILITY && (
         <AvailabilityBuilderStep
           weeklyTemplate={weeklyTemplate}
@@ -609,22 +616,22 @@ export default function ParentOnboardingPage() {
       {step === STEPS.INVITE && invite && (
         <div className="mt-2">
           <h3 className="text-lg font-semibold">Invite {childDisplayName}</h3>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-neutral-600">
             Send this link to your child. They'll set a password and land straight in
             Today.
           </p>
 
-          <div className="mt-4 rounded-xl border bg-white p-4">
-            <div className="text-xs text-gray-500">Invite link</div>
-            <div className="mt-1 break-all font-medium">{inviteUrl}</div>
+          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+            <div className="text-xs text-neutral-500">Invite link</div>
+            <div className="mt-1 break-all font-medium text-neutral-900">{inviteUrl}</div>
 
-            <div className="mt-4 text-xs text-gray-500">Invite code</div>
-            <div className="mt-1 font-mono text-base">{invite.invitation_code}</div>
+            <div className="mt-4 text-xs text-neutral-500">Invite code</div>
+            <div className="mt-1 font-mono text-base text-neutral-900">{invite.invitation_code}</div>
 
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-lg bg-black px-4 py-2 text-sm text-white"
+                className="rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
                 onClick={async () => {
                   const ok = await copyToClipboard(inviteUrl);
                   setCopied(ok ? "link" : null);
@@ -636,7 +643,7 @@ export default function ParentOnboardingPage() {
 
               <button
                 type="button"
-                className="rounded-lg border px-4 py-2 text-sm"
+                className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
                 onClick={async () => {
                   const ok = await copyToClipboard(invite.invitation_code);
                   setCopied(ok ? "code" : null);
@@ -648,7 +655,7 @@ export default function ParentOnboardingPage() {
 
               <button
                 type="button"
-                className="rounded-lg border px-4 py-2 text-sm"
+                className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
                 onClick={async () => {
                   setPendingDashboardNav(true);
                   await refresh();
@@ -659,38 +666,13 @@ export default function ParentOnboardingPage() {
             </div>
 
             {copied && (
-              <div className="mt-3 text-xs text-gray-600">
+              <div className="mt-3 text-xs text-neutral-600">
                 {copied === "link" ? "Link copied." : "Code copied."}
               </div>
             )}
           </div>
         </div>
       )}
-
-      {/* Default navigation for steps that don't manage their own */}
-      {showDefaultNav && (
-        <div className="mt-6 flex items-center justify-between">
-          <button
-            type="button"
-            className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
-            disabled={step === 0 || busy}
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-          >
-            Back
-          </button>
-
-          {step < STEPS.CONFIRM ? (
-            <button
-              type="button"
-              className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-              disabled={!canNext || busy}
-              onClick={() => setStep((s) => Math.min(STEPS.CONFIRM, s + 1))}
-            >
-              {step === STEPS.NEEDS && needClusters.length === 0 ? "Skip" : "Next"}
-            </button>
-          ) : null}
-        </div>
-      )}
-    </StepShell>
+    </OnboardingModal>
   );
 }
