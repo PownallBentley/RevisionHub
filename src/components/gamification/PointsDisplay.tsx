@@ -1,6 +1,6 @@
+// src/components/gamification/PointsDisplay.tsx
 
-
-import { getLevelInfo } from "./gamificationService";
+import { getLevelInfo, formatPoints } from "../../services/gamificationService";
 
 type PointsDisplayProps = {
   balance: number;
@@ -17,8 +17,8 @@ export default function PointsDisplay({
   size = "md",
   animated = false,
 }: PointsDisplayProps) {
-  const level = calculateLevel(lifetime);
-
+  const level = getLevelInfo(lifetime);
+  
   const sizeClasses = {
     sm: {
       container: "px-3 py-1.5",
@@ -39,9 +39,9 @@ export default function PointsDisplay({
       label: "text-sm",
     },
   };
-
+  
   const classes = sizeClasses[size];
-
+  
   return (
     <div
       className={`inline-flex items-center gap-2 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl ${classes.container} ${
@@ -65,7 +65,7 @@ export default function PointsDisplay({
           </text>
         </svg>
       </div>
-
+      
       {/* Points value */}
       <div className="flex flex-col">
         <span className={`font-bold text-amber-700 ${classes.points}`}>
