@@ -49,6 +49,9 @@ export interface ChildSummary {
   week_topics_covered: number;
   prev_week_sessions_completed: number;
   gamification: ChildGamification;
+  // Invitation fields
+  has_signed_up: boolean;
+  invitation_code: string | null;
 }
 
 export interface WeekSummary {
