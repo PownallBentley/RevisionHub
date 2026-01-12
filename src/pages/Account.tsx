@@ -16,16 +16,10 @@ import {
   faTimes,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { PageLayout } from "../components/layout";
 import { supabase } from "../lib/supabase";
 import AvatarUpload from "../components/account/AvatarUpload";
 import AnalyticsSharingCard from "../components/account/AnalyticsSharingCard";
-
-// Design system colors
-const COLORS = {
-  primary: { 50: "#F7F4FF", 100: "#EAE3FF", 600: "#5B2CFF", 700: "#4520C5" },
-  neutral: { 50: "#F9FAFC", 100: "#F6F7FB", 200: "#E1E4EE", 500: "#6C7280", 600: "#4B5161", 700: "#1F2330" },
-  accent: { green: "#1EC592", amber: "#FFB547", red: "#F05151" },
-};
 
 interface ProfileData {
   full_name: string;
@@ -431,12 +425,14 @@ export default function Account() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <div className="min-h-[calc(100vh-73px)] flex items-center justify-center" style={{ backgroundColor: COLORS.neutral[100] }}>
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: COLORS.primary[600] }} />
-          <p className="text-sm" style={{ color: COLORS.neutral[600] }}>Loading account...</p>
+      <PageLayout>
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Loading account...</p>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -447,25 +443,25 @@ export default function Account() {
   const userId = isParent ? user.id : childId;
 
   return (
-    <div className="min-h-[calc(100vh-73px)]" style={{ backgroundColor: COLORS.neutral[100] }}>
+    <PageLayout>
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2" style={{ color: COLORS.primary[600] }}>
+          <h1 className="text-2xl font-bold mb-2 text-primary-600">
             My Account
           </h1>
-          <p style={{ color: COLORS.neutral[500] }}>
+          <p className="text-neutral-500">
             Manage your profile and preferences
           </p>
         </div>
 
         {/* Error banner */}
         {error && (
-          <div className="mb-6 p-4 rounded-xl flex items-center gap-3" style={{ backgroundColor: "#FEE2E2", border: "1px solid #FECACA" }}>
-            <FontAwesomeIcon icon={faExclamationTriangle} style={{ color: COLORS.accent.red }} />
-            <p className="text-sm" style={{ color: COLORS.accent.red }}>{error}</p>
+          <div className="mb-6 p-4 rounded-xl flex items-center gap-3 bg-red-50 border border-red-200">
+            <FontAwesomeIcon icon={faExclamationTriangle} className="text-accent-red" />
+            <p className="text-sm text-accent-red">{error}</p>
             <button onClick={() => setError(null)} className="ml-auto">
-              <FontAwesomeIcon icon={faTimes} style={{ color: COLORS.accent.red }} />
+              <FontAwesomeIcon icon={faTimes} className="text-accent-red" />
             </button>
           </div>
         )}
@@ -474,7 +470,7 @@ export default function Account() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column - Avatar */}
           <div className="lg:col-span-1">
-            <div className="rounded-2xl p-6 sticky top-6" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+            <div className="bg-white rounded-2xl shadow-card p-6 sticky top-6">
               <AvatarUpload
                 currentAvatarUrl={avatarUrl || null}
                 userId={userId || ""}
@@ -484,11 +480,11 @@ export default function Account() {
               />
               
               {/* Display name under avatar */}
-              <div className="text-center mt-4 pt-4 border-t" style={{ borderColor: COLORS.neutral[200] }}>
-                <h2 className="text-lg font-semibold" style={{ color: COLORS.neutral[700] }}>
+              <div className="text-center mt-4 pt-4 border-t border-neutral-200">
+                <h2 className="text-lg font-semibold text-neutral-700">
                   {displayName}
                 </h2>
-                <p className="text-sm" style={{ color: COLORS.neutral[500] }}>
+                <p className="text-sm text-neutral-500">
                   {isParent ? "Parent Account" : "Student Account"}
                 </p>
               </div>
@@ -589,19 +585,16 @@ export default function Account() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block" style={{ color: COLORS.neutral[700] }}>
+                    <label className="text-sm font-medium mb-1 block text-neutral-700">
                       Time zone
                     </label>
                     <select
                       value={parentData.timezone}
                       onChange={(e) => setParentData({ ...parentData, timezone: e.target.value })}
                       disabled={!editingAddress}
-                      className="w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 disabled:cursor-not-allowed"
-                      style={{ 
-                        borderColor: COLORS.neutral[200], 
-                        backgroundColor: editingAddress ? COLORS.neutral[50] : COLORS.neutral[100],
-                        color: editingAddress ? COLORS.neutral[700] : COLORS.neutral[500]
-                      }}
+                      className={`w-full px-4 py-2.5 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:cursor-not-allowed transition-colors ${
+                        editingAddress ? "bg-neutral-50 text-neutral-700" : "bg-neutral-100 text-neutral-500"
+                      }`}
                     >
                       <option value="Europe/London">Europe/London (GMT/BST)</option>
                       <option value="Europe/Paris">Europe/Paris (CET)</option>
@@ -707,24 +700,23 @@ export default function Account() {
             </SectionCard>
 
             {/* Security Section */}
-            <div className="rounded-2xl p-6" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+            <div className="bg-white rounded-2xl shadow-card p-6">
               <div className="flex items-center gap-3 mb-6">
-                <FontAwesomeIcon icon={faLock} style={{ color: COLORS.primary[600] }} />
-                <h2 className="text-lg font-semibold" style={{ color: COLORS.neutral[700] }}>Security</h2>
+                <FontAwesomeIcon icon={faLock} className="text-primary-600" />
+                <h2 className="text-lg font-semibold text-neutral-700">Security</h2>
               </div>
 
               {passwordSuccess && (
-                <div className="mb-4 p-3 rounded-xl flex items-center gap-2" style={{ backgroundColor: "#D1FAE5" }}>
-                  <FontAwesomeIcon icon={faCheck} style={{ color: COLORS.accent.green }} />
-                  <p className="text-sm" style={{ color: "#065F46" }}>Password changed successfully</p>
+                <div className="mb-4 p-3 rounded-xl flex items-center gap-2 bg-green-100">
+                  <FontAwesomeIcon icon={faCheck} className="text-accent-green" />
+                  <p className="text-sm text-green-800">Password changed successfully</p>
                 </div>
               )}
 
               {!showPasswordForm ? (
                 <button
                   onClick={() => setShowPasswordForm(true)}
-                  className="text-sm font-medium hover:underline"
-                  style={{ color: COLORS.primary[600] }}
+                  className="text-sm font-medium text-primary-600 hover:underline"
                 >
                   Change password
                 </button>
@@ -743,7 +735,7 @@ export default function Account() {
                     onChange={setConfirmPassword}
                   />
                   {passwordError && (
-                    <p className="text-sm" style={{ color: COLORS.accent.red }}>{passwordError}</p>
+                    <p className="text-sm text-accent-red">{passwordError}</p>
                   )}
                   <div className="flex gap-3">
                     <button
@@ -753,16 +745,14 @@ export default function Account() {
                         setConfirmPassword("");
                         setPasswordError(null);
                       }}
-                      className="px-4 py-2 rounded-xl border font-medium"
-                      style={{ borderColor: COLORS.neutral[200], color: COLORS.neutral[700] }}
+                      className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handlePasswordChange}
                       disabled={savingPassword}
-                      className="px-4 py-2 rounded-xl text-white font-medium flex items-center gap-2"
-                      style={{ backgroundColor: COLORS.primary[600] }}
+                      className="px-4 py-2 rounded-xl bg-primary-600 text-white font-medium flex items-center gap-2 hover:bg-primary-700 transition-colors"
                     >
                       {savingPassword && <FontAwesomeIcon icon={faSpinner} className="animate-spin" />}
                       Update password
@@ -773,35 +763,33 @@ export default function Account() {
             </div>
 
             {/* Danger Zone */}
-            <div className="rounded-2xl p-6 border-2" style={{ borderColor: COLORS.accent.red, backgroundColor: "#FEF2F2" }}>
+            <div className="rounded-2xl p-6 border-2 border-accent-red bg-red-50">
               <div className="flex items-center gap-3 mb-4">
-                <FontAwesomeIcon icon={faTrash} style={{ color: COLORS.accent.red }} />
-                <h2 className="text-lg font-semibold" style={{ color: COLORS.accent.red }}>Danger Zone</h2>
+                <FontAwesomeIcon icon={faTrash} className="text-accent-red" />
+                <h2 className="text-lg font-semibold text-accent-red">Danger Zone</h2>
               </div>
 
-              <p className="text-sm mb-4" style={{ color: COLORS.neutral[600] }}>
+              <p className="text-sm text-neutral-600 mb-4">
                 Once you delete your account, there is no going back. All your data will be permanently removed.
               </p>
 
               {!showDeleteConfirm ? (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="px-4 py-2 rounded-xl border-2 font-medium hover:bg-red-100 transition-colors"
-                  style={{ borderColor: COLORS.accent.red, color: COLORS.accent.red }}
+                  className="px-4 py-2 rounded-xl border-2 border-accent-red text-accent-red font-medium hover:bg-red-100 transition-colors"
                 >
                   Delete my account
                 </button>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-sm font-medium" style={{ color: COLORS.accent.red }}>
+                  <p className="text-sm font-medium text-accent-red">
                     Type "DELETE" to confirm:
                   </p>
                   <input
                     type="text"
                     value={deleteConfirmText}
                     onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border focus:outline-none"
-                    style={{ borderColor: COLORS.accent.red }}
+                    className="w-full px-4 py-2.5 rounded-xl border border-accent-red focus:outline-none"
                   />
                   <div className="flex gap-3">
                     <button
@@ -809,15 +797,13 @@ export default function Account() {
                         setShowDeleteConfirm(false);
                         setDeleteConfirmText("");
                       }}
-                      className="px-4 py-2 rounded-xl border font-medium"
-                      style={{ borderColor: COLORS.neutral[200], color: COLORS.neutral[700] }}
+                      className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       disabled={deleteConfirmText !== "DELETE"}
-                      className="px-4 py-2 rounded-xl text-white font-medium disabled:opacity-50"
-                      style={{ backgroundColor: COLORS.accent.red }}
+                      className="px-4 py-2 rounded-xl bg-accent-red text-white font-medium disabled:opacity-50"
                     >
                       Permanently delete account
                     </button>
@@ -828,7 +814,7 @@ export default function Account() {
           </div>
         </div>
       </main>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -853,18 +839,17 @@ function SectionCard({
   onCancel: () => void;
 }) {
   return (
-    <div className="rounded-2xl p-6" style={{ backgroundColor: "#FFFFFF", boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+    <div className="bg-white rounded-2xl shadow-card p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <FontAwesomeIcon icon={icon} style={{ color: "#5B2CFF" }} />
-          <h2 className="text-lg font-semibold" style={{ color: "#1F2330" }}>{title}</h2>
+          <FontAwesomeIcon icon={icon} className="text-primary-600" />
+          <h2 className="text-lg font-semibold text-neutral-700">{title}</h2>
         </div>
         
         {!editing ? (
           <button
             onClick={onEdit}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-            style={{ color: "#5B2CFF" }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-primary-600 hover:bg-neutral-50 transition-colors"
           >
             <FontAwesomeIcon icon={faPen} className="text-xs" />
             Edit
@@ -874,16 +859,14 @@ function SectionCard({
             <button
               onClick={onCancel}
               disabled={saving}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
-              style={{ borderColor: "#E1E4EE", color: "#4B5161" }}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-neutral-200 text-neutral-600 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={onSave}
               disabled={saving}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-colors"
-              style={{ backgroundColor: "#1EC592" }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-accent-green transition-colors"
             >
               {saving ? (
                 <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
@@ -921,7 +904,7 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="text-sm font-medium mb-1 block" style={{ color: "#1F2330" }}>
+      <label className="text-sm font-medium mb-1 block text-neutral-700">
         {label}
       </label>
       <input
@@ -930,15 +913,12 @@ function FormField({
         onChange={(e) => onChange?.(e.target.value)}
         disabled={disabled}
         placeholder={placeholder}
-        className="w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 disabled:cursor-not-allowed transition-colors"
-        style={{ 
-          borderColor: "#E1E4EE", 
-          backgroundColor: disabled ? "#F6F7FB" : "#F9FAFC",
-          color: disabled ? "#6C7280" : "#1F2330",
-        }}
+        className={`w-full px-4 py-2.5 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-600 disabled:cursor-not-allowed transition-colors ${
+          disabled ? "bg-neutral-100 text-neutral-500" : "bg-neutral-50 text-neutral-700"
+        }`}
       />
       {hint && (
-        <p className="text-xs mt-1" style={{ color: "#6C7280" }}>{hint}</p>
+        <p className="text-xs mt-1 text-neutral-500">{hint}</p>
       )}
     </div>
   );
@@ -962,18 +942,18 @@ function NotificationToggle({
 }) {
   return (
     <div
-      className={`flex items-center justify-between p-4 rounded-xl transition-colors ${dimmed ? "opacity-50" : ""}`}
-      style={{ backgroundColor: "#F9FAFC" }}
+      className={`flex items-center justify-between p-4 rounded-xl bg-neutral-50 transition-colors ${dimmed ? "opacity-50" : ""}`}
     >
       <div>
-        <p className="text-sm font-medium" style={{ color: "#1F2330" }}>{label}</p>
-        <p className="text-xs" style={{ color: "#6C7280" }}>{description}</p>
+        <p className="text-sm font-medium text-neutral-700">{label}</p>
+        <p className="text-xs text-neutral-500">{description}</p>
       </div>
       <button
         onClick={() => !disabled && onChange(!enabled)}
         disabled={disabled}
-        className={`relative w-11 h-6 rounded-full transition-colors ${disabled && !dimmed ? "cursor-not-allowed" : ""}`}
-        style={{ backgroundColor: enabled ? "#1EC592" : "#E1E4EE" }}
+        className={`relative w-11 h-6 rounded-full transition-colors ${disabled && !dimmed ? "cursor-not-allowed" : ""} ${
+          enabled ? "bg-accent-green" : "bg-neutral-200"
+        }`}
       >
         <div
           className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
