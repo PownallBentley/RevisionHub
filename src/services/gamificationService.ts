@@ -1,5 +1,7 @@
 // src/services/gamificationService.ts
 
+import { supabase } from "../lib/supabase";
+
 /**
  * Get emoji/icon for achievement based on icon code
  */
@@ -150,4 +152,23 @@ export function getStreakColorScheme(streak: number): { bg: string; text: string
   }
   // 14+ days
   return { bg: "bg-gradient-to-r from-amber-100 to-orange-100", text: "text-orange-800" };
+}
+
+/**
+ * Mark achievements as notified (user has seen them)
+ */
+export async function markAchievementsNotified(childId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("child_achievements")
+      .update({ notified_at: new Date().toISOString() })
+      .eq("child_id", childId)
+      .is("notified_at", null);
+
+    if (error) {
+      console.error("[gamificationService] markAchievementsNotified error:", error);
+    }
+  } catch (e) {
+    console.error("[gamificationService] markAchievementsNotified exception:", e);
+  }
 }
