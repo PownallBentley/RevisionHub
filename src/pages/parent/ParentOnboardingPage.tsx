@@ -27,7 +27,7 @@ import SubjectPriorityGradesStep, {
 import RevisionPeriodStep, {
   type RevisionPeriodData,
 } from "../../components/parentOnboarding/steps/RevisionPeriodStep";
-import AvailabilityBuilderStep,
+import AvailabilityBuilderStep,{
   type DateOverride,
 } from "../../components/parentOnboarding/steps/AvailabilityBuilderStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
