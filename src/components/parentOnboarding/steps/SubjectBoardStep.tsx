@@ -42,7 +42,7 @@ type ExamTypeInfo = {
 };
 
 /* ============================
-   Helpers (UNCHANGED LOGIC)
+   Helpers
 ============================ */
 
 function uniq(ids: string[]) {
@@ -62,6 +62,18 @@ function normaliseNotSureLabel(name: string) {
     n.includes("not sure");
 
   return { isNotSure, label: isNotSure ? "I'm not sure" : raw };
+}
+
+/**
+ * Database stores icon as "book", "calculator", etc.
+ * We need to prefix with "fa-" for Font Awesome.
+ */
+function formatIcon(dbIcon: string | null): string {
+  if (!dbIcon) return "fa-book";
+  // If already has fa- prefix, return as-is
+  if (dbIcon.startsWith("fa-")) return dbIcon;
+  // Otherwise add the prefix
+  return `fa-${dbIcon}`;
 }
 
 /* ============================
@@ -101,7 +113,6 @@ export default function SubjectBoardStep(props: Props) {
       setError(null);
 
       try {
-        // Fetch exam type names and subjects in parallel
         const [allExamTypes, rows] = await Promise.all([
           listExamTypes(),
           rpcListSubjectGroupsForExamTypes(ids),
@@ -109,7 +120,6 @@ export default function SubjectBoardStep(props: Props) {
 
         if (cancelled) return;
 
-        // Filter to only the selected exam types and preserve order
         const selectedExamTypes = ids
           .map((id) => {
             const et = allExamTypes.find((e) => String(e.id) === String(id));
@@ -159,6 +169,27 @@ export default function SubjectBoardStep(props: Props) {
     return map;
   }, [selected]);
 
+  function getGroupKey(group: SubjectGroupRow): string {
+    return `${String(group.exam_type_id)}|${String(group.subject_name)}`;
+  }
+
+  function isGroupSelected(group: SubjectGroupRow): boolean {
+    return selectedByGroupKey.has(getGroupKey(group));
+  }
+
+  function handleSubjectClick(group: SubjectGroupRow) {
+    const key = getGroupKey(group);
+    
+    // If already selected, toggle it off (deselect)
+    if (selectedByGroupKey.has(key)) {
+      removeSelection(String(group.exam_type_id), String(group.subject_name));
+      return;
+    }
+    
+    // Otherwise open the board selection modal
+    openBoardModal(group);
+  }
+
   function openBoardModal(group: SubjectGroupRow) {
     setModalCtx({
       exam_type_id: String(group.exam_type_id),
@@ -173,11 +204,6 @@ export default function SubjectBoardStep(props: Props) {
   function closeModal() {
     setModalOpen(false);
     setModalCtx(null);
-  }
-
-  function isGroupSelected(group: SubjectGroupRow): boolean {
-    const key = `${String(group.exam_type_id)}|${String(group.subject_name)}`;
-    return selectedByGroupKey.has(key);
   }
 
   function removeSelection(examTypeId: string, subjectName: string) {
@@ -246,7 +272,7 @@ export default function SubjectBoardStep(props: Props) {
               Select subjects
             </h2>
             <p className="text-neutral-500 text-sm leading-relaxed">
-              Choose a subject, then pick the exam board.
+              Choose a subject, then pick the exam board. Click again to deselect.
             </p>
           </div>
 
@@ -292,7 +318,7 @@ export default function SubjectBoardStep(props: Props) {
         </div>
       )}
 
-      {/* Subjects grid - 2 columns for better readability */}
+      {/* Subjects grid - 2 columns */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-700 mb-4">Available subjects</label>
 
@@ -307,15 +333,15 @@ export default function SubjectBoardStep(props: Props) {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
 
-              // Use icon and color from database
-              const icon = (g as any).icon || "fa-book";
-              const color = (g as any).color || "#9A84FF";
+              // Use icon and color from database - format icon with fa- prefix
+              const icon = formatIcon((g as any).icon);
+              const color = (g as any).color || "#7C3AED";
 
               return (
                 <button
                   key={`${String(g.exam_type_id)}:${String(g.subject_name)}`}
                   type="button"
-                  onClick={() => openBoardModal(g)}
+                  onClick={() => handleSubjectClick(g)}
                   className={`border-2 rounded-xl p-4 text-left transition-all hover:shadow-soft ${
                     selectedFlag
                       ? "border-primary-600 bg-primary-50"
@@ -335,7 +361,7 @@ export default function SubjectBoardStep(props: Props) {
                         />
                       </div>
 
-                      {/* Subject name - full width, wraps if needed */}
+                      {/* Subject name */}
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-neutral-900 leading-tight">
                           {String(g.subject_name)}
@@ -376,7 +402,6 @@ export default function SubjectBoardStep(props: Props) {
             <p className="text-sm text-neutral-400">No subjects selected yet.</p>
           ) : (
             allSelectedSubjects.map((s) => {
-              // Find exam type name for this selection
               const etName = examTypes.find((et) => et.id === s.exam_type_id)?.name ?? "";
 
               return (
@@ -389,8 +414,12 @@ export default function SubjectBoardStep(props: Props) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => removeSelection(s.exam_type_id, s.subject_name)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeSelection(s.exam_type_id, s.subject_name);
+                    }}
                     className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
+                    aria-label={`Remove ${s.subject_name}`}
                   >
                     <i className="fa-solid fa-xmark text-xs" />
                   </button>
@@ -433,7 +462,7 @@ export default function SubjectBoardStep(props: Props) {
                   {modalCtx.subject_name}
                 </div>
                 <p className="mt-2 text-sm text-neutral-500">
-                  You can always add it later if you're not sure.
+                  You can always change this later if you're not sure.
                 </p>
               </div>
               <button
