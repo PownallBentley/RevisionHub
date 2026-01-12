@@ -7,7 +7,6 @@ import {
   faBookOpen,
   faChevronDown,
   faSignOutAlt,
-  faCog,
   faUser,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
@@ -21,7 +20,7 @@ function getInitials(name: string | null | undefined): string {
 }
 
 function getDisplayName(profile: any, isChild: boolean): string {
-  if (!profile) return "";
+  if (!profile) return "User";
 
   if (isChild) {
     return profile.preferred_name || profile.first_name || "Student";
@@ -33,19 +32,16 @@ function getDisplayName(profile: any, isChild: boolean): string {
   if (profile.email) {
     return profile.email.split("@")[0];
   }
-  return "Parent";
+  return "User";
 }
 
 export default function AppHeader() {
   const navigate = useNavigate();
-  const { profile, isChild, isParent, loading, signOut } = useAuth();
+  const { user, profile, isChild, isParent, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Only show logged-in state when user role is resolved (isParent or isChild)
-  // If user exists but role not resolved (isUnresolved), treat as logged out
-  const isLoggedIn = isParent || isChild;
-  
+  const isLoggedIn = !!user;
   const displayName = getDisplayName(profile, isChild);
   const initials = getInitials(displayName);
 
@@ -80,9 +76,6 @@ export default function AppHeader() {
     ? "bg-gradient-to-br from-indigo-400 to-purple-500"
     : "bg-brand-purple";
 
-  // Get avatar URL from profile if available
-  const avatarUrl = profile?.avatar_url;
-
   return (
     <header className={`${headerBg} border-b sticky top-0 z-50`}>
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -115,11 +108,7 @@ export default function AppHeader() {
         </div>
 
         {/* Right side */}
-        {loading ? (
-          // Loading state - show nothing or a subtle loading indicator
-          <div className="w-24 h-9 bg-gray-100 rounded-xl animate-pulse" />
-        ) : !isLoggedIn ? (
-          // Logged out (including unresolved state) - show login/signup buttons
+        {!isLoggedIn ? (
           <div className="flex items-center gap-2">
             <Link
               to="/login"
@@ -135,26 +124,17 @@ export default function AppHeader() {
             </Link>
           </div>
         ) : (
-          // Logged in with resolved role
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/50 transition-colors"
             >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="w-9 h-9 rounded-full object-cover"
-                />
-              ) : (
-                <div
-                  className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center text-white text-sm font-semibold`}
-                >
-                  {initials}
-                </div>
-              )}
+              <div
+                className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center text-white text-sm font-semibold`}
+              >
+                {initials}
+              </div>
               <span className="text-sm font-medium text-gray-700 hidden sm:block">
                 {displayName}
               </span>
@@ -170,20 +150,6 @@ export default function AppHeader() {
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
                 {!isChild && (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        navigate("/settings");
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <FontAwesomeIcon
-                        icon={faCog}
-                        className="text-gray-400 w-4"
-                      />
-                      Settings
-                    </button>
                     <button
                       type="button"
                       onClick={() => {
