@@ -1,7 +1,7 @@
 // src/services/todayService.ts
 
 import { supabase } from "../lib/supabase";
-import { calculateLevel } from "./gamificationService";
+import { getLevelInfo } from "./gamificationService";
 import { todayIsoDate, addDays } from "../utils/dateUtils";
 import type { SessionRow, UpcomingDay, TodayData, ChildGamificationData } from "../types/today";
 
@@ -131,7 +131,7 @@ async function fetchChildGamification(
       return { data: null, error: null };
     }
 
-    const level = calculateLevel(data.points?.lifetime ?? 0);
+  const level = getLevelInfo(data.points?.lifetime ?? 0);
 
     // Get most recent achievement
     const recentAchievement = data.achievements?.recent?.[0] ?? null;
