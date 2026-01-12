@@ -21,6 +21,9 @@ export default function ParentNav() {
       <NavLink to="/parent/timetable" className={navLinkClass}>
         Timetable
       </NavLink>
+       <NavLink to="/parent/insights" className={navLinkClass}>
+        Insights
+      </NavLink>
     </nav>
   );
 }
