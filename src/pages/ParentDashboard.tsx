@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEllipsis } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
+import { PageLayout } from "../components/layout";
 import { fetchParentDashboard } from "../services/parentDashboardService";
 import type { ParentDashboardData } from "../types/parentDashboard";
 import {
@@ -87,12 +88,14 @@ export default function ParentDashboard() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <div className="min-h-[calc(100vh-73px)] bg-neutral-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-neutral-600">Loading dashboard...</p>
+      <PageLayout>
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Loading dashboard...</p>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -101,8 +104,8 @@ export default function ParentDashboard() {
   // Error state
   if (error) {
     return (
-      <div className="min-h-[calc(100vh-73px)] bg-neutral-100">
-        <div className="max-w-content mx-auto px-6 py-8">
+      <PageLayout>
+        <div className="max-w-[1120px] mx-auto px-6 py-8">
           <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
             <p className="text-accent-red font-medium">Failed to load dashboard</p>
             <p className="text-red-600 text-sm mt-1">{error}</p>
@@ -114,7 +117,7 @@ export default function ParentDashboard() {
             </button>
           </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -135,8 +138,8 @@ export default function ParentDashboard() {
   const status = getOverallStatus();
 
   return (
-    <div className="min-h-[calc(100vh-73px)] bg-neutral-100">
-      <main className="max-w-content mx-auto px-6 py-8">
+    <PageLayout>
+      <main className="max-w-[1120px] mx-auto px-6 py-8">
         {/* Hero Card */}
         <section className="mb-8">
           <div className="bg-white rounded-2xl shadow-card p-8">
@@ -146,7 +149,7 @@ export default function ParentDashboard() {
                   Your family's revision at a glance
                 </h1>
                 <div className="flex items-center space-x-3">
-                  <span className={`px-4 py-2 ${status.color} text-white rounded-pill text-sm font-medium`}>
+                  <span className={`px-4 py-2 ${status.color} text-white rounded-full text-sm font-medium`}>
                     {status.label}
                   </span>
                   <span className="text-neutral-600">
@@ -249,13 +252,13 @@ export default function ParentDashboard() {
             </p>
             <button
               onClick={() => navigate("/parent/onboarding")}
-              className="px-6 py-3 bg-primary-600 text-white rounded-pill font-medium hover:bg-primary-700 transition-colors"
+              className="px-6 py-3 bg-primary-600 text-white rounded-full font-medium hover:bg-primary-700 transition-colors"
             >
               Add Your First Child
             </button>
           </div>
         )}
       </main>
-    </div>
+    </PageLayout>
   );
 }
