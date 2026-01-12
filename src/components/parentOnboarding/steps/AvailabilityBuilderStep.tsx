@@ -1,12 +1,11 @@
 // src/components/parentOnboarding/steps/AvailabilityBuilderStep.tsx
+// Weekly schedule builder with copy functionality and feasibility checking
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   generateDefaultTemplate,
-  checkFeasibility,
   type RecommendationResult,
   type DayTemplate,
-  type FeasibilityCheck,
 } from "../../../services/parentOnboarding/recommendationService";
 import type { RevisionPeriodData } from "./RevisionPeriodStep";
 
@@ -40,6 +39,22 @@ interface AvailabilityBuilderStepProps {
   onBack: () => void;
 }
 
+type FeasibilityStatus = "sufficient" | "marginal" | "insufficient";
+
+interface FeasibilityResult {
+  status: FeasibilityStatus;
+  recommended: number;
+  withContingency: number;
+  available: number;
+  shortfall: number;
+  surplus: number;
+  sessionsPerWeekNeeded: number;
+  currentSessionsPerWeek: number;
+  additionalSessionsPerWeek: number;
+  message: string;
+  suggestion: string | null;
+}
+
 /* ============================
    Constants
 ============================ */
@@ -60,16 +75,6 @@ const SESSION_PATTERN_OPTIONS: {
   { value: "p20", label: "20 min", minutes: 20, topics: 1 },
   { value: "p45", label: "45 min", minutes: 45, topics: 2 },
   { value: "p70", label: "70 min", minutes: 70, topics: 3 },
-];
-
-const DAY_NAMES = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
 ];
 
 /* ============================
@@ -112,6 +117,144 @@ function calculateWeeksBetween(start: string, end: string): number {
 
 function hasAnySlots(template: DayTemplate[]): boolean {
   return template.some((day) => day.slots.length > 0);
+}
+
+function checkFeasibility(
+  recommended: number,
+  withContingency: number,
+  available: number,
+  totalWeeks: number
+): FeasibilityResult {
+  const shortfall = Math.max(0, recommended - available);
+  const surplus = Math.max(0, available - withContingency);
+
+  const sessionsPerWeekNeeded = Math.ceil(withContingency / Math.max(1, totalWeeks));
+  const currentSessionsPerWeek = Math.round(available / Math.max(1, totalWeeks));
+  const additionalSessionsPerWeek = Math.max(
+    0,
+    Math.ceil((withContingency - available) / Math.max(1, totalWeeks))
+  );
+
+  let status: FeasibilityStatus;
+  let message: string;
+  let suggestion: string | null = null;
+
+  if (available >= withContingency) {
+    status = "sufficient";
+    message = `You have ${available} sessions planned, which covers the recommended ${recommended} plus contingency buffer.`;
+    if (surplus > 10) {
+      suggestion = `You have ${surplus} extra sessions as buffer — great for flexibility!`;
+    }
+  } else if (available >= recommended) {
+    status = "marginal";
+    const bufferShort = withContingency - available;
+    message = `You have ${available} sessions, which covers the ${recommended} recommended but leaves little buffer for missed days.`;
+    suggestion = `Consider adding ${Math.ceil(
+      bufferShort / totalWeeks
+    )} more session${bufferShort > totalWeeks ? "s" : ""} per week (${bufferShort} total) for contingency.`;
+  } else {
+    status = "insufficient";
+    message = `You have ${available} sessions but need at least ${recommended} to cover all topics properly.`;
+    suggestion = `Add ${additionalSessionsPerWeek} more session${
+      additionalSessionsPerWeek !== 1 ? "s" : ""
+    } per week to reach ${withContingency} sessions (includes contingency).`;
+  }
+
+  return {
+    status,
+    recommended,
+    withContingency,
+    available,
+    shortfall,
+    surplus,
+    sessionsPerWeekNeeded,
+    currentSessionsPerWeek,
+    additionalSessionsPerWeek,
+    message,
+    suggestion,
+  };
+}
+
+function getStatusColors(status: FeasibilityStatus): {
+  bg: string;
+  border: string;
+  text: string;
+  icon: string;
+  iconClass: string;
+} {
+  switch (status) {
+    case "sufficient":
+      return {
+        bg: "bg-green-50",
+        border: "border-green-200",
+        text: "text-green-800",
+        icon: "fa-circle-check",
+        iconClass: "text-green-600",
+      };
+    case "marginal":
+      return {
+        bg: "bg-amber-50",
+        border: "border-amber-200",
+        text: "text-amber-800",
+        icon: "fa-triangle-exclamation",
+        iconClass: "text-amber-600",
+      };
+    case "insufficient":
+      return {
+        bg: "bg-red-50",
+        border: "border-red-200",
+        text: "text-red-800",
+        icon: "fa-circle-xmark",
+        iconClass: "text-red-600",
+      };
+  }
+}
+
+/* ============================
+   Traffic Light Component
+============================ */
+
+interface TrafficLightProps {
+  status: FeasibilityStatus;
+  label?: string;
+  message: string;
+  suggestion?: string | null;
+}
+
+function TrafficLight({ status, label, message, suggestion }: TrafficLightProps) {
+  const colors = getStatusColors(status);
+
+  return (
+    <div className={`p-4 rounded-xl border ${colors.bg} ${colors.border}`}>
+      <div className="flex items-start gap-3">
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+            status === "sufficient"
+              ? "bg-green-100"
+              : status === "marginal"
+              ? "bg-amber-100"
+              : "bg-red-100"
+          }`}
+        >
+          <i className={`fa-solid ${colors.icon} ${colors.iconClass}`} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {label && (
+            <h4 className={`text-sm font-semibold ${colors.text} mb-1`}>{label}</h4>
+          )}
+          <p className={`text-sm ${colors.text}`}>{message}</p>
+
+          {suggestion && (
+            <div className="mt-3 flex items-start gap-2 p-3 bg-white/50 rounded-lg">
+              <i className="fa-solid fa-lightbulb text-primary-600 mt-0.5" />
+              <p className="text-sm text-neutral-700">{suggestion}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ============================
@@ -169,9 +312,7 @@ function DayCard({
             className={`relative w-11 h-6 rounded-full transition-colors ${
               day.is_enabled ? "bg-primary-600" : "bg-neutral-200"
             }`}
-            aria-label={`${day.is_enabled ? "Disable" : "Enable"} ${
-              day.day_name
-            }`}
+            aria-label={`${day.is_enabled ? "Disable" : "Enable"} ${day.day_name}`}
           >
             <div
               className={`absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow transition-transform ${
@@ -270,7 +411,7 @@ function DayCard({
               <button
                 type="button"
                 onClick={() => onRemoveSlot(idx)}
-                className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-accent-red hover:bg-accent-red/10 rounded-lg transition-colors flex-shrink-0 mt-5"
+                className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0 mt-5"
                 aria-label="Remove session"
               >
                 <i className="fa-solid fa-trash-can text-sm" />
@@ -335,7 +476,9 @@ export default function AvailabilityBuilderStep({
           return {
             ...day,
             is_enabled: true,
-            slots: [{ time_of_day: "afternoon" as TimeOfDay, session_pattern: defaultPattern }],
+            slots: [
+              { time_of_day: "afternoon" as TimeOfDay, session_pattern: defaultPattern },
+            ],
             session_count: 1,
           };
         }
@@ -343,6 +486,7 @@ export default function AvailabilityBuilderStep({
       });
       onTemplateChange(updated);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   // Calculate totals
@@ -361,15 +505,16 @@ export default function AvailabilityBuilderStep({
     return Math.round(weeklyStats.sessions * totalWeeks);
   }, [weeklyStats.sessions, totalWeeks]);
 
-  // Feasibility check
-  const feasibility: FeasibilityCheck | null = useMemo(() => {
+  // Feasibility check with detailed suggestions
+  const feasibility: FeasibilityResult | null = useMemo(() => {
     if (!recommendation) return null;
     return checkFeasibility(
       recommendation.total_recommended_sessions,
       recommendation.with_contingency,
-      totalPlannedSessions
+      totalPlannedSessions,
+      totalWeeks
     );
-  }, [recommendation, totalPlannedSessions]);
+  }, [recommendation, totalPlannedSessions, totalWeeks]);
 
   // Get Monday's setup for copying
   const mondaySetup = weeklyTemplate[0];
@@ -382,7 +527,7 @@ export default function AvailabilityBuilderStep({
       return {
         ...day,
         is_enabled: mondaySetup.is_enabled,
-        slots: [...mondaySetup.slots],
+        slots: mondaySetup.slots.map((s) => ({ ...s })),
         session_count: mondaySetup.slots.length,
       };
     });
@@ -397,7 +542,7 @@ export default function AvailabilityBuilderStep({
       return {
         ...day,
         is_enabled: mondaySetup.is_enabled,
-        slots: [...mondaySetup.slots],
+        slots: mondaySetup.slots.map((s) => ({ ...s })),
         session_count: mondaySetup.slots.length,
       };
     });
@@ -412,13 +557,53 @@ export default function AvailabilityBuilderStep({
       return {
         ...day,
         is_enabled: mondaySetup.is_enabled,
-        slots: [...mondaySetup.slots],
+        slots: mondaySetup.slots.map((s) => ({ ...s })),
         session_count: mondaySetup.slots.length,
       };
     });
     onTemplateChange(updated);
     setShowAllDays(true);
   }, [weeklyTemplate, mondaySetup, onTemplateChange]);
+
+  // Quick fix: add sessions to reach recommendation
+  const handleQuickFixAddSessions = useCallback(() => {
+    if (!feasibility) return;
+
+    const sessionsToAdd = feasibility.additionalSessionsPerWeek;
+    if (sessionsToAdd <= 0) return;
+
+    const updated = weeklyTemplate.map((day, idx) => {
+      // Only add to enabled weekdays (Mon-Fri, idx 0-4)
+      if (!day.is_enabled || idx >= 5) return day;
+
+      // Determine next time slot to use
+      const existingTimes = day.slots.map((s) => s.time_of_day);
+      let nextTime: TimeOfDay = "afternoon";
+      if (existingTimes.includes("afternoon")) {
+        nextTime = "evening";
+      }
+      if (existingTimes.includes("evening")) {
+        nextTime = "morning";
+      }
+      if (existingTimes.includes("morning")) {
+        nextTime = "early_morning";
+      }
+
+      const newSlot: AvailabilitySlot = {
+        time_of_day: nextTime,
+        session_pattern: defaultPattern,
+      };
+
+      return {
+        ...day,
+        slots: [...day.slots, newSlot],
+        session_count: day.slots.length + 1,
+      };
+    });
+
+    onTemplateChange(updated);
+    setShowAllDays(true);
+  }, [weeklyTemplate, onTemplateChange, feasibility, defaultPattern]);
 
   // Day handlers
   const handleToggleDay = useCallback(
@@ -746,41 +931,76 @@ export default function AvailabilityBuilderStep({
         </div>
       </div>
 
-      {/* Feasibility Indicator */}
+      {/* Feasibility Traffic Light */}
       {feasibility && (
-        <div
-          className={`mb-6 p-4 rounded-xl border ${
-            feasibility.status === "sufficient"
-              ? "bg-accent-green/10 border-accent-green/30"
-              : feasibility.status === "marginal"
-              ? "bg-accent-amber/10 border-accent-amber/30"
-              : "bg-accent-red/10 border-accent-red/30"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            <i
-              className={`fa-solid mt-0.5 ${
-                feasibility.status === "sufficient"
-                  ? "fa-circle-check text-accent-green"
-                  : feasibility.status === "marginal"
-                  ? "fa-triangle-exclamation text-accent-amber"
-                  : "fa-circle-xmark text-accent-red"
-              }`}
-            />
-            <p
-              className={`text-sm ${
-                feasibility.status === "sufficient"
-                  ? "text-accent-green"
-                  : feasibility.status === "marginal"
-                  ? "text-amber-800"
-                  : "text-accent-red"
-              }`}
-            >
-              {feasibility.message}
-            </p>
-          </div>
+        <div className="mb-6">
+          <TrafficLight
+            status={feasibility.status}
+            label={
+              feasibility.status === "sufficient"
+                ? "On track"
+                : feasibility.status === "marginal"
+                ? "Close but tight"
+                : "More sessions needed"
+            }
+            message={feasibility.message}
+            suggestion={feasibility.suggestion}
+          />
+
+          {/* Quick action for insufficient */}
+          {feasibility.status === "insufficient" && (
+            <div className="mt-4 p-4 bg-primary-50 rounded-xl border border-primary-200">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-semibold text-primary-900">
+                    Quick fix: Add {feasibility.additionalSessionsPerWeek} session
+                    {feasibility.additionalSessionsPerWeek !== 1 ? "s" : ""} per
+                    weekday
+                  </h4>
+                  <p className="text-xs text-primary-700 mt-1">
+                    This would give you approximately{" "}
+                    {feasibility.withContingency} total sessions
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleQuickFixAddSessions}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0"
+                >
+                  <i className="fa-solid fa-plus mr-2" />
+                  Add sessions
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Session Duration Guide */}
+      <div className="mb-6 p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+        <div className="flex items-start gap-3">
+          <i className="fa-solid fa-circle-info text-neutral-400 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-medium text-neutral-700 mb-2">
+              Session duration guide
+            </h4>
+            <ul className="text-xs text-neutral-600 space-y-1">
+              <li>
+                <strong>20 minutes:</strong> Quick review of 1 topic — great for
+                busy days or shorter attention spans
+              </li>
+              <li>
+                <strong>45 minutes:</strong> 2 topics with a short break —
+                balanced session for most students
+              </li>
+              <li>
+                <strong>70 minutes:</strong> 3 topics with two breaks — deep
+                revision for focused study
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
       {/* Helper text */}
       <div className="mb-6 text-center">
