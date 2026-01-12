@@ -1,14 +1,20 @@
+// src/types/today.ts
+
 export interface SessionRow {
   planned_session_id: string;
   session_date: string;
-  status: 'not_started' | 'started' | 'completed';
-  subject_name: string;
-  topic_names: string[];
-  topic_count: number;
-  duration_minutes: number;
-  session_duration_minutes: number;
+  session_index: number;
   session_pattern: string;
-  topics_preview?: Array<{ topic_name: string }>;
+  session_duration_minutes: number;
+  status: "not_started" | "started" | "completed";
+  subject_id: string;
+  subject_name: string;
+  icon: string;           // From subjects table (e.g., "calculator", "flask")
+  color: string;          // Hex color from subjects table (e.g., "#5B2CFF")
+  topic_count: number;
+  topic_names: string[];
+  topics_preview?: Array<{ id: string; topic_name: string; order_index: number }>;
+  // Added during enrichment for started sessions
   current_topic_index?: number;
   total_topics?: number;
 }
