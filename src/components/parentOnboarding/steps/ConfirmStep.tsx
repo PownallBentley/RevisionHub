@@ -1,13 +1,23 @@
 // src/components/parentOnboarding/steps/ConfirmStep.tsx
 // Final confirmation step showing summary of all onboarding selections before plan creation
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faExclamationTriangle } from "@fortawesome/free-solid-svg-icons";
-
 /* ============================
    Types
 ============================ */
 
+interface SubjectPayload {
+  subject_id: string;
+  subject_name?: string;
+  exam_board_name?: string;
+  sort_order: number;
+  current_grade: number | null;
+  target_grade: number | null;
+  grade_confidence: string;
+}
+
+interface NeedClusterPayload {
+  cluster_code: string;
+}
 
 interface PathwaySelectionPayload {
   subject_id: string;
@@ -32,20 +42,12 @@ interface RevisionPeriod {
   history_code: string | null;
 }
 
-// Legacy format support
-interface LegacyAvailabilityDay {
-  sessions: number;
-  session_pattern: string;
-}
-
-interface LegacyAvailability {
-  monday: LegacyAvailabilityDay;
-  tuesday: LegacyAvailabilityDay;
-  wednesday: LegacyAvailabilityDay;
-  thursday: LegacyAvailabilityDay;
-  friday: LegacyAvailabilityDay;
-  saturday: LegacyAvailabilityDay;
-  sunday: LegacyAvailabilityDay;
+interface ChildPayload {
+  first_name?: string;
+  last_name?: string;
+  preferred_name?: string;
+  year_group?: number;
+  country?: string;
 }
 
 /* ============================
@@ -60,70 +62,47 @@ const PATTERN_LABELS: Record<string, string> = {
   p70: '70 min',
 };
 
+const PATTERN_MINUTES: Record<string, number> = {
+  p20: 20,
+  p45: 45,
+  p70: 70,
+};
+
 const TIME_OF_DAY_LABELS: Record<string, string> = {
+  early_morning: 'Early morning',
+  morning: 'Morning',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
   before_school: 'Before school',
   after_school: 'After school',
-  evening: 'Evening',
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  pass_exam: 'Pass exams',
+  improve_grade: 'Improve grades',
+  excel: 'Excel & achieve top grades',
+};
+
+const GRADE_LABELS: Record<number, string> = {
+  1: '1',
+  2: '2',
+  3: '3',
+  4: '4',
+  5: '5',
+  6: '6',
+  7: '7',
+  8: '8',
+  9: '9',
 };
 
 /* ============================
    Helpers
 ============================ */
 
-function formatNewAvailability(
-  weekly: Record<string, DayAvailability>
-): Array<{ day: string; sessions: number; details: string }> {
-  const result: Array<{ day: string; sessions: number; details: string }> = [];
-
-  for (let i = 0; i < 7; i++) {
-    const dayData = weekly[i.toString()];
-    if (!dayData || !dayData.enabled || dayData.slots.length === 0) continue;
-
-    const sessionCount = dayData.slots.length;
-    const details = dayData.slots
-      .map(s => {
-        const timeLabel = TIME_OF_DAY_LABELS[s.time_of_day] || s.time_of_day.replace('_', ' ');
-        const patternLabel = PATTERN_LABELS[s.session_pattern] || s.session_pattern;
-        return `${timeLabel} (${patternLabel})`;
-      })
-      .join(', ');
-
-    result.push({
-      day: DAY_NAMES[i],
-      sessions: sessionCount,
-      details,
-    });
-  }
-
-  return result;
-}
-
-function formatLegacyAvailability(
-  av: LegacyAvailability
-): Array<{ day: string; sessions: number; details: string }> {
-  const map: Array<[string, keyof LegacyAvailability]> = [
-    ['Monday', 'monday'],
-    ['Tuesday', 'tuesday'],
-    ['Wednesday', 'wednesday'],
-    ['Thursday', 'thursday'],
-    ['Friday', 'friday'],
-    ['Saturday', 'saturday'],
-    ['Sunday', 'sunday'],
-  ];
-
-  return map
-    .filter(([, key]) => av[key]?.sessions > 0)
-    .map(([label, key]) => ({
-      day: label,
-      sessions: av[key].sessions ?? 0,
-      details: PATTERN_LABELS[av[key].session_pattern] ?? av[key].session_pattern,
-    }));
-}
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return '—';
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function calculateWeeks(start: string, end: string): number {
@@ -132,6 +111,62 @@ function calculateWeeks(start: string, end: string): number {
   const endDate = new Date(end);
   const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   return Math.round(diffDays / 7 * 10) / 10;
+}
+
+function calculateScheduleStats(
+  weekly: Record<string, DayAvailability>
+): { sessionsPerWeek: number; totalMinutes: number; mostCommonPattern: string } {
+  let sessionsPerWeek = 0;
+  let totalMinutes = 0;
+  const patternCounts: Record<string, number> = {};
+
+  for (let i = 0; i < 7; i++) {
+    const dayData = weekly[i.toString()];
+    if (!dayData || !dayData.enabled) continue;
+
+    for (const slot of dayData.slots) {
+      sessionsPerWeek += 1;
+      const minutes = PATTERN_MINUTES[slot.session_pattern] || 45;
+      totalMinutes += minutes;
+      patternCounts[slot.session_pattern] = (patternCounts[slot.session_pattern] || 0) + 1;
+    }
+  }
+
+  // Find most common pattern
+  let mostCommonPattern = 'p45';
+  let maxCount = 0;
+  for (const [pattern, count] of Object.entries(patternCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      mostCommonPattern = pattern;
+    }
+  }
+
+  return { sessionsPerWeek, totalMinutes, mostCommonPattern };
+}
+
+function formatMinutesAsHours(minutes: number): string {
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  if (remaining === 0) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  return `${hours}h ${remaining}m`;
+}
+
+function getActiveDays(weekly: Record<string, DayAvailability>): string[] {
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const dayData = weekly[i.toString()];
+    if (dayData?.enabled && dayData.slots.length > 0) {
+      days.push(DAY_NAMES[i]);
+    }
+  }
+  return days;
+}
+
+function getGradeDisplay(grade: number | null): string {
+  if (grade === null) return '—';
+  return GRADE_LABELS[grade] || grade.toString();
 }
 
 /* ============================
@@ -145,179 +180,300 @@ export default function ConfirmStep(props: {
 }) {
   const { payload, busy, onSubmit } = props;
 
-  const child = payload?.child ?? {};
-  
-  // Detect payload format and get subject count
-  const isNewFormat = Array.isArray(payload?.subjects);
-  const subjectCount = isNewFormat 
-    ? payload.subjects.length 
-    : (Array.isArray(payload?.subject_ids) ? payload.subject_ids.length : 0);
-
-  // Get pathway selections
-  const pathwaySelections = Array.isArray(payload?.pathway_selections) 
-    ? payload.pathway_selections as PathwaySelectionPayload[]
-    : [];
-  const pathwayCount = pathwaySelections.length;
-
-  // Get availability rows based on format
-  let availRows: Array<{ day: string; sessions: number; details: string }> = [];
-  
-  if (payload?.weekly_availability) {
-    // New format
-    availRows = formatNewAvailability(payload.weekly_availability);
-  } else if (payload?.settings?.availability) {
-    // Legacy format
-    availRows = formatLegacyAvailability(payload.settings.availability);
-  }
-
-  const totalSessions = availRows.reduce((sum, r) => sum + r.sessions, 0);
-
-  // Revision period (new format only)
+  const child = (payload?.child ?? {}) as ChildPayload;
+  const subjects = (payload?.subjects ?? []) as SubjectPayload[];
+  const needClusters = (payload?.need_clusters ?? []) as NeedClusterPayload[];
+  const pathwaySelections = (payload?.pathway_selections ?? []) as PathwaySelectionPayload[];
   const revisionPeriod = payload?.revision_period as RevisionPeriod | undefined;
+  const weeklyAvailability = (payload?.weekly_availability ?? {}) as Record<string, DayAvailability>;
+  const goalCode = payload?.goal_code as string | undefined;
+
+  // Calculated values
   const hasRevisionPeriod = revisionPeriod?.start_date && revisionPeriod?.end_date;
-  const weeks = hasRevisionPeriod 
-    ? calculateWeeks(revisionPeriod!.start_date, revisionPeriod!.end_date) 
+  const weeks = hasRevisionPeriod
+    ? calculateWeeks(revisionPeriod!.start_date, revisionPeriod!.end_date)
     : 0;
 
-  // Need clusters count
-  const needsCount = Array.isArray(payload?.need_clusters) ? payload.need_clusters.length : 0;
+  const scheduleStats = calculateScheduleStats(weeklyAvailability);
+  const activeDays = getActiveDays(weeklyAvailability);
+
+  // Sort subjects by priority for display
+  const sortedSubjects = [...subjects].sort((a, b) => a.sort_order - b.sort_order);
+
+  // Child display name
+  const childName = [child.first_name, child.last_name].filter(Boolean).join(' ') || '—';
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Confirm details</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          We'll create the plan and prepare today's sessions.
+      {/* Header */}
+      <div className="mb-2">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">Review your plan details</h2>
+        <p className="text-neutral-500 text-sm leading-relaxed">
+          Here's what we'll use to build your child's revision plan. Everything looks good? Let's create it!
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Child Details */}
-        <div className="rounded-2xl border border-gray-200 p-5">
-          <p className="text-sm font-medium text-gray-900">Child</p>
-          <p className="text-sm text-gray-700 mt-2">
-            {(child.first_name ?? '').trim() || '—'}{' '}
-            {(child.last_name ?? '').trim() ? child.last_name : ''}
-          </p>
-          {child.preferred_name && (
-            <p className="text-sm text-gray-600 mt-1">
-              Preferred: {child.preferred_name}
-            </p>
-          )}
-          <p className="text-sm text-gray-600 mt-1">
-            {child.year_group ? `Year ${child.year_group}` : 'Year —'}
-            {child.country ? ` • ${child.country}` : ''}
-          </p>
-        </div>
-
-        {/* Plan Choices */}
-        <div className="rounded-2xl border border-gray-200 p-5">
-          <p className="text-sm font-medium text-gray-900">Plan choices</p>
-          <p className="text-sm text-gray-700 mt-2">
-            Goal: <span className="font-mono text-xs">{payload?.goal_code ?? '—'}</span>
-          </p>
-          <p className="text-sm text-gray-700 mt-2">
-            Subjects: {subjectCount}
-          </p>
-          {pathwayCount > 0 && (
-            <p className="text-sm text-gray-700 mt-2">
-              Tiers/Options: {pathwayCount} selected
-            </p>
-          )}
-          <p className="text-sm text-gray-700 mt-2">
-            Needs: {needsCount}
-          </p>
-        </div>
-      </div>
-
-      {/* Pathway Selections (NEW) */}
-      {pathwayCount > 0 && (
-        <div className="rounded-2xl border border-gray-200 p-5">
-          <p className="text-sm font-medium text-gray-900">Exam tiers & options</p>
-          <p className="text-sm text-gray-600 mt-1">
-            {pathwayCount} pathway{pathwayCount === 1 ? '' : 's'} configured
-          </p>
-          {/* Note: We don't have pathway names in the payload, just IDs.
-              For a richer display, you could store pathway_name in the payload
-              or fetch from the pathwaySelections state in ParentOnboardingPage */}
-        </div>
-      )}
-
-      {/* Pathway Warning - shown if subjects need pathways but none selected */}
-      {subjectCount > 0 && pathwayCount === 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <FontAwesomeIcon icon={faExclamationTriangle} className="w-5 h-5 text-amber-500 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">No exam tiers selected</p>
-              <p className="text-sm text-amber-700 mt-1">
-                Some subjects may have tiers (Foundation/Higher) or options. 
-                You can set these from your dashboard later.
-              </p>
+      {/* Summary Cards Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Child Details Card */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+              <i className="fa-solid fa-user text-primary-600 mr-3" />
+              Your child
+            </h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-neutral-500 text-sm">Name</span>
+              <span className="text-neutral-900 font-medium">{childName}</span>
             </div>
+            {child.preferred_name && (
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Preferred name</span>
+                <span className="text-neutral-900 font-medium">{child.preferred_name}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-neutral-500 text-sm">Year</span>
+              <span className="text-neutral-900 font-medium">
+                {child.year_group ? `Year ${child.year_group}` : '—'}
+              </span>
+            </div>
+            {child.country && (
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Country</span>
+                <span className="text-neutral-900 font-medium">{child.country}</span>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Revision Period (new format) */}
-      {hasRevisionPeriod && (
-        <div className="rounded-2xl border border-gray-200 p-5">
-          <p className="text-sm font-medium text-gray-900">Revision period</p>
-          <div className="mt-2 grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-gray-500">Start</p>
-              <p className="text-sm text-gray-700">{formatDate(revisionPeriod!.start_date)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">End</p>
-              <p className="text-sm text-gray-700">{formatDate(revisionPeriod!.end_date)}</p>
-            </div>
+        {/* Goal & Needs Card */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+              <i className="fa-solid fa-bullseye text-primary-600 mr-3" />
+              Goal & support
+            </h3>
           </div>
-          <p className="text-sm text-gray-600 mt-2">
-            {weeks} weeks • {revisionPeriod!.contingency_percent}% contingency buffer
-          </p>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-neutral-500 text-sm">Goal</span>
+              <span className="text-neutral-900 font-medium">
+                {goalCode ? GOAL_LABELS[goalCode] || goalCode : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between items-start">
+              <span className="text-neutral-500 text-sm">Learning needs</span>
+              {needClusters.length === 0 ? (
+                <span className="text-neutral-900 font-medium">None selected</span>
+              ) : (
+                <span className="text-neutral-900 font-medium text-right">
+                  {needClusters.length} selected
+                </span>
+              )}
+            </div>
+            {pathwaySelections.length > 0 && (
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Exam tiers/options</span>
+                <span className="text-neutral-900 font-medium">
+                  {pathwaySelections.length} configured
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* Availability */}
-      <div className="rounded-2xl border border-gray-200 p-5">
-        <p className="text-sm font-medium text-gray-900">Weekly availability</p>
-
-        {availRows.length === 0 ? (
-          <p className="text-sm text-gray-600 mt-2">—</p>
-        ) : (
-          <>
-            <p className="text-sm text-gray-600 mt-1">
-              {totalSessions} session{totalSessions === 1 ? '' : 's'} per week
-            </p>
-            <div className="mt-3 space-y-2">
-              {availRows.map((r) => (
-                <div key={r.day} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-sm font-medium text-gray-900">{r.day}</span>
-                  <span className="text-sm text-gray-600">
-                    {r.sessions} session{r.sessions === 1 ? '' : 's'}
-                  </span>
-                </div>
+        {/* Subjects Card */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+              <i className="fa-solid fa-book text-primary-600 mr-3" />
+              Subjects
+            </h3>
+            <span className="text-sm text-neutral-500">{subjects.length} selected</span>
+          </div>
+          {subjects.length === 0 ? (
+            <p className="text-neutral-500 text-sm">No subjects selected</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {sortedSubjects.map((subject, index) => (
+                <span
+                  key={subject.subject_id}
+                  className="px-3 py-1.5 bg-white border border-neutral-200 text-neutral-700 text-xs font-medium rounded-full"
+                >
+                  {subject.subject_name || `Subject ${index + 1}`}
+                  {subject.exam_board_name && (
+                    <span className="text-neutral-400"> • {subject.exam_board_name}</span>
+                  )}
+                </span>
               ))}
             </div>
-          </>
+          )}
+        </div>
+
+        {/* Priorities Card */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+              <i className="fa-solid fa-star text-primary-600 mr-3" />
+              Grade targets
+            </h3>
+          </div>
+          {sortedSubjects.length === 0 ? (
+            <p className="text-neutral-500 text-sm">No subjects configured</p>
+          ) : (
+            <div className="space-y-3">
+              {sortedSubjects.slice(0, 5).map((subject, index) => (
+                <div key={subject.subject_id} className="flex items-center justify-between">
+                  <span className="text-neutral-700 font-medium text-sm truncate mr-4">
+                    {subject.subject_name || `Subject ${index + 1}`}
+                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs text-neutral-500 w-4 text-center">
+                      {getGradeDisplay(subject.current_grade)}
+                    </span>
+                    <i className="fa-solid fa-arrow-right text-neutral-300 text-xs" />
+                    <span className="text-xs font-semibold text-accent-green w-4 text-center">
+                      {getGradeDisplay(subject.target_grade)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {sortedSubjects.length > 5 && (
+                <p className="text-xs text-neutral-400 pt-1">
+                  +{sortedSubjects.length - 5} more subject{sortedSubjects.length - 5 === 1 ? '' : 's'}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Timeline Card */}
+        {hasRevisionPeriod && (
+          <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+                <i className="fa-solid fa-calendar text-primary-600 mr-3" />
+                Timeline
+              </h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Start date</span>
+                <span className="text-neutral-900 font-medium">
+                  {formatDate(revisionPeriod!.start_date)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">End date</span>
+                <span className="text-neutral-900 font-medium">
+                  {formatDate(revisionPeriod!.end_date)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Contingency</span>
+                <span className="text-neutral-900 font-medium">
+                  {revisionPeriod!.contingency_percent}% buffer
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 text-sm">Total weeks</span>
+                <span className="text-neutral-900 font-medium">{weeks} weeks</span>
+              </div>
+            </div>
+          </div>
         )}
+
+        {/* Schedule Card - Full Width */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-neutral-900 flex items-center">
+              <i className="fa-solid fa-clock text-primary-600 mr-3" />
+              Weekly schedule
+            </h3>
+          </div>
+          
+          {scheduleStats.sessionsPerWeek === 0 ? (
+            <p className="text-neutral-500 text-sm">No sessions scheduled</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex justify-between md:flex-col md:items-start">
+                  <span className="text-neutral-500 text-sm">Sessions per week</span>
+                  <span className="text-neutral-900 font-medium">
+                    {scheduleStats.sessionsPerWeek} session{scheduleStats.sessionsPerWeek === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="flex justify-between md:flex-col md:items-start">
+                  <span className="text-neutral-500 text-sm">Typical length</span>
+                  <span className="text-neutral-900 font-medium">
+                    {PATTERN_LABELS[scheduleStats.mostCommonPattern] || '45 min'}
+                  </span>
+                </div>
+                <div className="flex justify-between md:flex-col md:items-start">
+                  <span className="text-neutral-500 text-sm">Total weekly time</span>
+                  <span className="text-neutral-900 font-medium">
+                    {formatMinutesAsHours(scheduleStats.totalMinutes)}
+                  </span>
+                </div>
+              </div>
+              
+              {activeDays.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-neutral-200">
+                  <p className="text-xs text-neutral-500 flex items-center">
+                    <i className="fa-solid fa-lightbulb text-neutral-400 mr-2" />
+                    Scheduled for {activeDays.join(', ')}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
+      {/* Confirmation Note */}
+      <div className="p-5 bg-primary-50 border border-primary-200 rounded-xl">
+        <div className="flex items-start">
+          <div className="flex-shrink-0 w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center mr-4">
+            <i className="fa-solid fa-check text-white text-sm" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-primary-900 mb-1">Ready to create your plan</h4>
+            <p className="text-sm text-primary-700 leading-relaxed">
+              We'll generate a personalised revision schedule based on these details. 
+              You can always adjust topics, timing, and priorities once your plan is ready.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Create Button */}
       <button
         type="button"
         onClick={onSubmit}
         disabled={busy}
-        className="w-full rounded-xl bg-brand-purple text-white py-3 font-semibold disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 rounded-full bg-primary-600 text-white py-3.5 font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {busy ? 'Building your plan…' : 'Create plan'}
+        {busy ? (
+          <>
+            <i className="fa-solid fa-spinner fa-spin" />
+            Creating your plan…
+          </>
+        ) : (
+          <>
+            <i className="fa-solid fa-wand-magic-sparkles" />
+            Create plan
+          </>
+        )}
       </button>
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          You can edit subjects, tiers, and availability later from the parent dashboard.
-        </p>
-      </div>
+      {/* Footer Note */}
+      <p className="text-xs text-neutral-500 text-center">
+        You can edit subjects, tiers, and availability later from your dashboard.
+      </p>
     </div>
   );
 }
