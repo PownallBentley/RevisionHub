@@ -1,25 +1,48 @@
 // src/pages/child/Today.tsx
-// Refactored with gamification support (v3.3)
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
-import { fetchTodayData } from "../../services/todayService";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  TodayHeader,
-  TodayProgressCard,
-  SessionList,
-  UpcomingSection,
-  EmptyState,
-  LoadingState,
-  ErrorState,
-} from "../../components/child/today";
-import type { TodayData } from "../../types/today";
+  faCalculator,
+  faBook,
+  faFlask,
+  faAtom,
+  faGlobe,
+  faLandmark,
+  faLightbulb,
+  faFire,
+  faStar,
+  faTrophy,
+} from "@fortawesome/free-solid-svg-icons";
+import { useAuth } from "../../contexts/AuthContext";
+import { PageLayout } from "../../components/layout";
+import { fetchTodayData } from "../../services/todayService";
+import type { TodayData, TodaySession, UpcomingDay } from "../../types/today";
+
+// Subject icon mapping
+const SUBJECT_ICONS: Record<string, any> = {
+  maths: faCalculator,
+  mathematics: faCalculator,
+  english: faBook,
+  "english literature": faBook,
+  "english language": faBook,
+  chemistry: faFlask,
+  physics: faAtom,
+  biology: faFlask,
+  science: faFlask,
+  geography: faGlobe,
+  history: faLandmark,
+};
+
+function getSubjectIcon(subjectName: string) {
+  const key = subjectName.toLowerCase();
+  return SUBJECT_ICONS[key] || faBook;
+}
 
 export default function Today() {
   const navigate = useNavigate();
   const { user, activeChildId, isParent, profile, loading: authLoading } = useAuth();
-
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
@@ -52,7 +75,6 @@ export default function Today() {
 
     async function loadData() {
       if (authLoading) return;
-
       if (!childId) {
         setData(null);
         if (user) {
@@ -98,37 +120,320 @@ export default function Today() {
   const upcomingDays = data?.upcomingDays ?? [];
   const gamification = data?.gamification ?? null;
 
+  // Calculate progress
+  const completedCount = todaySessions.filter((s) => s.status === "completed").length;
+  const totalCount = todaySessions.length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Find next ready session
+  const nextSession = todaySessions.find((s) => s.status === "planned" || s.status === "started");
+
+  // Loading state
+  if (authLoading || loading) {
+    return (
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Loading your sessions...</p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
+            <p className="text-accent-red font-medium">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-accent-red text-white rounded-lg hover:opacity-90"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
   return (
-    <div className="min-h-[calc(100vh-73px)] bg-gradient-to-b from-indigo-50 to-white">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        {/* Header with gamification badges */}
-        <TodayHeader childName={childName} gamification={gamification} />
+    <PageLayout bgColor="bg-neutral-100">
+      <main className="max-w-[1120px] mx-auto px-6 py-8">
+        {/* Greeting Section */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-primary-900 mb-2">
+            Hi {childName}! 👋
+          </h1>
+          <p className="text-lg text-neutral-600">
+            Ready to tackle your revision today?
+          </p>
+        </div>
 
-        {loading ? (
-          <LoadingState />
-        ) : error ? (
-          <ErrorState message={error} />
-        ) : todaySessions.length === 0 ? (
-          <EmptyState upcomingDays={upcomingDays} gamification={gamification} />
-        ) : (
-          <>
-            {/* Progress card with achievement teaser */}
-            <TodayProgressCard
-              sessions={todaySessions}
-              gamification={gamification}
-            />
-
-            {/* Session list */}
-            <SessionList
-              sessions={todaySessions}
-              onStartSession={handleStartSession}
-            />
-
-            {/* Upcoming section */}
-            <UpcomingSection upcomingDays={upcomingDays} />
-          </>
+        {/* Gamification Bar - if has data */}
+        {gamification && (gamification.current_streak > 0 || gamification.points_balance > 0) && (
+          <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-2xl shadow-soft">
+            {gamification.current_streak > 0 && (
+              <div className="flex items-center gap-2">
+                <FontAwesomeIcon icon={faFire} className="text-orange-500" />
+                <span className="font-semibold text-neutral-700">{gamification.current_streak}</span>
+                <span className="text-sm text-neutral-500">day streak</span>
+              </div>
+            )}
+            {gamification.points_balance > 0 && (
+              <>
+                <div className="w-px h-6 bg-neutral-200" />
+                <div className="flex items-center gap-2">
+                  <FontAwesomeIcon icon={faStar} className="text-accent-amber" />
+                  <span className="font-semibold text-neutral-700">{gamification.points_balance}</span>
+                  <span className="text-sm text-neutral-500">points</span>
+                </div>
+              </>
+            )}
+            {gamification.recent_achievement && (
+              <>
+                <div className="w-px h-6 bg-neutral-200" />
+                <div className="flex items-center gap-2">
+                  <FontAwesomeIcon icon={faTrophy} className="text-accent-amber" />
+                  <span className="text-sm text-neutral-600">{gamification.recent_achievement.name}</span>
+                </div>
+              </>
+            )}
+          </div>
         )}
+
+        {/* Today's Sessions Card */}
+        <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-neutral-700">Today's sessions</h2>
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl font-bold text-primary-600">{totalCount}</span>
+              <span className="text-neutral-500">session{totalCount !== 1 ? "s" : ""}</span>
+            </div>
+          </div>
+
+          {todaySessions.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FontAwesomeIcon icon={faBook} className="text-2xl text-primary-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-primary-900 mb-2">No sessions today</h3>
+              <p className="text-neutral-600">Enjoy your break! Check back tomorrow for your next sessions.</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 mb-6">
+                {todaySessions.map((session) => (
+                  <SessionItem
+                    key={session.planned_session_id}
+                    session={session}
+                    isNext={nextSession?.planned_session_id === session.planned_session_id}
+                    onStart={() => handleStartSession(session.planned_session_id)}
+                  />
+                ))}
+              </div>
+
+              {nextSession && (
+                <button
+                  onClick={() => handleStartSession(nextSession.planned_session_id)}
+                  className="w-full py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-medium"
+                >
+                  Start next session
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Two Column Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Coming Up */}
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h3 className="text-lg font-semibold text-neutral-700 mb-4">Coming up</h3>
+            {upcomingDays.length === 0 ? (
+              <p className="text-sm text-neutral-500 text-center py-4">No upcoming sessions scheduled</p>
+            ) : (
+              <div className="space-y-3">
+                {upcomingDays.slice(0, 4).flatMap((day) =>
+                  day.sessions.slice(0, 2).map((session) => (
+                    <div
+                      key={session.planned_session_id}
+                      className="flex items-center justify-between py-2"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center">
+                          <FontAwesomeIcon
+                            icon={getSubjectIcon(session.subject_name)}
+                            className="text-neutral-500 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-neutral-700">
+                            {session.subject_name}
+                          </div>
+                          <div className="text-xs text-neutral-500">
+                            {session.topic_name || "Topic TBD"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-neutral-400">{day.day_label}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* This Week's Progress */}
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h3 className="text-lg font-semibold text-neutral-700 mb-4">This week's progress</h3>
+            <div className="flex items-center justify-center mb-4">
+              <div className="relative w-24 h-24">
+                <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#E1E4EE"
+                    strokeWidth="8"
+                    fill="none"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#5B2CFF"
+                    strokeWidth="8"
+                    fill="none"
+                    strokeDasharray="251.2"
+                    strokeDashoffset={251.2 - (251.2 * progressPercent) / 100}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xl font-bold text-primary-600">{progressPercent}%</span>
+                </div>
+              </div>
+            </div>
+            <div className="text-center mb-4">
+              <div className="text-sm text-neutral-600">
+                {completedCount} of {totalCount} sessions completed
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600">Sessions completed</span>
+                <span className="font-medium text-accent-green">{completedCount}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-neutral-600">Remaining today</span>
+                <span className="font-medium text-primary-600">{totalCount - completedCount}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Study Tip Card */}
+        <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-6 mt-6">
+          <div className="flex items-start space-x-4">
+            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <FontAwesomeIcon icon={faLightbulb} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-primary-900 mb-2">💡 Study Tip</h3>
+              <p className="text-neutral-700">
+                Try the Pomodoro Technique for your next session! Study for 25 minutes, then take a
+                5-minute break. It helps you stay focused and remember more.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </PageLayout>
+  );
+}
+
+/**
+ * Session Item Component
+ */
+function SessionItem({
+  session,
+  isNext,
+  onStart,
+}: {
+  session: TodaySession;
+  isNext: boolean;
+  onStart: () => void;
+}) {
+  const isCompleted = session.status === "completed";
+  const isScheduled = session.status === "planned" && !isNext;
+  const isReady = isNext;
+
+  // Determine styles based on state
+  const containerStyles = isReady
+    ? "bg-primary-50 border-2 border-primary-200"
+    : "bg-neutral-50";
+
+  const iconBgStyles = isCompleted
+    ? "bg-accent-green"
+    : isReady
+    ? "bg-primary-600"
+    : "bg-neutral-200";
+
+  const iconColorStyles = isCompleted || isReady ? "text-white" : "text-neutral-500";
+
+  // Status badge
+  const getStatusBadge = () => {
+    if (isCompleted) {
+      return (
+        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
+          Completed
+        </span>
+      );
+    }
+    if (isReady) {
+      return (
+        <button
+          onClick={onStart}
+          className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full hover:bg-primary-700 transition-colors"
+        >
+          Ready
+        </button>
+      );
+    }
+    return (
+      <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
+        Scheduled
+      </span>
+    );
+  };
+
+  return (
+    <div className={`flex items-center justify-between p-4 rounded-xl ${containerStyles}`}>
+      <div className="flex items-center space-x-4">
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBgStyles}`}
+        >
+          <FontAwesomeIcon
+            icon={getSubjectIcon(session.subject_name)}
+            className={iconColorStyles}
+          />
+        </div>
+        <div>
+          <div className="font-medium text-neutral-700">{session.subject_name}</div>
+          <div className="text-sm text-neutral-500">
+            {session.topic_name || "Topic TBD"}
+          </div>
+          <div className="text-sm text-neutral-400">
+            {session.session_duration_minutes} mins
+          </div>
+        </div>
       </div>
+      {getStatusBadge()}
     </div>
   );
 }
