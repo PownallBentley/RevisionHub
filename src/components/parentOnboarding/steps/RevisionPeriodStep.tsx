@@ -1,12 +1,6 @@
 // src/components/parentOnboarding/steps/RevisionPeriodStep.tsx
-// Start/end date selection with contingency and feeling/history capture
 
-import { useMemo } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faCalendarAlt, 
-  faInfoCircle 
-} from '@fortawesome/free-solid-svg-icons';
+import { useMemo } from "react";
 
 /* ============================
    Types
@@ -15,9 +9,10 @@ import {
 export interface RevisionPeriodData {
   start_date: string;
   end_date: string;
-  contingency_percent: number;
-  feeling_code: string | null;
-  history_code: string | null;
+  contingency_enabled: boolean;
+  current_revision_score: number;
+  past_revision_score: number;
+  is_first_time: boolean;
 }
 
 interface RevisionPeriodStepProps {
@@ -28,37 +23,17 @@ interface RevisionPeriodStepProps {
 }
 
 /* ============================
-   Constants
-============================ */
-
-const FEELING_OPTIONS = [
-  { code: 'feeling_on_track', label: 'On track', emoji: '😊', description: 'Things are going well' },
-  { code: 'feeling_behind', label: 'A bit behind', emoji: '😐', description: 'Could use some catching up' },
-  { code: 'feeling_overwhelmed', label: 'Overwhelmed', emoji: '😰', description: 'Feeling the pressure' },
-  { code: 'feeling_crisis', label: 'Crisis mode', emoji: '🚨', description: 'Need urgent help' },
-];
-
-const HISTORY_OPTIONS = [
-  { code: 'history_good', label: 'Good experience', description: 'Revision has worked well before' },
-  { code: 'history_mixed', label: 'Mixed results', description: 'Some subjects better than others' },
-  { code: 'history_struggled', label: 'Struggled', description: 'Found revision difficult' },
-  { code: 'history_first', label: 'First time', description: 'First major exams' },
-];
-
-/* ============================
    Helper Functions
 ============================ */
 
-function formatDateForInput(dateStr: string): string {
-  return dateStr; // Already in YYYY-MM-DD format
-}
-
-function calculateDuration(start: string, end: string): { days: number; weeks: number } {
+function calculateDuration(start: string, end: string): { days: number; weeks: number } | null {
+  if (!start || !end) return null;
   const startDate = new Date(start);
   const endDate = new Date(end);
   const diffTime = endDate.getTime() - startDate.getTime();
   const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  const weeks = Math.round(days / 7 * 10) / 10; // One decimal place
+  if (days <= 0) return null;
+  const weeks = Math.round((days / 7) * 10) / 10;
   return { days, weeks };
 }
 
@@ -72,15 +47,14 @@ export default function RevisionPeriodStep({
   onNext,
   onBack,
 }: RevisionPeriodStepProps) {
-  
   const duration = useMemo(() => {
-    if (!revisionPeriod.start_date || !revisionPeriod.end_date) {
-      return null;
-    }
     return calculateDuration(revisionPeriod.start_date, revisionPeriod.end_date);
   }, [revisionPeriod.start_date, revisionPeriod.end_date]);
 
-  const handleChange = (field: keyof RevisionPeriodData, value: string | number | null) => {
+  const handleChange = <K extends keyof RevisionPeriodData>(
+    field: K,
+    value: RevisionPeriodData[K]
+  ) => {
     onRevisionPeriodChange({
       ...revisionPeriod,
       [field]: value,
@@ -88,213 +62,307 @@ export default function RevisionPeriodStep({
   };
 
   // Validation
-  const isValid = useMemo(() => {
-    if (!revisionPeriod.start_date || !revisionPeriod.end_date) return false;
-    
-    const start = new Date(revisionPeriod.start_date);
-    const end = new Date(revisionPeriod.end_date);
-    
-    // End must be after start
-    if (end <= start) return false;
-    
-    // Minimum 7 days
-    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays < 7) return false;
-    
-    return true;
-  }, [revisionPeriod.start_date, revisionPeriod.end_date]);
-
   const validationError = useMemo(() => {
     if (!revisionPeriod.start_date || !revisionPeriod.end_date) {
-      return 'Please set both start and end dates';
+      return "Please set both start and end dates";
     }
-    
+
     const start = new Date(revisionPeriod.start_date);
     const end = new Date(revisionPeriod.end_date);
-    
+
     if (end <= start) {
-      return 'End date must be after start date';
+      return "End date must be after start date";
     }
-    
+
     const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays < 7) {
-      return 'Revision period must be at least 7 days';
+      return "Revision period must be at least 7 days";
     }
-    
+
     return null;
   }, [revisionPeriod.start_date, revisionPeriod.end_date]);
 
+  const isValid = validationError === null;
+
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">
-          When should revision happen?
-        </h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Set a start date and an end date (usually the first exam). We'll build a plan that fits this window.
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">Set your timeline</h2>
+        <p className="text-neutral-500 text-sm leading-relaxed">
+          Set the time frame for this revision plan.
         </p>
       </div>
 
       {/* Date Selection */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-2 gap-4">
-          {/* Start Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <FontAwesomeIcon icon={faCalendarAlt} className="mr-1.5 text-gray-400" />
-              Start date
-            </label>
-            <input
-              type="date"
-              value={formatDateForInput(revisionPeriod.start_date)}
-              onChange={(e) => handleChange('start_date', e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* End Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <FontAwesomeIcon icon={faCalendarAlt} className="mr-1.5 text-gray-400" />
-              End date (exam date)
-            </label>
-            <input
-              type="date"
-              value={formatDateForInput(revisionPeriod.end_date)}
-              onChange={(e) => handleChange('end_date', e.target.value)}
-              min={revisionPeriod.start_date}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        {/* Start Date */}
+        <div>
+          <label
+            htmlFor="start-date"
+            className="block text-sm font-medium text-neutral-700 mb-2"
+          >
+            Start date for revision
+          </label>
+          <input
+            type="date"
+            id="start-date"
+            value={revisionPeriod.start_date}
+            onChange={(e) => handleChange("start_date", e.target.value)}
+            className="w-full px-4 py-3 border border-neutral-200 rounded-xl text-neutral-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
+          />
+          <p className="mt-1.5 text-xs text-neutral-500">
+            When do you want to begin the revision plan?
+          </p>
         </div>
 
-        {/* Duration Display */}
-        {duration && (
-          <div className="mt-3 text-sm text-gray-600">
-            <strong>{duration.weeks} weeks</strong> ({duration.days} days)
-          </div>
-        )}
-
-        {/* Validation Error */}
-        {validationError && revisionPeriod.start_date && revisionPeriod.end_date && (
-          <div className="mt-3 text-sm text-red-600">
-            {validationError}
-          </div>
-        )}
+        {/* End Date */}
+        <div>
+          <label
+            htmlFor="end-date"
+            className="block text-sm font-medium text-neutral-700 mb-2"
+          >
+            End date (exam/mock date)
+          </label>
+          <input
+            type="date"
+            id="end-date"
+            value={revisionPeriod.end_date}
+            onChange={(e) => handleChange("end_date", e.target.value)}
+            min={revisionPeriod.start_date}
+            className="w-full px-4 py-3 border border-neutral-200 rounded-xl text-neutral-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
+          />
+          <p className="mt-1.5 text-xs text-neutral-500">
+            Date of the first exam or mock test
+          </p>
+        </div>
       </div>
 
-      {/* Contingency Buffer */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Contingency buffer
-            </label>
-            <p className="text-sm text-gray-500">
-              Extra capacity for missed sessions or revision
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-gray-900">
-              {revisionPeriod.contingency_percent}%
+      {/* Duration Display */}
+      {duration && (
+        <div className="mb-8 p-4 bg-primary-50 border border-primary-100 rounded-xl">
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-calendar-days text-primary-600" />
+            <span className="text-sm text-primary-800">
+              <strong>{duration.weeks} weeks</strong> ({duration.days} days) until exams
             </span>
-            <div className="group relative">
-              <FontAwesomeIcon 
-                icon={faInfoCircle} 
-                className="text-gray-400 cursor-help" 
+          </div>
+        </div>
+      )}
+
+      {/* Validation Error */}
+      {validationError && revisionPeriod.start_date && revisionPeriod.end_date && (
+        <div className="mb-8 p-4 bg-accent-red/10 border border-accent-red/30 rounded-xl">
+          <div className="flex items-center gap-3">
+            <i className="fa-solid fa-circle-exclamation text-accent-red" />
+            <span className="text-sm text-accent-red">{validationError}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Contingency Section */}
+      <div className="mb-8">
+        <h3 className="text-base font-medium text-neutral-900 mb-2">Contingency planning</h3>
+        <p className="text-sm text-neutral-600 mb-4">
+          Do you want to allow extra time for recapping tricky topics?
+        </p>
+
+        <div className="space-y-3">
+          {/* Yes option */}
+          <label
+            className={`flex items-start cursor-pointer p-4 border-2 rounded-xl transition-all ${
+              revisionPeriod.contingency_enabled
+                ? "border-primary-600 bg-primary-50"
+                : "border-neutral-200 hover:border-primary-300"
+            }`}
+          >
+            <div className="relative flex items-center justify-center mt-0.5">
+              <input
+                type="radio"
+                name="contingency"
+                checked={revisionPeriod.contingency_enabled === true}
+                onChange={() => handleChange("contingency_enabled", true)}
+                className="sr-only"
               />
-              <div className="absolute right-0 top-6 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-                A 10% buffer means we'll plan for 10% more sessions than the minimum needed.
+              <div
+                className={`w-5 h-5 border-2 rounded-full flex items-center justify-center transition-all ${
+                  revisionPeriod.contingency_enabled
+                    ? "border-primary-600"
+                    : "border-neutral-300"
+                }`}
+              >
+                {revisionPeriod.contingency_enabled && (
+                  <div className="w-2.5 h-2.5 bg-primary-600 rounded-full" />
+                )}
               </div>
+            </div>
+            <div className="ml-4">
+              <span className="text-sm font-medium text-neutral-900">
+                Yes, build in room for repeats
+              </span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Allow extra time to revisit difficult topics
+              </p>
+            </div>
+          </label>
+
+          {/* No option */}
+          <label
+            className={`flex items-start cursor-pointer p-4 border-2 rounded-xl transition-all ${
+              revisionPeriod.contingency_enabled === false
+                ? "border-primary-600 bg-primary-50"
+                : "border-neutral-200 hover:border-primary-300"
+            }`}
+          >
+            <div className="relative flex items-center justify-center mt-0.5">
+              <input
+                type="radio"
+                name="contingency"
+                checked={revisionPeriod.contingency_enabled === false}
+                onChange={() => handleChange("contingency_enabled", false)}
+                className="sr-only"
+              />
+              <div
+                className={`w-5 h-5 border-2 rounded-full flex items-center justify-center transition-all ${
+                  !revisionPeriod.contingency_enabled
+                    ? "border-primary-600"
+                    : "border-neutral-300"
+                }`}
+              >
+                {!revisionPeriod.contingency_enabled && (
+                  <div className="w-2.5 h-2.5 bg-primary-600 rounded-full" />
+                )}
+              </div>
+            </div>
+            <div className="ml-4">
+              <span className="text-sm font-medium text-neutral-900">
+                No, keep the plan tightly packed
+              </span>
+              <p className="text-xs text-neutral-500 mt-1">
+                Maximize coverage without buffer time
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      {/* Revision Status Section */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8">
+        {/* Current Revision */}
+        <div>
+          <h3 className="text-base font-medium text-neutral-900 mb-2">Current revision status</h3>
+          <p className="text-sm text-neutral-600 mb-4">How is revision going at the moment?</p>
+
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-neutral-500 mb-2">
+              <span>Very challenging</span>
+              <span>Going well</span>
+            </div>
+            <input
+              type="range"
+              id="current-revision"
+              min="1"
+              max="5"
+              value={revisionPeriod.current_revision_score}
+              onChange={(e) =>
+                handleChange("current_revision_score", parseInt(e.target.value, 10))
+              }
+              className="w-full h-2 bg-neutral-200 rounded-full appearance-none cursor-pointer accent-primary-600"
+              style={{
+                background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${
+                  ((revisionPeriod.current_revision_score - 1) / 4) * 100
+                }%, #E1E4EE ${
+                  ((revisionPeriod.current_revision_score - 1) / 4) * 100
+                }%, #E1E4EE 100%)`,
+              }}
+            />
+            <div className="flex justify-between mt-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <span
+                  key={n}
+                  className={`text-xs ${
+                    revisionPeriod.current_revision_score === n
+                      ? "text-primary-600 font-semibold"
+                      : "text-neutral-400"
+                  }`}
+                >
+                  {n}
+                </span>
+              ))}
             </div>
           </div>
         </div>
-        
-        <input
-          type="range"
-          min="0"
-          max="25"
-          step="5"
-          value={revisionPeriod.contingency_percent}
-          onChange={(e) => handleChange('contingency_percent', parseInt(e.target.value, 10))}
-          className="w-full mt-3 accent-blue-600"
-        />
-        
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>0%</span>
-          <span>10%</span>
-          <span>25%</span>
-        </div>
-      </div>
 
-      {/* Feeling Selection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          How does revision feel right now?
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          {FEELING_OPTIONS.map((option) => (
-            <button
-              key={option.code}
-              type="button"
-              onClick={() => handleChange('feeling_code', option.code)}
-              className={`
-                flex items-center gap-2 rounded-lg border p-3 text-left transition-colors
-                ${revisionPeriod.feeling_code === option.code
-                  ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }
-              `}
-            >
-              <span className="text-xl">{option.emoji}</span>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                <div className="text-xs text-gray-500">{option.description}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+        {/* Past Revision */}
+        <div>
+          <h3 className="text-base font-medium text-neutral-900 mb-2">Previous exam experience</h3>
+          <p className="text-sm text-neutral-600 mb-4">How did revision go in previous exam years?</p>
 
-      {/* History Selection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          How has revision gone before?
-        </label>
-        <div className="space-y-2">
-          {HISTORY_OPTIONS.map((option) => (
-            <button
-              key={option.code}
-              type="button"
-              onClick={() => handleChange('history_code', option.code)}
-              className={`
-                w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors
-                ${revisionPeriod.history_code === option.code
-                  ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }
-              `}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-neutral-500 mb-2">
+              <span>Very challenging</span>
+              <span>Went well</span>
+            </div>
+            <input
+              type="range"
+              id="past-revision"
+              min="1"
+              max="5"
+              value={revisionPeriod.past_revision_score}
+              onChange={(e) =>
+                handleChange("past_revision_score", parseInt(e.target.value, 10))
+              }
+              disabled={revisionPeriod.is_first_time}
+              className={`w-full h-2 bg-neutral-200 rounded-full appearance-none cursor-pointer accent-primary-600 ${
+                revisionPeriod.is_first_time ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              style={{
+                background: revisionPeriod.is_first_time
+                  ? "#E1E4EE"
+                  : `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${
+                      ((revisionPeriod.past_revision_score - 1) / 4) * 100
+                    }%, #E1E4EE ${
+                      ((revisionPeriod.past_revision_score - 1) / 4) * 100
+                    }%, #E1E4EE 100%)`,
+              }}
+            />
+            <div className="flex justify-between mt-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <span
+                  key={n}
+                  className={`text-xs ${
+                    !revisionPeriod.is_first_time && revisionPeriod.past_revision_score === n
+                      ? "text-primary-600 font-semibold"
+                      : "text-neutral-400"
+                  }`}
+                >
+                  {n}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* First time checkbox */}
+          <label className="flex items-center cursor-pointer mt-4 text-sm text-neutral-600">
+            <div
+              className={`w-5 h-5 border-2 rounded flex items-center justify-center mr-3 transition-all ${
+                revisionPeriod.is_first_time
+                  ? "bg-primary-600 border-primary-600"
+                  : "border-neutral-300"
+              }`}
             >
-              <div
-                className={`
-                  h-4 w-4 rounded-full border-2 flex items-center justify-center
-                  ${revisionPeriod.history_code === option.code
-                    ? 'border-blue-500'
-                    : 'border-gray-300'
-                  }
-                `}
-              >
-                {revisionPeriod.history_code === option.code && (
-                  <div className="h-2 w-2 rounded-full bg-blue-500" />
-                )}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                <div className="text-xs text-gray-500">{option.description}</div>
-              </div>
-            </button>
-          ))}
+              {revisionPeriod.is_first_time && (
+                <i className="fa-solid fa-check text-white text-xs" />
+              )}
+            </div>
+            <input
+              type="checkbox"
+              checked={revisionPeriod.is_first_time}
+              onChange={(e) => handleChange("is_first_time", e.target.checked)}
+              className="sr-only"
+            />
+            <span>This is their first time taking GCSEs/IGCSEs</span>
+          </label>
         </div>
       </div>
 
@@ -303,7 +371,7 @@ export default function RevisionPeriodStep({
         <button
           type="button"
           onClick={onBack}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="px-6 py-3 rounded-full font-medium text-neutral-700 bg-neutral-200 hover:bg-neutral-300 transition-all"
         >
           Back
         </button>
@@ -312,9 +380,9 @@ export default function RevisionPeriodStep({
           type="button"
           onClick={onNext}
           disabled={!isValid}
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+          className="px-8 py-3 rounded-full font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          Continue
         </button>
       </div>
     </div>
