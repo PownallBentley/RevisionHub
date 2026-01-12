@@ -1,10 +1,8 @@
 // src/types/parentDashboard.ts
-
 /**
  * Types for rpc_get_parent_dashboard_summary
  * Based on PRD v3.4 and RPC Addendum specifications
  */
-
 export interface ChildSubject {
   subject_id: string;
   subject_name: string;
@@ -64,17 +62,16 @@ export interface WeekSummary {
   days_active: number;
 }
 
-
 export interface DailyPattern {
-     day_index: number;
-     day_name: string;
-     sessions_completed: number;
-     sessions_planned?: number;    // NEW
-     sessions_total?: number;      // NEW
-     total_minutes: number;
-     planned_minutes?: number;     // NEW
-     is_rest_day: boolean;
-   }
+  day_index: number;
+  day_name: string;
+  sessions_completed: number;
+  sessions_planned?: number;
+  sessions_total?: number;
+  total_minutes: number;
+  planned_minutes?: number;
+  is_rest_day: boolean;
+}
 
 export interface GentleReminder {
   type: "mocks_coming_up" | "topic_to_revisit" | "building_momentum" | "subject_neglected";
@@ -82,10 +79,14 @@ export interface GentleReminder {
   child_id: string;
   child_name: string;
   message: string;
-  subject_id: string | null;
-  subject_name: string | null;
-  topic_id: string | null;
-  topic_name: string | null;
+  action_label?: string | null;
+  action_route?: string | null;
+  metadata?: Record<string, unknown> | null;
+  // Legacy fields (kept for backwards compatibility)
+  subject_id?: string | null;
+  subject_name?: string | null;
+  topic_id?: string | null;
+  topic_name?: string | null;
 }
 
 export interface UpcomingSession {
@@ -98,6 +99,7 @@ export interface UpcomingSession {
   topic_name: string;
   session_date: string;
   session_duration_minutes: number;
+  status?: string;
 }
 
 export interface SubjectCoverageEntry {
