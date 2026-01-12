@@ -593,13 +593,16 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 8: Availability (self-navigating) */}
+      {/* Step 8: Availability (self-navigating) - UPDATED with coverage props */}
       {step === STEPS.AVAILABILITY && (
         <AvailabilityBuilderStep
           weeklyTemplate={weeklyTemplate}
           dateOverrides={dateOverrides}
           recommendation={recommendation}
           revisionPeriod={revisionPeriod}
+          subjects={subjectsWithGrades}
+          goalCode={goalCode}
+          needClusters={needClusters}
           onTemplateChange={setWeeklyTemplate}
           onOverridesChange={setDateOverrides}
           onNext={handleAvailabilityNext}
