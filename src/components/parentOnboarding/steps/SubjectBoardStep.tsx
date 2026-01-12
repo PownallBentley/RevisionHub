@@ -7,13 +7,12 @@ import {
   type SubjectGroupBoardOption,
 } from "../../../services/parentOnboarding/parentOnboardingService";
 
-/**
- * ParentOnboardingPage expects:
- *   value={selectedSubjects}
- *   onChange={setSelectedSubjects}
- */
+/* ============================
+   Types (UNCHANGED)
+============================ */
+
 export type SelectedSubject = {
-  subject_id: string; // the selected subject row id (board-specific row)
+  subject_id: string;
   exam_type_id: string;
   subject_name: string;
   exam_board_id: string;
@@ -24,7 +23,6 @@ type Props = {
   examTypeIds: string[];
   value: SelectedSubject[];
   onChange: (next: SelectedSubject[]) => void;
-
   onBackToExamTypes: () => void;
   onDone: () => void;
 };
@@ -36,6 +34,10 @@ type BoardPickContext = {
   color: string | null;
   boards: SubjectGroupBoardOption[];
 };
+
+/* ============================
+   Helpers (UNCHANGED LOGIC)
+============================ */
 
 function uniq(ids: string[]) {
   return Array.from(new Set((ids || []).filter(Boolean).map(String)));
@@ -53,8 +55,12 @@ function normaliseNotSureLabel(name: string) {
     n === "i am not sure" ||
     n.includes("not sure");
 
-  return { isNotSure, label: isNotSure ? "I’m not sure" : raw };
+  return { isNotSure, label: isNotSure ? "I'm not sure" : raw };
 }
+
+/* ============================
+   Main Component
+============================ */
 
 export default function SubjectBoardStep(props: Props) {
   const examTypeIds = Array.isArray(props.examTypeIds) ? props.examTypeIds : [];
@@ -71,6 +77,7 @@ export default function SubjectBoardStep(props: Props) {
 
   const examTypeKey = useMemo(() => uniq(examTypeIds).slice().sort().join("|"), [examTypeIds]);
 
+  // Load subjects (UNCHANGED LOGIC)
   useEffect(() => {
     let cancelled = false;
 
@@ -118,7 +125,6 @@ export default function SubjectBoardStep(props: Props) {
     return groups.filter((g) => String(g.exam_type_id) === String(activeExamTypeId));
   }, [groups, activeExamTypeId]);
 
-  // For quick lookup: selected subject by (exam_type_id + subject_name)
   const selectedByGroupKey = useMemo(() => {
     const map = new Map<string, SelectedSubject>();
     for (const s of selected) {
@@ -156,7 +162,6 @@ export default function SubjectBoardStep(props: Props) {
   }
 
   function setSelectionForGroup(ctx: BoardPickContext, chosen: SubjectGroupBoardOption) {
-    // One choice per (exam_type_id + subject_name)
     const groupKey = `${String(ctx.exam_type_id)}|${String(ctx.subject_name)}`;
 
     const next: SelectedSubject[] = selected.filter(
@@ -168,8 +173,6 @@ export default function SubjectBoardStep(props: Props) {
     const exam_board_name_raw = String((chosen as any).exam_board_name ?? "");
 
     if (!subject_id || !exam_board_id || !exam_board_name_raw) {
-      // If the backend didn't give us a valid selectable row, don't pretend we selected anything.
-      // Just close the modal.
       closeModal();
       return;
     }
@@ -200,7 +203,6 @@ export default function SubjectBoardStep(props: Props) {
     else setActiveExamTypeIndex((i) => Math.max(0, i - 1));
   }
 
-  // Simple label placeholder (wire in your exam type name map later)
   function examTypeLabel(_examTypeId: string) {
     return "Exam";
   }
@@ -211,63 +213,116 @@ export default function SubjectBoardStep(props: Props) {
   }, [selected, activeExamTypeId]);
 
   return (
-    <div className="mt-2">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">Pick your subjects</h2>
-          <p className="mt-1 text-sm text-gray-600">Choose a subject, then pick the exam board.</p>
-        </div>
-
-        {activeExamTypeId ? (
-          <div className="rounded-xl border bg-white px-3 py-2 text-sm">
-            <div className="text-xs text-gray-500">Selecting for</div>
-            <div className="font-medium">{examTypeLabel(activeExamTypeId)}</div>
+    <div>
+      {/* Section header */}
+      <div className="mb-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-neutral-900 mb-2">
+              Select subjects
+            </h2>
+            <p className="text-neutral-500 text-sm leading-relaxed">
+              Choose a subject, then pick the exam board.
+            </p>
           </div>
-        ) : null}
+
+          {activeExamTypeId && (
+            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm">
+              <div className="text-xs text-neutral-500">Selecting for</div>
+              <div className="font-semibold text-neutral-900">{examTypeLabel(activeExamTypeId)}</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {error ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
+      {/* Exam type tabs (if multiple) */}
+      {examTypeIds.length > 1 && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-neutral-700 mb-3">Exam type</label>
+          <div className="flex gap-3 flex-wrap">
+            {examTypeIds.map((etId, idx) => (
+              <button
+                key={etId}
+                type="button"
+                onClick={() => setActiveExamTypeIndex(idx)}
+                className={`px-6 py-3 rounded-xl border-2 font-medium transition-all ${
+                  idx === activeExamTypeIndex
+                    ? "border-primary-600 bg-primary-50 text-primary-600"
+                    : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300"
+                }`}
+              >
+                {examTypeLabel(etId)}
+              </button>
+            ))}
+          </div>
         </div>
-      ) : null}
+      )}
 
-      <div className="mt-4">
+      {/* Error state */}
+      {error && (
+        <div className="mb-6 rounded-xl border border-accent-red/30 bg-accent-red/10 p-4">
+          <div className="flex items-start gap-3">
+            <i className="fa-solid fa-circle-exclamation text-accent-red mt-0.5" />
+            <p className="text-sm text-accent-red">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Subjects grid */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-neutral-700 mb-4">Available subjects</label>
+
         {loading ? (
-          <div className="rounded-xl border bg-white p-4 text-sm text-gray-600">Loading subjects…</div>
+          <div className="flex items-center justify-center py-8">
+            <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+            <span className="ml-3 text-sm text-neutral-500">Loading subjects…</span>
+          </div>
         ) : (
-          // Bigger, clearer cards: fewer columns + larger min height
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {groupsForActiveExamType.map((g) => {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
+              
+              // Use icon and color from database
+              const icon = (g as any).icon ?? "fa-book";
+              const color = (g as any).color ?? null;
 
               return (
                 <button
                   key={`${String(g.exam_type_id)}:${String(g.subject_name)}`}
                   type="button"
                   onClick={() => openBoardModal(g)}
-                  className={[
-                    "rounded-2xl border bg-white text-left shadow-sm transition",
-                    "hover:shadow-md",
-                    selectedFlag ? "border-black" : "border-gray-200",
-                    "p-5",
-                    "min-h-[104px]",
-                  ].join(" ")}
+                  className={`border-2 rounded-xl p-4 text-left transition-all hover:shadow-soft ${
+                    selectedFlag
+                      ? "border-primary-600 bg-primary-50"
+                      : "border-neutral-200 bg-white hover:border-primary-300"
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="truncate text-lg font-semibold">{String(g.subject_name)}</div>
-                      <div className="mt-1 text-sm text-gray-600">{boardsCount} boards</div>
-                    </div>
-
-                    {selectedFlag ? (
-                      <span className="rounded-full border border-black px-3 py-1 text-xs font-medium">
-                        Selected
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                          selectedFlag
+                            ? "bg-primary-600 border-primary-600"
+                            : "border-neutral-300"
+                        }`}
+                      >
+                        {selectedFlag && (
+                          <i className="fa-solid fa-check text-white text-xs" />
+                        )}
+                      </div>
+                      <span className="font-medium text-neutral-900 truncate">
+                        {String(g.subject_name)}
                       </span>
-                    ) : (
-                      <span className="rounded-full border px-3 py-1 text-xs text-gray-700">Choose</span>
-                    )}
+                    </div>
+                    {/* Icon from database with color */}
+                    <i
+                      className={`fa-solid ${icon} text-lg flex-shrink-0`}
+                      style={color ? { color } : { color: "#9A84FF" }}
+                    />
+                  </div>
+                  <div className="mt-2 ml-8 text-xs text-neutral-500">
+                    {boardsCount} {boardsCount === 1 ? "board" : "boards"}
                   </div>
                 </button>
               );
@@ -276,28 +331,27 @@ export default function SubjectBoardStep(props: Props) {
         )}
       </div>
 
-      <div className="mt-6">
-        <div className="text-sm font-medium">Selected</div>
-
-        <div className="mt-2 flex flex-wrap gap-2">
+      {/* Selected subjects lozenges */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-neutral-700 mb-4">Selected subjects</label>
+        <div className="flex flex-wrap gap-3 p-4 bg-neutral-50 rounded-xl border border-neutral-200 min-h-[80px]">
           {selectedForActiveExamType.length === 0 ? (
-            <div className="text-sm text-gray-600">No subjects yet.</div>
+            <p className="text-sm text-neutral-400">No subjects selected yet.</p>
           ) : (
             selectedForActiveExamType.map((s) => (
               <div
                 key={`${s.exam_type_id}|${s.subject_name}`}
-                className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
               >
-                <span className="font-medium">{s.subject_name}</span>
-                <span className="text-gray-500">·</span>
-                <span className="text-gray-700">{s.exam_board_name}</span>
-
+                <span>
+                  {s.subject_name} · {s.exam_board_name}
+                </span>
                 <button
                   type="button"
-                  className="ml-1 rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
                   onClick={() => removeSelection(s.exam_type_id, s.subject_name)}
+                  className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
                 >
-                  Remove
+                  <i className="fa-solid fa-xmark text-xs" />
                 </button>
               </div>
             ))
@@ -305,90 +359,103 @@ export default function SubjectBoardStep(props: Props) {
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-between">
-        <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={onBack}>
+      {/* Navigation */}
+      <div className="flex items-center justify-between pt-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-6 py-3 rounded-full font-medium text-neutral-700 bg-neutral-200 hover:bg-neutral-300 transition-all"
+        >
           Back
         </button>
 
         <button
           type="button"
-          className="rounded-lg bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
-          disabled={selectedForActiveExamType.length === 0}
           onClick={onContinue}
+          disabled={selectedForActiveExamType.length === 0}
+          className="px-8 py-3 rounded-full font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Continue
         </button>
       </div>
 
-      {/* Modal: choose exam board */}
-      {modalOpen && modalCtx ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
+      {/* Board selection modal */}
+      {modalOpen && modalCtx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-card overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-neutral-200">
               <div>
-                <div className="text-sm text-gray-500">Choose exam board</div>
-                <div className="text-lg font-semibold">{modalCtx.subject_name}</div>
-                <div className="mt-1 text-sm text-gray-600">You can always add it later if you’re not sure.</div>
+                <div className="text-sm text-neutral-500">Choose exam board</div>
+                <div className="text-xl font-semibold text-neutral-900 mt-1">
+                  {modalCtx.subject_name}
+                </div>
+                <p className="mt-2 text-sm text-neutral-500">
+                  You can always add it later if you're not sure.
+                </p>
               </div>
-
-              <button type="button" className="rounded-lg border px-3 py-1 text-sm" onClick={closeModal}>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 rounded-full text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-all"
+              >
                 Close
               </button>
             </div>
 
-            {(() => {
-              const rawBoards = Array.isArray(modalCtx.boards) ? modalCtx.boards : [];
+            {/* Board options */}
+            <div className="p-6 space-y-3 max-h-[400px] overflow-y-auto">
+              {(() => {
+                const rawBoards = Array.isArray(modalCtx.boards) ? modalCtx.boards : [];
 
-              // Normalise labels + identify not-sure options
-              const boards = rawBoards
-                .map((b) => {
-                  const name = String((b as any).exam_board_name ?? "");
-                  const n = normaliseNotSureLabel(name);
-                  return { ...b, _label: n.label, _isNotSure: n.isNotSure };
-                })
-                .filter((b) => (b as any).exam_board_id); // guard against junk rows
+                const boards = rawBoards
+                  .map((b) => {
+                    const name = String((b as any).exam_board_name ?? "");
+                    const n = normaliseNotSureLabel(name);
+                    return { ...b, _label: n.label, _isNotSure: n.isNotSure };
+                  })
+                  .filter((b) => (b as any).exam_board_id);
 
-              const normalBoards = boards.filter((b) => !(b as any)._isNotSure);
-              const notSureBoards = boards.filter((b) => (b as any)._isNotSure);
+                const normalBoards = boards.filter((b) => !(b as any)._isNotSure);
+                const notSureBoards = boards.filter((b) => (b as any)._isNotSure);
+                const notSureOne = notSureBoards.slice(0, 1);
 
-              // Keep exactly one not-sure option if present in data
-              const notSureOne = notSureBoards.slice(0, 1);
+                return (
+                  <>
+                    {normalBoards.map((b: any) => (
+                      <button
+                        key={String(b.exam_board_id)}
+                        type="button"
+                        onClick={() => setSelectionForGroup(modalCtx, b)}
+                        className="w-full rounded-xl border-2 border-neutral-200 bg-white px-4 py-4 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
+                      >
+                        <div className="font-medium text-neutral-900">{String(b._label)}</div>
+                      </button>
+                    ))}
 
-              return (
-                <div className="mt-4 space-y-2">
-                  {normalBoards.map((b: any) => (
-                    <button
-                      key={String(b.exam_board_id)}
-                      type="button"
-                      onClick={() => setSelectionForGroup(modalCtx, b)}
-                      className="w-full rounded-xl border bg-white px-4 py-3 text-left text-sm hover:bg-gray-50"
-                    >
-                      <div className="font-medium">{String(b._label)}</div>
-                    </button>
-                  ))}
+                    {notSureOne.map((b: any) => (
+                      <button
+                        key={`not-sure-${String(b.exam_board_id)}`}
+                        type="button"
+                        onClick={() => setSelectionForGroup(modalCtx, b)}
+                        className="w-full rounded-xl border-2 border-neutral-200 bg-white px-4 py-4 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
+                      >
+                        <div className="font-medium text-neutral-900">I'm not sure</div>
+                      </button>
+                    ))}
 
-                  {notSureOne.map((b: any) => (
-                    <button
-                      key={`not-sure-${String(b.exam_board_id)}`}
-                      type="button"
-                      onClick={() => setSelectionForGroup(modalCtx, b)}
-                      className="w-full rounded-xl border bg-white px-4 py-3 text-left text-sm hover:bg-gray-50"
-                    >
-                      <div className="font-medium">I’m not sure</div>
-                    </button>
-                  ))}
-
-                  {normalBoards.length === 0 && notSureOne.length === 0 ? (
-                    <div className="mt-2 rounded-xl border bg-gray-50 p-3 text-sm text-gray-700">
-                      No exam boards found for this subject.
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })()}
+                    {normalBoards.length === 0 && notSureOne.length === 0 && (
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
+                        No exam boards found for this subject.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
