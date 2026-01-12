@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+// Import at top
+import { PageLayout } from "../../components/layout";
+
 import {
   faGraduationCap,
   faHeart,
