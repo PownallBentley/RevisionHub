@@ -219,41 +219,41 @@ export default function ChildCard({ child }: ChildCardProps) {
 
       {/* Invite Footer - show if child hasn't signed up */}
       {needsSignup && (
-        <div className="mt-4 pt-4 border-t border-neutral-200">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-5 h-5 rounded-full bg-accent-amber flex items-center justify-center">
-              <i className="fa-solid fa-envelope text-white text-xs" />
+        <div className="mt-4 pt-3 px-3 pb-3 -mx-3 -mb-3 bg-primary-50 rounded-b-2xl">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-4 h-4 rounded-full bg-accent-amber flex items-center justify-center">
+              <i className="fa-solid fa-envelope text-white" style={{ fontSize: '8px' }} />
             </div>
-            <p className="text-sm font-medium text-neutral-700">
+            <p className="text-xs font-medium text-neutral-600">
               Waiting for {child.child_name} to sign up
             </p>
           </div>
           
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex-1 px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg">
-              <span className="text-sm font-mono font-semibold text-primary-600 tracking-wider">
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="flex-1 px-2 py-1.5 bg-white border border-primary-100 rounded-md">
+              <span className="text-xs font-mono font-semibold text-primary-600 tracking-wider">
                 {child.invitation_code}
               </span>
             </div>
             <button
               type="button"
               onClick={handleCopyCode}
-              className="px-3 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-1.5"
+              className="px-2 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center gap-1"
             >
-              <i className={`fa-solid ${copied === "code" ? "fa-check" : "fa-copy"} text-xs`} />
+              <i className={`fa-solid ${copied === "code" ? "fa-check" : "fa-copy"}`} style={{ fontSize: '10px' }} />
               {copied === "code" ? "Copied" : "Code"}
             </button>
             <button
               type="button"
               onClick={handleCopyLink}
-              className="px-3 py-2 border border-primary-600 text-primary-600 text-sm font-medium rounded-lg hover:bg-primary-50 transition-colors flex items-center gap-1.5"
+              className="px-2 py-1.5 border border-primary-300 text-primary-600 text-xs font-medium rounded-md hover:bg-primary-100 transition-colors flex items-center gap-1"
             >
-              <i className={`fa-solid ${copied === "link" ? "fa-check" : "fa-link"} text-xs`} />
+              <i className={`fa-solid ${copied === "link" ? "fa-check" : "fa-link"}`} style={{ fontSize: '10px' }} />
               {copied === "link" ? "Copied" : "Link"}
             </button>
           </div>
           
-          <p className="text-xs text-neutral-500">
+          <p className="text-[10px] text-neutral-500">
             Share this code or link with {child.child_name} so they can create their account.
           </p>
         </div>
