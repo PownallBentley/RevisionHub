@@ -6,6 +6,7 @@ import {
   type SubjectGroupRow,
   type SubjectGroupBoardOption,
 } from "../../../services/parentOnboarding/parentOnboardingService";
+import { listExamTypes } from "../../../services/referenceData/referenceDataService";
 
 /* ============================
    Types (UNCHANGED)
@@ -33,6 +34,11 @@ type BoardPickContext = {
   icon: string | null;
   color: string | null;
   boards: SubjectGroupBoardOption[];
+};
+
+type ExamTypeInfo = {
+  id: string;
+  name: string;
 };
 
 /* ============================
@@ -70,6 +76,7 @@ export default function SubjectBoardStep(props: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const [groups, setGroups] = useState<SubjectGroupRow[]>([]);
+  const [examTypes, setExamTypes] = useState<ExamTypeInfo[]>([]);
   const [activeExamTypeIndex, setActiveExamTypeIndex] = useState(0);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -77,7 +84,7 @@ export default function SubjectBoardStep(props: Props) {
 
   const examTypeKey = useMemo(() => uniq(examTypeIds).slice().sort().join("|"), [examTypeIds]);
 
-  // Load subjects (UNCHANGED LOGIC)
+  // Load exam type names and subjects
   useEffect(() => {
     let cancelled = false;
 
@@ -86,6 +93,7 @@ export default function SubjectBoardStep(props: Props) {
 
       if (ids.length === 0) {
         setGroups([]);
+        setExamTypes([]);
         return;
       }
 
@@ -93,8 +101,23 @@ export default function SubjectBoardStep(props: Props) {
       setError(null);
 
       try {
-        const rows = await rpcListSubjectGroupsForExamTypes(ids);
+        // Fetch exam type names and subjects in parallel
+        const [allExamTypes, rows] = await Promise.all([
+          listExamTypes(),
+          rpcListSubjectGroupsForExamTypes(ids),
+        ]);
+
         if (cancelled) return;
+
+        // Filter to only the selected exam types and preserve order
+        const selectedExamTypes = ids
+          .map((id) => {
+            const et = allExamTypes.find((e) => String(e.id) === String(id));
+            return et ? { id: String(et.id), name: et.name } : null;
+          })
+          .filter((et): et is ExamTypeInfo => et !== null);
+
+        setExamTypes(selectedExamTypes);
 
         const safe = (Array.isArray(rows) ? rows : []).map((r) => ({
           ...r,
@@ -107,6 +130,7 @@ export default function SubjectBoardStep(props: Props) {
         if (cancelled) return;
         setError(e?.message ?? "Failed to load subjects");
         setGroups([]);
+        setExamTypes([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -118,7 +142,8 @@ export default function SubjectBoardStep(props: Props) {
     };
   }, [examTypeKey]);
 
-  const activeExamTypeId = examTypeIds[activeExamTypeIndex] ?? null;
+  const activeExamType = examTypes[activeExamTypeIndex] ?? null;
+  const activeExamTypeId = activeExamType?.id ?? null;
 
   const groupsForActiveExamType = useMemo(() => {
     if (!activeExamTypeId) return [];
@@ -192,10 +217,10 @@ export default function SubjectBoardStep(props: Props) {
   }
 
   function onContinue() {
-    if (examTypeIds.length === 0) return;
-    const isLast = activeExamTypeIndex >= examTypeIds.length - 1;
+    if (examTypes.length === 0) return;
+    const isLast = activeExamTypeIndex >= examTypes.length - 1;
     if (isLast) props.onDone();
-    else setActiveExamTypeIndex((i) => Math.min(examTypeIds.length - 1, i + 1));
+    else setActiveExamTypeIndex((i) => Math.min(examTypes.length - 1, i + 1));
   }
 
   function onBack() {
@@ -203,14 +228,13 @@ export default function SubjectBoardStep(props: Props) {
     else setActiveExamTypeIndex((i) => Math.max(0, i - 1));
   }
 
-  function examTypeLabel(_examTypeId: string) {
-    return "Exam";
-  }
-
   const selectedForActiveExamType = useMemo(() => {
     if (!activeExamTypeId) return [];
     return selected.filter((s) => String(s.exam_type_id) === String(activeExamTypeId));
   }, [selected, activeExamTypeId]);
+
+  // All selected subjects across all exam types (for cumulative lozenges)
+  const allSelectedSubjects = selected;
 
   return (
     <div>
@@ -226,23 +250,23 @@ export default function SubjectBoardStep(props: Props) {
             </p>
           </div>
 
-          {activeExamTypeId && (
-            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm">
+          {activeExamType && (
+            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm flex-shrink-0">
               <div className="text-xs text-neutral-500">Selecting for</div>
-              <div className="font-semibold text-neutral-900">{examTypeLabel(activeExamTypeId)}</div>
+              <div className="font-semibold text-neutral-900">{activeExamType.name}</div>
             </div>
           )}
         </div>
       </div>
 
       {/* Exam type tabs (if multiple) */}
-      {examTypeIds.length > 1 && (
+      {examTypes.length > 1 && (
         <div className="mb-6">
           <label className="block text-sm font-medium text-neutral-700 mb-3">Exam type</label>
           <div className="flex gap-3 flex-wrap">
-            {examTypeIds.map((etId, idx) => (
+            {examTypes.map((et, idx) => (
               <button
-                key={etId}
+                key={et.id}
                 type="button"
                 onClick={() => setActiveExamTypeIndex(idx)}
                 className={`px-6 py-3 rounded-xl border-2 font-medium transition-all ${
@@ -251,7 +275,7 @@ export default function SubjectBoardStep(props: Props) {
                     : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300"
                 }`}
               >
-                {examTypeLabel(etId)}
+                {et.name}
               </button>
             ))}
           </div>
@@ -268,7 +292,7 @@ export default function SubjectBoardStep(props: Props) {
         </div>
       )}
 
-      {/* Subjects grid */}
+      {/* Subjects grid - 2 columns for better readability */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-700 mb-4">Available subjects</label>
 
@@ -278,14 +302,14 @@ export default function SubjectBoardStep(props: Props) {
             <span className="ml-3 text-sm text-neutral-500">Loading subjects…</span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-1">
             {groupsForActiveExamType.map((g) => {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
-              
+
               // Use icon and color from database
-              const icon = (g as any).icon ?? "fa-book";
-              const color = (g as any).color ?? null;
+              const icon = (g as any).icon || "fa-book";
+              const color = (g as any).color || "#9A84FF";
 
               return (
                 <button
@@ -298,31 +322,42 @@ export default function SubjectBoardStep(props: Props) {
                       : "border-neutral-200 bg-white hover:border-primary-300"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      {/* Icon with database color */}
                       <div
-                        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                          selectedFlag
-                            ? "bg-primary-600 border-primary-600"
-                            : "border-neutral-300"
-                        }`}
+                        className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: `${color}20` }}
                       >
-                        {selectedFlag && (
-                          <i className="fa-solid fa-check text-white text-xs" />
-                        )}
+                        <i
+                          className={`fa-solid ${icon} text-lg`}
+                          style={{ color }}
+                        />
                       </div>
-                      <span className="font-medium text-neutral-900 truncate">
-                        {String(g.subject_name)}
-                      </span>
+
+                      {/* Subject name - full width, wraps if needed */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-neutral-900 leading-tight">
+                          {String(g.subject_name)}
+                        </div>
+                        <div className="mt-1 text-xs text-neutral-500">
+                          {boardsCount} {boardsCount === 1 ? "board" : "boards"}
+                        </div>
+                      </div>
                     </div>
-                    {/* Icon from database with color */}
-                    <i
-                      className={`fa-solid ${icon} text-lg flex-shrink-0`}
-                      style={color ? { color } : { color: "#9A84FF" }}
-                    />
-                  </div>
-                  <div className="mt-2 ml-8 text-xs text-neutral-500">
-                    {boardsCount} {boardsCount === 1 ? "board" : "boards"}
+
+                    {/* Selection indicator */}
+                    <div
+                      className={`flex-shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                        selectedFlag
+                          ? "bg-primary-600 border-primary-600"
+                          : "border-neutral-300 bg-white"
+                      }`}
+                    >
+                      {selectedFlag && (
+                        <i className="fa-solid fa-check text-white text-xs" />
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -331,30 +366,37 @@ export default function SubjectBoardStep(props: Props) {
         )}
       </div>
 
-      {/* Selected subjects lozenges */}
+      {/* Selected subjects lozenges - cumulative across all exam types */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-neutral-700 mb-4">Selected subjects</label>
+        <label className="block text-sm font-medium text-neutral-700 mb-4">
+          Selected subjects {allSelectedSubjects.length > 0 && `(${allSelectedSubjects.length})`}
+        </label>
         <div className="flex flex-wrap gap-3 p-4 bg-neutral-50 rounded-xl border border-neutral-200 min-h-[80px]">
-          {selectedForActiveExamType.length === 0 ? (
+          {allSelectedSubjects.length === 0 ? (
             <p className="text-sm text-neutral-400">No subjects selected yet.</p>
           ) : (
-            selectedForActiveExamType.map((s) => (
-              <div
-                key={`${s.exam_type_id}|${s.subject_name}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
-              >
-                <span>
-                  {s.subject_name} · {s.exam_board_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeSelection(s.exam_type_id, s.subject_name)}
-                  className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
+            allSelectedSubjects.map((s) => {
+              // Find exam type name for this selection
+              const etName = examTypes.find((et) => et.id === s.exam_type_id)?.name ?? "";
+
+              return (
+                <div
+                  key={`${s.exam_type_id}|${s.subject_name}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
                 >
-                  <i className="fa-solid fa-xmark text-xs" />
-                </button>
-              </div>
-            ))
+                  <span>
+                    {etName && `${etName} · `}{s.subject_name} · {s.exam_board_name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeSelection(s.exam_type_id, s.subject_name)}
+                    className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
+                  >
+                    <i className="fa-solid fa-xmark text-xs" />
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
