@@ -18,7 +18,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
 import { fetchTodayData } from "../../services/todayService";
-import type { TodayData, TodaySession, UpcomingDay } from "../../types/today";
+import type { TodayData, SessionRow, UpcomingDay } from "../../types/today";
 
 // Subject icon mapping
 const SUBJECT_ICONS: Record<string, any> = {
@@ -38,6 +38,29 @@ const SUBJECT_ICONS: Record<string, any> = {
 function getSubjectIcon(subjectName: string) {
   const key = subjectName.toLowerCase();
   return SUBJECT_ICONS[key] || faBook;
+}
+
+/**
+ * Format date string to friendly label like "Tomorrow", "Wednesday", etc.
+ */
+function formatDayLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+  
+  if (targetDate.getTime() === tomorrow.getTime()) {
+    return "Tomorrow";
+  }
+  
+  // Return day name for dates within a week
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return days[date.getDay()];
 }
 
 export default function Today() {
@@ -125,8 +148,8 @@ export default function Today() {
   const totalCount = todaySessions.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Find next ready session
-  const nextSession = todaySessions.find((s) => s.status === "planned" || s.status === "started");
+  // Find next ready session (not_started or started)
+  const nextSession = todaySessions.find((s) => s.status === "not_started" || s.status === "started");
 
   // Loading state
   if (authLoading || loading) {
@@ -175,31 +198,31 @@ export default function Today() {
         </div>
 
         {/* Gamification Bar - if has data */}
-        {gamification && (gamification.current_streak > 0 || gamification.points_balance > 0) && (
+        {gamification && (gamification.streak.current > 0 || gamification.points.balance > 0) && (
           <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-2xl shadow-soft">
-            {gamification.current_streak > 0 && (
+            {gamification.streak.current > 0 && (
               <div className="flex items-center gap-2">
                 <FontAwesomeIcon icon={faFire} className="text-orange-500" />
-                <span className="font-semibold text-neutral-700">{gamification.current_streak}</span>
+                <span className="font-semibold text-neutral-700">{gamification.streak.current}</span>
                 <span className="text-sm text-neutral-500">day streak</span>
               </div>
             )}
-            {gamification.points_balance > 0 && (
+            {gamification.points.balance > 0 && (
               <>
                 <div className="w-px h-6 bg-neutral-200" />
                 <div className="flex items-center gap-2">
                   <FontAwesomeIcon icon={faStar} className="text-accent-amber" />
-                  <span className="font-semibold text-neutral-700">{gamification.points_balance}</span>
+                  <span className="font-semibold text-neutral-700">{gamification.points.balance}</span>
                   <span className="text-sm text-neutral-500">points</span>
                 </div>
               </>
             )}
-            {gamification.recent_achievement && (
+            {gamification.recentAchievement && (
               <>
                 <div className="w-px h-6 bg-neutral-200" />
                 <div className="flex items-center gap-2">
                   <FontAwesomeIcon icon={faTrophy} className="text-accent-amber" />
-                  <span className="text-sm text-neutral-600">{gamification.recent_achievement.name}</span>
+                  <span className="text-sm text-neutral-600">{gamification.recentAchievement.name}</span>
                 </div>
               </>
             )}
@@ -276,11 +299,11 @@ export default function Today() {
                             {session.subject_name}
                           </div>
                           <div className="text-xs text-neutral-500">
-                            {session.topic_name || "Topic TBD"}
+                            {session.topic_names?.[0] || "Topic TBD"}
                           </div>
                         </div>
                       </div>
-                      <div className="text-xs text-neutral-400">{day.day_label}</div>
+                      <div className="text-xs text-neutral-400">{formatDayLabel(day.date)}</div>
                     </div>
                   ))
                 )}
@@ -365,13 +388,14 @@ function SessionItem({
   isNext,
   onStart,
 }: {
-  session: TodaySession;
+  session: SessionRow;
   isNext: boolean;
   onStart: () => void;
 }) {
   const isCompleted = session.status === "completed";
-  const isScheduled = session.status === "planned" && !isNext;
-  const isReady = isNext;
+  const isStarted = session.status === "started";
+  const isNotStarted = session.status === "not_started";
+  const isReady = isNext && (isNotStarted || isStarted);
 
   // Determine styles based on state
   const containerStyles = isReady
@@ -385,6 +409,9 @@ function SessionItem({
     : "bg-neutral-200";
 
   const iconColorStyles = isCompleted || isReady ? "text-white" : "text-neutral-500";
+
+  // Get first topic name for display
+  const topicDisplay = session.topic_names?.[0] || "Topic TBD";
 
   // Status badge
   const getStatusBadge = () => {
@@ -401,7 +428,7 @@ function SessionItem({
           onClick={onStart}
           className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full hover:bg-primary-700 transition-colors"
         >
-          Ready
+          {isStarted ? "Continue" : "Ready"}
         </button>
       );
     }
@@ -425,9 +452,7 @@ function SessionItem({
         </div>
         <div>
           <div className="font-medium text-neutral-700">{session.subject_name}</div>
-          <div className="text-sm text-neutral-500">
-            {session.topic_name || "Topic TBD"}
-          </div>
+          <div className="text-sm text-neutral-500">{topicDisplay}</div>
           <div className="text-sm text-neutral-400">
             {session.session_duration_minutes} mins
           </div>
