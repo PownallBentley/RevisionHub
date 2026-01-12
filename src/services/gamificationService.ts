@@ -55,7 +55,6 @@ export function getAchievementIcon(iconCode: string): string {
     // Default
     default: "🏅",
   };
-
   return icons[iconCode.toLowerCase()] || icons.default;
 }
 
@@ -117,11 +116,11 @@ export function getLevelInfo(lifetimePoints: number): {
 /**
  * Get streak status message
  */
-export function getStreakMessage(currentStreak: number, longestStreak: number): string {
+export function getStreakMessage(currentStreak: number, longestStreak?: number): string {
   if (currentStreak === 0) {
     return "Start a streak by completing a session!";
   }
-  if (currentStreak === longestStreak && currentStreak >= 3) {
+  if (longestStreak !== undefined && currentStreak === longestStreak && currentStreak >= 3) {
     return `Personal best! ${currentStreak} day streak 🎉`;
   }
   if (currentStreak >= 7) {
@@ -131,4 +130,24 @@ export function getStreakMessage(currentStreak: number, longestStreak: number): 
     return `Great progress! ${currentStreak} day streak`;
   }
   return `${currentStreak} day streak - keep going!`;
+}
+
+/**
+ * Get color scheme based on streak length
+ */
+export function getStreakColorScheme(streak: number): { bg: string; text: string } {
+  if (streak === 0) {
+    return { bg: "bg-gray-100", text: "text-gray-500" };
+  }
+  if (streak < 3) {
+    return { bg: "bg-orange-50", text: "text-orange-600" };
+  }
+  if (streak < 7) {
+    return { bg: "bg-orange-100", text: "text-orange-700" };
+  }
+  if (streak < 14) {
+    return { bg: "bg-amber-100", text: "text-amber-700" };
+  }
+  // 14+ days
+  return { bg: "bg-gradient-to-r from-amber-100 to-orange-100", text: "text-orange-800" };
 }
