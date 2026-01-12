@@ -127,13 +127,6 @@ export default function SubjectBoardStep(props: Props) {
           boards: Array.isArray((r as any).boards) ? (r as any).boards : [],
         }));
 
-        // DEBUG: Log first few rows to check icon/color data
-        console.log("Subject groups loaded:", safe.slice(0, 5).map(s => ({
-          name: s.subject_name,
-          icon: (s as any).icon,
-          color: (s as any).color
-        })));
-
         setGroups(safe);
         setActiveExamTypeIndex(0);
       } catch (e: any) {
@@ -323,17 +316,6 @@ export default function SubjectBoardStep(props: Props) {
         </div>
       )}
 
-      {/* DEBUG: Test if Font Awesome is working */}
-      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
-        <strong>Debug icons:</strong>{" "}
-        <i className="fa-solid fa-atom" style={{ color: "#744FFF" }} />{" "}
-        <i className="fa-solid fa-flask" style={{ color: "#FFB547" }} />{" "}
-        <i className="fa-solid fa-calculator" style={{ color: "#5B2CFF" }} />{" "}
-        <i className="fa-solid fa-dna" style={{ color: "#16A07A" }} />{" "}
-        <i className="fa-solid fa-book" style={{ color: "#1EC592" }} />
-        <span className="ml-2 text-yellow-700">(If you see 5 colored icons above, Font Awesome works)</span>
-      </div>
-
       {/* Subjects grid - 2 columns */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-700 mb-4">Available subjects</label>
@@ -349,8 +331,7 @@ export default function SubjectBoardStep(props: Props) {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
 
-              const rawIcon = (g as any).icon;
-              const icon = formatIcon(rawIcon);
+              const icon = formatIcon((g as any).icon);
               const color = (g as any).color || "#7C3AED";
 
               return (
@@ -364,22 +345,22 @@ export default function SubjectBoardStep(props: Props) {
                       : "border-neutral-200 bg-white hover:border-primary-300"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0 flex-1">
                       {/* Icon with database color */}
                       <div
-                        className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                        className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
                         style={{ backgroundColor: `${color}20` }}
                       >
                         <i
                           className={`fa-solid ${icon}`}
-                          style={{ color, fontSize: "1.125rem" }}
+                          style={{ color, fontSize: "1rem" }}
                         />
                       </div>
 
-                      {/* Subject name */}
+                      {/* Subject name - slightly smaller text */}
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-neutral-900 leading-tight">
+                        <div className="text-sm font-medium text-neutral-900 leading-tight">
                           {String(g.subject_name)}
                         </div>
                         <div className="mt-1 text-xs text-neutral-500">
@@ -390,14 +371,14 @@ export default function SubjectBoardStep(props: Props) {
 
                     {/* Selection indicator */}
                     <div
-                      className={`flex-shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                      className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
                         selectedFlag
                           ? "bg-primary-600 border-primary-600"
                           : "border-neutral-300 bg-white"
                       }`}
                     >
                       {selectedFlag && (
-                        <i className="fa-solid fa-check text-white text-xs" />
+                        <i className="fa-solid fa-check text-white text-[10px]" />
                       )}
                     </div>
                   </div>
@@ -413,7 +394,7 @@ export default function SubjectBoardStep(props: Props) {
         <label className="block text-sm font-medium text-neutral-700 mb-4">
           Selected subjects {allSelectedSubjects.length > 0 && `(${allSelectedSubjects.length})`}
         </label>
-        <div className="flex flex-wrap gap-3 p-4 bg-neutral-50 rounded-xl border border-neutral-200 min-h-[80px]">
+        <div className="flex flex-wrap gap-2 p-4 bg-neutral-50 rounded-xl border border-neutral-200 min-h-[72px]">
           {allSelectedSubjects.length === 0 ? (
             <p className="text-sm text-neutral-400">No subjects selected yet.</p>
           ) : (
@@ -423,7 +404,7 @@ export default function SubjectBoardStep(props: Props) {
               return (
                 <div
                   key={`${s.exam_type_id}|${s.subject_name}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-100 text-primary-700 rounded-full text-xs font-medium"
                 >
                   <span>
                     {etName && `${etName} · `}{s.subject_name} · {s.exam_board_name}
@@ -434,10 +415,10 @@ export default function SubjectBoardStep(props: Props) {
                       e.stopPropagation();
                       removeSelection(s.exam_type_id, s.subject_name);
                     }}
-                    className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
+                    className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-primary-200 transition-all"
                     aria-label={`Remove ${s.subject_name}`}
                   >
-                    <i className="fa-solid fa-xmark text-xs" />
+                    <i className="fa-solid fa-xmark text-[10px]" />
                   </button>
                 </div>
               );
@@ -473,7 +454,7 @@ export default function SubjectBoardStep(props: Props) {
             <div className="flex items-start justify-between gap-4 p-6 border-b border-neutral-200">
               <div>
                 <div className="text-sm text-neutral-500">Choose exam board</div>
-                <div className="text-xl font-semibold text-neutral-900 mt-1">
+                <div className="text-lg font-semibold text-neutral-900 mt-1">
                   {modalCtx.subject_name}
                 </div>
                 <p className="mt-2 text-sm text-neutral-500">
@@ -483,9 +464,10 @@ export default function SubjectBoardStep(props: Props) {
               <button
                 type="button"
                 onClick={closeModal}
-                className="px-4 py-2 rounded-full text-sm font-medium border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-all"
+                className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 transition-all"
+                aria-label="Close"
               >
-                Close
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -512,7 +494,7 @@ export default function SubjectBoardStep(props: Props) {
                         key={String(b.exam_board_id)}
                         type="button"
                         onClick={() => setSelectionForGroup(modalCtx, b)}
-                        className="w-full rounded-xl border-2 border-neutral-200 bg-white px-4 py-4 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
+                        className="w-full rounded-xl border-2 border-neutral-200 bg-white px-4 py-3 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
                       >
                         <div className="font-medium text-neutral-900">{String(b._label)}</div>
                       </button>
@@ -523,9 +505,9 @@ export default function SubjectBoardStep(props: Props) {
                         key={`not-sure-${String(b.exam_board_id)}`}
                         type="button"
                         onClick={() => setSelectionForGroup(modalCtx, b)}
-                        className="w-full rounded-xl border-2 border-neutral-200 bg-white px-4 py-4 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
+                        className="w-full rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 px-4 py-3 text-left hover:border-primary-300 hover:bg-primary-50 transition-all"
                       >
-                        <div className="font-medium text-neutral-900">I'm not sure</div>
+                        <div className="font-medium text-neutral-600">I'm not sure</div>
                       </button>
                     ))}
 
