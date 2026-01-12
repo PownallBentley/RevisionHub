@@ -11,6 +11,7 @@ import {
   faLightbulb,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
+import { PageLayout } from "../../components/layout";
 import {
   fetchChildrenForParent,
   fetchWeekPlan,
@@ -26,13 +27,6 @@ import {
   type ChildOption,
   type SubjectLegend,
 } from "../../services/timetableService";
-
-// Design system colors
-const COLORS = {
-  primary: { 50: "#F7F4FF", 100: "#EAE3FF", 200: "#D4C7FF", 600: "#5B2CFF", 700: "#4520C5", 900: "#2A185E" },
-  neutral: { 50: "#F9FAFC", 100: "#F6F7FB", 200: "#E1E4EE", 500: "#6C7280", 600: "#4B5161", 700: "#1F2330" },
-  accent: { green: "#1EC592", amber: "#FFB547", red: "#F05151" },
-};
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -190,40 +184,38 @@ export default function Timetable() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <div className="min-h-[calc(100vh-73px)] flex items-center justify-center" style={{ backgroundColor: COLORS.neutral[100] }}>
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: COLORS.primary[600] }} />
-          <p className="text-sm" style={{ color: COLORS.neutral[600] }}>Loading timetable...</p>
+      <PageLayout>
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Loading timetable...</p>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   if (!user || !profile) return null;
 
   return (
-    <div className="min-h-[calc(100vh-73px)]" style={{ backgroundColor: COLORS.neutral[100] }}>
+    <PageLayout>
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Page Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-3xl font-bold mb-2" style={{ color: COLORS.primary[900] }}>
+              <h1 className="text-3xl font-bold mb-2 text-primary-900">
                 Revision Timetable
               </h1>
-              <p style={{ color: COLORS.neutral[600] }}>Weekly schedule and session planning</p>
+              <p className="text-neutral-600">Weekly schedule and session planning</p>
             </div>
             <div className="flex items-center space-x-3">
               {/* Child Selector */}
-              <div
-                className="relative flex items-center px-4 py-2 rounded-full border cursor-pointer"
-                style={{ backgroundColor: COLORS.primary[50], borderColor: COLORS.primary[100] }}
-              >
+              <div className="relative flex items-center px-4 py-2 rounded-full border cursor-pointer bg-primary-50 border-primary-100">
                 <select
                   value={selectedChildId || ""}
                   onChange={(e) => setSelectedChildId(e.target.value)}
-                  className="appearance-none bg-transparent border-none font-medium focus:outline-none cursor-pointer pr-6"
-                  style={{ color: COLORS.primary[600] }}
+                  className="appearance-none bg-transparent border-none font-medium focus:outline-none cursor-pointer pr-6 text-primary-600"
                 >
                   {children.map((child) => (
                     <option key={child.child_id} value={child.child_id}>
@@ -233,14 +225,10 @@ export default function Timetable() {
                 </select>
                 <FontAwesomeIcon
                   icon={faChevronDown}
-                  className="absolute right-4 text-xs pointer-events-none"
-                  style={{ color: COLORS.primary[600] }}
+                  className="absolute right-4 text-xs pointer-events-none text-primary-600"
                 />
               </div>
-              <button
-                className="px-6 py-2 text-white rounded-full hover:opacity-90 transition-colors flex items-center gap-2"
-                style={{ backgroundColor: COLORS.primary[600] }}
-              >
+              <button className="px-6 py-2 text-white rounded-full hover:opacity-90 transition-colors flex items-center gap-2 bg-primary-600">
                 <FontAwesomeIcon icon={faPlus} />
                 Add Session
               </button>
@@ -249,23 +237,24 @@ export default function Timetable() {
         </div>
 
         {/* Status Hero Card */}
-        <div className="bg-white rounded-2xl p-6 mb-6" style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+        <div className="bg-white rounded-2xl shadow-card p-6 mb-6">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center space-x-3 mb-3">
                 <span
-                  className="px-4 py-1.5 text-white text-sm font-medium rounded-full"
-                  style={{ backgroundColor: stats.plannedSessions > 0 ? COLORS.accent.green : COLORS.accent.amber }}
+                  className={`px-4 py-1.5 text-white text-sm font-medium rounded-full ${
+                    stats.plannedSessions > 0 ? "bg-accent-green" : "bg-accent-amber"
+                  }`}
                 >
                   {stats.plannedSessions > 0 ? "Sessions Scheduled" : "No Sessions"}
                 </span>
-                <h2 className="text-xl font-semibold" style={{ color: COLORS.neutral[700] }}>
+                <h2 className="text-xl font-semibold text-neutral-700">
                   {stats.plannedSessions > 0
                     ? `${stats.plannedSessions} session${stats.plannedSessions !== 1 ? "s" : ""} scheduled`
                     : "No sessions scheduled for this period"}
                 </h2>
               </div>
-              <p className="mb-4" style={{ color: COLORS.neutral[600] }}>
+              <p className="mb-4 text-neutral-600">
                 {stats.completedSessions > 0
                   ? `${stats.completedSessions} of ${stats.totalSessions} sessions completed.`
                   : stats.plannedSessions > 0
@@ -273,14 +262,14 @@ export default function Timetable() {
                   : "Add sessions to build a revision plan."}
               </p>
               {stats.plannedSessions === 0 && (
-                <div className="border rounded-xl p-4" style={{ backgroundColor: COLORS.primary[50], borderColor: COLORS.primary[200] }}>
+                <div className="border rounded-xl p-4 bg-primary-50 border-primary-200">
                   <div className="flex items-start space-x-3">
-                    <FontAwesomeIcon icon={faLightbulb} className="mt-1" style={{ color: COLORS.primary[600] }} />
+                    <FontAwesomeIcon icon={faLightbulb} className="mt-1 text-primary-600" />
                     <div>
-                      <p className="text-sm font-medium mb-1" style={{ color: COLORS.primary[900] }}>
+                      <p className="text-sm font-medium mb-1 text-primary-900">
                         Recommendation
                       </p>
-                      <p className="text-sm" style={{ color: COLORS.neutral[600] }}>
+                      <p className="text-sm text-neutral-600">
                         Generate a revision plan to automatically schedule sessions based on your child's subjects and availability.
                       </p>
                     </div>
@@ -289,39 +278,38 @@ export default function Timetable() {
               )}
             </div>
             <div className="ml-6 text-right">
-              <div className="text-4xl font-bold mb-1" style={{ color: COLORS.primary[600] }}>
+              <div className="text-4xl font-bold mb-1 text-primary-600">
                 {stats.totalSessions}
               </div>
-              <div className="text-sm" style={{ color: COLORS.neutral[500] }}>Total sessions</div>
+              <div className="text-sm text-neutral-500">Total sessions</div>
             </div>
           </div>
         </div>
 
         {/* Timetable Controls */}
-        <div className="bg-white rounded-2xl p-4 mb-6" style={{ boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)" }}>
+        <div className="bg-white rounded-2xl shadow-soft p-4 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
                 onClick={goToPrevious}
                 className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-neutral-100 transition-colors"
               >
-                <FontAwesomeIcon icon={faChevronLeft} style={{ color: COLORS.neutral[600] }} />
+                <FontAwesomeIcon icon={faChevronLeft} className="text-neutral-600" />
               </button>
-              <h3 className="text-lg font-semibold min-w-[200px] text-center" style={{ color: COLORS.neutral[700] }}>
+              <h3 className="text-lg font-semibold min-w-[200px] text-center text-neutral-700">
                 {formatDateRange(viewMode, referenceDate)}
               </h3>
               <button
                 onClick={goToNext}
                 className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-neutral-100 transition-colors"
               >
-                <FontAwesomeIcon icon={faChevronRight} style={{ color: COLORS.neutral[600] }} />
+                <FontAwesomeIcon icon={faChevronRight} className="text-neutral-600" />
               </button>
             </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={goToToday}
-                className="px-4 py-2 text-white rounded-full text-sm hover:opacity-90 transition-colors"
-                style={{ backgroundColor: COLORS.primary[600] }}
+                className="px-4 py-2 text-white rounded-full text-sm hover:opacity-90 transition-colors bg-primary-600"
               >
                 Today
               </button>
@@ -329,12 +317,11 @@ export default function Timetable() {
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
-                  className="px-4 py-2 border rounded-full text-sm transition-colors"
-                  style={{
-                    backgroundColor: viewMode === mode ? COLORS.primary[50] : "white",
-                    borderColor: viewMode === mode ? COLORS.primary[600] : COLORS.neutral[200],
-                    color: viewMode === mode ? COLORS.primary[600] : COLORS.neutral[600],
-                  }}
+                  className={`px-4 py-2 border rounded-full text-sm transition-colors ${
+                    viewMode === mode
+                      ? "bg-primary-50 border-primary-600 text-primary-600"
+                      : "bg-white border-neutral-200 text-neutral-600"
+                  }`}
                 >
                   {mode.charAt(0).toUpperCase() + mode.slice(1)}
                 </button>
@@ -345,11 +332,11 @@ export default function Timetable() {
 
         {/* Week View Grid */}
         {viewMode === "week" && (
-          <div className="bg-white rounded-2xl overflow-hidden mb-6" style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+          <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-6">
             {/* Header Row */}
-            <div className="grid grid-cols-8 border-b" style={{ borderColor: COLORS.neutral[200] }}>
-              <div className="p-4 border-r" style={{ backgroundColor: COLORS.neutral[50], borderColor: COLORS.neutral[200] }}>
-                <div className="text-sm font-medium" style={{ color: COLORS.neutral[700] }}>Time</div>
+            <div className="grid grid-cols-8 border-b border-neutral-200">
+              <div className="p-4 border-r bg-neutral-50 border-neutral-200">
+                <div className="text-sm font-medium text-neutral-700">Time</div>
               </div>
               {DAYS.map((day, index) => {
                 const date = new Date(weekStart);
@@ -359,16 +346,14 @@ export default function Timetable() {
                 return (
                   <div
                     key={day}
-                    className="p-4 text-center border-r last:border-r-0"
-                    style={{
-                      backgroundColor: isToday ? COLORS.primary[50] : "white",
-                      borderColor: COLORS.neutral[200],
-                    }}
+                    className={`p-4 text-center border-r last:border-r-0 border-neutral-200 ${
+                      isToday ? "bg-primary-50" : "bg-white"
+                    }`}
                   >
-                    <div className="text-sm font-medium" style={{ color: isToday ? COLORS.primary[600] : COLORS.neutral[700] }}>
+                    <div className={`text-sm font-medium ${isToday ? "text-primary-600" : "text-neutral-700"}`}>
                       {day}
                     </div>
-                    <div className="text-xs" style={{ color: isToday ? COLORS.primary[600] : COLORS.neutral[500] }}>
+                    <div className={`text-xs ${isToday ? "text-primary-600" : "text-neutral-500"}`}>
                       {date.getDate()}
                     </div>
                   </div>
@@ -378,10 +363,10 @@ export default function Timetable() {
 
             {/* Session Row */}
             <div className="grid grid-cols-8 min-h-[200px]">
-              <div className="p-4 border-r flex items-start" style={{ backgroundColor: COLORS.neutral[50], borderColor: COLORS.neutral[200] }}>
+              <div className="p-4 border-r flex items-start bg-neutral-50 border-neutral-200">
                 <div>
-                  <div className="text-sm font-medium" style={{ color: COLORS.neutral[700] }}>Sessions</div>
-                  <div className="text-xs" style={{ color: COLORS.neutral[500] }}>All day</div>
+                  <div className="text-sm font-medium text-neutral-700">Sessions</div>
+                  <div className="text-xs text-neutral-500">All day</div>
                 </div>
               </div>
               {DAYS.map((_, dayIndex) => {
@@ -394,10 +379,10 @@ export default function Timetable() {
                 const daySessions = dayData?.sessions || [];
 
                 return (
-                  <div key={dayIndex} className="p-3 border-r last:border-r-0" style={{ borderColor: COLORS.neutral[200] }}>
+                  <div key={dayIndex} className="p-3 border-r last:border-r-0 border-neutral-200">
                     {daySessions.length === 0 ? (
                       <div className="h-full flex items-center justify-center">
-                        <span className="text-xs" style={{ color: COLORS.neutral[400] }}>No sessions</span>
+                        <span className="text-xs text-neutral-400">No sessions</span>
                       </div>
                     ) : (
                       daySessions.map((session) => (
@@ -412,14 +397,14 @@ export default function Timetable() {
                           <div className="text-sm font-semibold mb-1" style={{ color: session.color }}>
                             {session.subject_name}
                           </div>
-                          <div className="text-xs" style={{ color: COLORS.neutral[600] }}>
+                          <div className="text-xs text-neutral-600">
                             {getTopicNames(session)}
                           </div>
-                          <div className="text-xs mt-2" style={{ color: COLORS.neutral[500] }}>
+                          <div className="text-xs mt-2 text-neutral-500">
                             {session.session_duration_minutes} mins
                           </div>
                           {session.status === "completed" && (
-                            <span className="inline-block mt-1 px-2 py-0.5 text-xs rounded-full text-white" style={{ backgroundColor: COLORS.accent.green }}>
+                            <span className="inline-block mt-1 px-2 py-0.5 text-xs rounded-full text-white bg-accent-green">
                               Done
                             </span>
                           )}
@@ -435,12 +420,11 @@ export default function Timetable() {
 
         {/* Month View */}
         {viewMode === "month" && (
-          <div className="bg-white rounded-2xl overflow-hidden mb-6" style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
+          <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-6">
             <div className="p-6">
               <MonthCalendar
                 referenceDate={referenceDate}
                 sessions={monthSessions}
-                colors={COLORS}
               />
             </div>
           </div>
@@ -448,15 +432,15 @@ export default function Timetable() {
 
         {/* Subject Legend */}
         {subjectLegend.length > 0 && (
-          <div className="bg-white rounded-2xl p-6" style={{ boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)" }}>
-            <h3 className="text-sm font-semibold mb-4" style={{ color: COLORS.neutral[700] }}>
+          <div className="bg-white rounded-2xl shadow-soft p-6">
+            <h3 className="text-sm font-semibold mb-4 text-neutral-700">
               Subject Legend
             </h3>
             <div className="flex flex-wrap gap-6">
               {subjectLegend.map((subject) => (
                 <div key={subject.subject_id} className="flex items-center space-x-2">
                   <div className="w-4 h-4 rounded" style={{ backgroundColor: subject.subject_color }} />
-                  <span className="text-sm" style={{ color: COLORS.neutral[600] }}>{subject.subject_name}</span>
+                  <span className="text-sm text-neutral-600">{subject.subject_name}</span>
                 </div>
               ))}
             </div>
@@ -465,26 +449,23 @@ export default function Timetable() {
 
         {/* Empty state */}
         {stats.totalSessions === 0 && !loading && viewMode === "week" && (
-          <div className="bg-white rounded-2xl p-8 text-center" style={{ boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)" }}>
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: COLORS.primary[100] }}>
-              <FontAwesomeIcon icon={faPlus} className="text-2xl" style={{ color: COLORS.primary[600] }} />
+          <div className="bg-white rounded-2xl shadow-card p-8 text-center">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-primary-100">
+              <FontAwesomeIcon icon={faPlus} className="text-2xl text-primary-600" />
             </div>
-            <h3 className="text-lg font-semibold mb-2" style={{ color: COLORS.primary[900] }}>
+            <h3 className="text-lg font-semibold mb-2 text-primary-900">
               No sessions scheduled
             </h3>
-            <p className="mb-6 max-w-md mx-auto" style={{ color: COLORS.neutral[600] }}>
+            <p className="mb-6 max-w-md mx-auto text-neutral-600">
               There are no revision sessions scheduled for this week. Generate a plan or add sessions manually.
             </p>
-            <button
-              className="px-6 py-3 text-white rounded-full font-medium hover:opacity-90 transition-colors"
-              style={{ backgroundColor: COLORS.primary[600] }}
-            >
+            <button className="px-6 py-3 text-white rounded-full font-medium hover:opacity-90 transition-colors bg-primary-600">
               Generate Revision Plan
             </button>
           </div>
         )}
       </main>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -494,11 +475,9 @@ export default function Timetable() {
 function MonthCalendar({
   referenceDate,
   sessions,
-  colors,
 }: {
   referenceDate: Date;
   sessions: TimetableSession[];
-  colors: typeof COLORS;
 }) {
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
@@ -533,7 +512,7 @@ function MonthCalendar({
       {/* Day headers */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {DAYS.map((day) => (
-          <div key={day} className="text-center text-sm font-medium py-2" style={{ color: colors.neutral[600] }}>
+          <div key={day} className="text-center text-sm font-medium py-2 text-neutral-600">
             {day}
           </div>
         ))}
@@ -552,13 +531,11 @@ function MonthCalendar({
           return (
             <div
               key={day}
-              className="h-24 border rounded-lg p-2 overflow-hidden"
-              style={{
-                borderColor: isToday ? colors.primary[600] : colors.neutral[200],
-                backgroundColor: isToday ? colors.primary[50] : "white",
-              }}
+              className={`h-24 border rounded-lg p-2 overflow-hidden ${
+                isToday ? "border-primary-600 bg-primary-50" : "border-neutral-200 bg-white"
+              }`}
             >
-              <div className="text-sm font-medium mb-1" style={{ color: isToday ? colors.primary[600] : colors.neutral[700] }}>
+              <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary-600" : "text-neutral-700"}`}>
                 {day}
               </div>
               <div className="space-y-1">
@@ -575,7 +552,7 @@ function MonthCalendar({
                   </div>
                 ))}
                 {daySessions.length > 2 && (
-                  <div className="text-xs" style={{ color: colors.neutral[500] }}>
+                  <div className="text-xs text-neutral-500">
                     +{daySessions.length - 2} more
                   </div>
                 )}
