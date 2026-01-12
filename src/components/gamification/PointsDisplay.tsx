@@ -1,6 +1,6 @@
-// src/components/gamification/PointsDisplay.tsx
 
-import { formatPoints, calculateLevel } from "../../services/gamificationService";
+
+import { getLevelInfo } from "./gamificationService";
 
 type PointsDisplayProps = {
   balance: number;
