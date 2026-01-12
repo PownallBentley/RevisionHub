@@ -82,7 +82,7 @@ export default function StreakCounter({
 // Compact badge version
 export function StreakBadge({ streak }: { streak: number }) {
   const colors = getStreakColorScheme(streak);
-  
+
   if (streak === 0) {
     return null;
   }
