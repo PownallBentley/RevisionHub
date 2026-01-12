@@ -10,7 +10,7 @@ import {
 } from "../../../services/referenceData/referenceDataService";
 
 /* ============================
-   Types
+   Types (UNCHANGED)
 ============================ */
 
 export type NeedClusterSelection = {
@@ -41,47 +41,78 @@ function GateScreen(props: {
   const { childName, onYes, onNo, onPending } = props;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">
+    <div>
+      {/* Section header */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">
           Does {childName} have any formal access arrangements for exams?
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="text-neutral-500 text-sm leading-relaxed">
           Access arrangements are approved by your school through the exam boards. They
           might include extra time, a separate room, a reader, or other support.
         </p>
       </div>
 
-      <div className="space-y-3">
+      {/* Options */}
+      <div className="space-y-4">
         <button
           type="button"
           onClick={onYes}
-          className="w-full rounded-2xl border border-gray-200 px-5 py-4 text-left hover:border-brand-purple hover:bg-brand-purple/5 transition-colors"
+          className="w-full border-2 border-neutral-200 rounded-xl p-5 text-left transition-all hover:border-primary-300 hover:shadow-soft"
         >
-          <p className="font-medium">Yes, they have approved arrangements</p>
-          <p className="mt-1 text-sm text-gray-500">
-            I'll tell you what support they receive
-          </p>
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center mt-0.5">
+              <i className="fa-solid fa-check-double text-primary-600 text-lg" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-neutral-900 mb-1">
+                Yes, they have approved arrangements
+              </h3>
+              <p className="text-sm text-neutral-500 leading-relaxed">
+                I'll tell you what support they receive
+              </p>
+            </div>
+          </div>
         </button>
 
         <button
           type="button"
           onClick={onNo}
-          className="w-full rounded-2xl border border-gray-200 px-5 py-4 text-left hover:border-brand-purple hover:bg-brand-purple/5 transition-colors"
+          className="w-full border-2 border-neutral-200 rounded-xl p-5 text-left transition-all hover:border-primary-300 hover:shadow-soft"
         >
-          <p className="font-medium">No, or I'm not sure</p>
-          <p className="mt-1 text-sm text-gray-500">
-            Help me understand their learning style
-          </p>
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center mt-0.5">
+              <i className="fa-solid fa-circle-question text-primary-600 text-lg" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-neutral-900 mb-1">
+                No, or I'm not sure
+              </h3>
+              <p className="text-sm text-neutral-500 leading-relaxed">
+                Help me understand their learning style
+              </p>
+            </div>
+          </div>
         </button>
 
         <button
           type="button"
           onClick={onPending}
-          className="w-full rounded-2xl border border-gray-200 px-5 py-4 text-left hover:border-brand-purple hover:bg-brand-purple/5 transition-colors"
+          className="w-full border-2 border-neutral-200 rounded-xl p-5 text-left transition-all hover:border-primary-300 hover:shadow-soft"
         >
-          <p className="font-medium">We're in the process of getting assessed</p>
-          <p className="mt-1 text-sm text-gray-500">I'll describe what I've noticed</p>
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center mt-0.5">
+              <i className="fa-solid fa-hourglass-half text-primary-600 text-lg" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-neutral-900 mb-1">
+                We're in the process of getting assessed
+              </h3>
+              <p className="text-sm text-neutral-500 leading-relaxed">
+                I'll describe what I've noticed
+              </p>
+            </div>
+          </div>
         </button>
       </div>
     </div>
@@ -122,24 +153,27 @@ function FormalArrangementsScreen(props: {
   }, [clusters]);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div>
+      {/* Back button and header */}
+      <div className="mb-8">
         <button
           type="button"
           onClick={onBack}
-          className="text-sm text-gray-500 hover:text-gray-700 mb-4"
+          className="text-sm text-neutral-500 hover:text-neutral-700 mb-4 flex items-center gap-2"
         >
-          ← Back
+          <i className="fa-solid fa-arrow-left text-xs" />
+          <span>Back</span>
         </button>
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">
           What conditions does {childName} have arrangements for?
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="text-neutral-500 text-sm leading-relaxed">
           Select all that apply. For each, you can tell us what arrangements they receive.
         </p>
       </div>
 
-      <div className="space-y-3">
+      {/* Areas list */}
+      <div className="space-y-4">
         {jcqAreas.map((area) => {
           const areaClusters = clustersByArea[area.code] ?? [];
           const isExpanded = expandedArea === area.code;
@@ -148,8 +182,8 @@ function FormalArrangementsScreen(props: {
           return (
             <div
               key={area.code}
-              className={`rounded-2xl border transition-colors ${
-                hasSelected ? "border-brand-purple bg-brand-purple/5" : "border-gray-200"
+              className={`rounded-xl border-2 transition-all overflow-hidden ${
+                hasSelected ? "border-primary-600 bg-primary-50" : "border-neutral-200"
               }`}
             >
               <button
@@ -158,14 +192,20 @@ function FormalArrangementsScreen(props: {
                 className="w-full px-5 py-4 text-left flex items-center justify-between"
               >
                 <div>
-                  <p className="font-medium">{area.name}</p>
-                  <p className="mt-1 text-sm text-gray-500">{area.description}</p>
+                  <p className="font-semibold text-neutral-900">{area.name}</p>
+                  <p className="mt-1 text-sm text-neutral-500">{area.description}</p>
                 </div>
-                <span className="text-gray-400 text-xl">{isExpanded ? "−" : "+"}</span>
+                <span className="text-neutral-400 text-xl flex-shrink-0 ml-4">
+                  {isExpanded ? (
+                    <i className="fa-solid fa-minus" />
+                  ) : (
+                    <i className="fa-solid fa-plus" />
+                  )}
+                </span>
               </button>
 
               {isExpanded && (
-                <div className="px-5 pb-4 space-y-3 border-t border-gray-100 pt-4">
+                <div className="px-5 pb-5 space-y-3 border-t border-neutral-200 pt-4">
                   {areaClusters.map((cluster) => {
                     const isSelected = selectedCodes.has(cluster.code);
                     return (
@@ -175,18 +215,18 @@ function FormalArrangementsScreen(props: {
                           onClick={() =>
                             onToggle(cluster.code, accommodationInputs[cluster.code])
                           }
-                          className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
+                          className={`w-full rounded-xl border-2 px-4 py-3 text-left transition-all ${
                             isSelected
-                              ? "border-brand-purple bg-brand-purple/10"
-                              : "border-gray-200 hover:border-gray-300"
+                              ? "border-primary-600 bg-primary-100"
+                              : "border-neutral-200 hover:border-neutral-300"
                           }`}
                         >
-                          <p className="font-medium">
+                          <p className="font-medium text-neutral-900">
                             {cluster.parent_friendly_name || cluster.name}
                           </p>
                           {cluster.condition_name &&
                             cluster.condition_name !== cluster.name && (
-                              <p className="text-xs text-gray-500 mt-0.5">
+                              <p className="text-xs text-neutral-500 mt-0.5">
                                 {cluster.condition_name}
                               </p>
                             )}
@@ -194,7 +234,7 @@ function FormalArrangementsScreen(props: {
 
                         {isSelected && (
                           <div className="ml-4">
-                            <label className="text-sm text-gray-600">
+                            <label className="text-sm text-neutral-600">
                               What arrangements do they receive? (optional)
                             </label>
                             <input
@@ -208,14 +248,13 @@ function FormalArrangementsScreen(props: {
                                 }));
                               }}
                               onBlur={() => {
-                                // Update the selection with accommodation details
                                 onToggle(cluster.code, accommodationInputs[cluster.code]);
                               }}
-                              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                              className="mt-2 w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
                             />
                             {cluster.common_arrangements &&
                               cluster.common_arrangements.length > 0 && (
-                                <p className="mt-1 text-xs text-gray-400">
+                                <p className="mt-2 text-xs text-neutral-400">
                                   Common: {cluster.common_arrangements.join(", ")}
                                 </p>
                               )}
@@ -262,25 +301,28 @@ function ObservedTraitsScreen(props: {
   }, [clusters]);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div>
+      {/* Back button and header */}
+      <div className="mb-8">
         <button
           type="button"
           onClick={onBack}
-          className="text-sm text-gray-500 hover:text-gray-700 mb-4"
+          className="text-sm text-neutral-500 hover:text-neutral-700 mb-4 flex items-center gap-2"
         >
-          ← Back
+          <i className="fa-solid fa-arrow-left text-xs" />
+          <span>Back</span>
         </button>
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">
           Let's understand how {childName} learns best
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="text-neutral-500 text-sm leading-relaxed">
           You don't need a diagnosis. Just select anything that sounds familiar — this
           helps us tailor their revision experience.
         </p>
       </div>
 
-      <div className="space-y-3">
+      {/* Areas list */}
+      <div className="space-y-4">
         {areas.map((area) => {
           const areaClusters = clustersByArea[area.code] ?? [];
           const isExpanded = expandedArea === area.code;
@@ -291,10 +333,10 @@ function ObservedTraitsScreen(props: {
           return (
             <div
               key={area.code}
-              className={`rounded-2xl border transition-colors ${
+              className={`rounded-xl border-2 transition-all overflow-hidden ${
                 selectedCount > 0
-                  ? "border-brand-purple bg-brand-purple/5"
-                  : "border-gray-200"
+                  ? "border-primary-600 bg-primary-50"
+                  : "border-neutral-200"
               }`}
             >
               <button
@@ -303,28 +345,32 @@ function ObservedTraitsScreen(props: {
                 className="w-full px-5 py-4 text-left flex items-center justify-between"
               >
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{area.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-neutral-900">{area.name}</p>
                     {!area.is_jcq_recognised && (
-                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full">
                         Revision support
                       </span>
                     )}
                     {selectedCount > 0 && (
-                      <span className="text-xs bg-brand-purple text-white px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
                         {selectedCount} selected
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">{area.helper_text}</p>
+                  <p className="mt-1 text-sm text-neutral-500">{area.helper_text}</p>
                 </div>
-                <span className="text-gray-400 text-xl ml-4">
-                  {isExpanded ? "−" : "+"}
+                <span className="text-neutral-400 text-xl flex-shrink-0 ml-4">
+                  {isExpanded ? (
+                    <i className="fa-solid fa-minus" />
+                  ) : (
+                    <i className="fa-solid fa-plus" />
+                  )}
                 </span>
               </button>
 
               {isExpanded && (
-                <div className="px-5 pb-4 space-y-3 border-t border-gray-100 pt-4">
+                <div className="px-5 pb-5 space-y-3 border-t border-neutral-200 pt-4">
                   {areaClusters.map((cluster) => {
                     const isSelected = selectedCodes.has(cluster.code);
                     const signs =
@@ -335,13 +381,13 @@ function ObservedTraitsScreen(props: {
                         key={cluster.code}
                         type="button"
                         onClick={() => onToggle(cluster.code)}
-                        className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
+                        className={`w-full rounded-xl border-2 px-4 py-3 text-left transition-all ${
                           isSelected
-                            ? "border-brand-purple bg-brand-purple/10"
-                            : "border-gray-200 hover:border-gray-300"
+                            ? "border-primary-600 bg-primary-100"
+                            : "border-neutral-200 hover:border-neutral-300"
                         }`}
                       >
-                        <p className="font-medium">
+                        <p className="font-medium text-neutral-900">
                           {cluster.parent_friendly_name || cluster.name}
                         </p>
                         {signs.length > 0 && (
@@ -349,9 +395,9 @@ function ObservedTraitsScreen(props: {
                             {signs.slice(0, 3).map((sign, i) => (
                               <li
                                 key={i}
-                                className="text-sm text-gray-500 flex items-start gap-2"
+                                className="text-sm text-neutral-500 flex items-start gap-2"
                               >
-                                <span className="text-gray-300">•</span>
+                                <span className="text-neutral-300">•</span>
                                 <span>{sign}</span>
                               </li>
                             ))}
@@ -371,7 +417,7 @@ function ObservedTraitsScreen(props: {
 }
 
 /* ============================
-   Main Component
+   Main Component (LOGIC UNCHANGED)
 ============================ */
 
 export default function NeedsStep({
@@ -415,7 +461,6 @@ export default function NeedsStep({
     const existing = value.find((v) => v.cluster_code === code);
 
     if (existing) {
-      // Update accommodation details if provided, otherwise toggle off
       if (
         accommodationDetails !== undefined &&
         accommodationDetails !== existing.accommodation_details
@@ -426,11 +471,9 @@ export default function NeedsStep({
           )
         );
       } else if (accommodationDetails === undefined) {
-        // Toggle off
         onChange(value.filter((v) => v.cluster_code !== code));
       }
     } else {
-      // Add new selection
       onChange([
         ...value,
         {
@@ -462,9 +505,9 @@ export default function NeedsStep({
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h2 className="text-lg font-semibold">Any learning needs?</h2>
-        <p className="text-sm text-gray-600">Loading…</p>
+      <div className="flex items-center justify-center py-12">
+        <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+        <span className="ml-3 text-sm text-neutral-500">Loading support options…</span>
       </div>
     );
   }
