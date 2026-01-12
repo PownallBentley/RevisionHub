@@ -9,7 +9,7 @@ import {
 import { listExamTypes } from "../../../services/referenceData/referenceDataService";
 
 /* ============================
-   Types (UNCHANGED)
+   Types
 ============================ */
 
 export type SelectedSubject = {
@@ -64,10 +64,6 @@ function normaliseNotSureLabel(name: string) {
   return { isNotSure, label: isNotSure ? "I'm not sure" : raw };
 }
 
-/**
- * Database stores icon as "book", "calculator", etc.
- * We need to prefix with "fa-" for Font Awesome.
- */
 function formatIcon(dbIcon: string | null): string {
   if (!dbIcon) return "fa-book";
   if (dbIcon.startsWith("fa-")) return dbIcon;
@@ -94,7 +90,6 @@ export default function SubjectBoardStep(props: Props) {
 
   const examTypeKey = useMemo(() => uniq(examTypeIds).slice().sort().join("|"), [examTypeIds]);
 
-  // Load exam type names and subjects
   useEffect(() => {
     let cancelled = false;
 
@@ -131,6 +126,13 @@ export default function SubjectBoardStep(props: Props) {
           ...r,
           boards: Array.isArray((r as any).boards) ? (r as any).boards : [],
         }));
+
+        // DEBUG: Log first few rows to check icon/color data
+        console.log("Subject groups loaded:", safe.slice(0, 5).map(s => ({
+          name: s.subject_name,
+          icon: (s as any).icon,
+          color: (s as any).color
+        })));
 
         setGroups(safe);
         setActiveExamTypeIndex(0);
@@ -178,13 +180,11 @@ export default function SubjectBoardStep(props: Props) {
   function handleSubjectClick(group: SubjectGroupRow) {
     const key = getGroupKey(group);
 
-    // If already selected, toggle it off (deselect)
     if (selectedByGroupKey.has(key)) {
       removeSelection(String(group.exam_type_id), String(group.subject_name));
       return;
     }
 
-    // Otherwise open the board selection modal
     openBoardModal(group);
   }
 
@@ -323,6 +323,17 @@ export default function SubjectBoardStep(props: Props) {
         </div>
       )}
 
+      {/* DEBUG: Test if Font Awesome is working */}
+      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+        <strong>Debug icons:</strong>{" "}
+        <i className="fa-solid fa-atom" style={{ color: "#744FFF" }} />{" "}
+        <i className="fa-solid fa-flask" style={{ color: "#FFB547" }} />{" "}
+        <i className="fa-solid fa-calculator" style={{ color: "#5B2CFF" }} />{" "}
+        <i className="fa-solid fa-dna" style={{ color: "#16A07A" }} />{" "}
+        <i className="fa-solid fa-book" style={{ color: "#1EC592" }} />
+        <span className="ml-2 text-yellow-700">(If you see 5 colored icons above, Font Awesome works)</span>
+      </div>
+
       {/* Subjects grid - 2 columns */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-700 mb-4">Available subjects</label>
@@ -338,7 +349,8 @@ export default function SubjectBoardStep(props: Props) {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
 
-              const icon = formatIcon((g as any).icon);
+              const rawIcon = (g as any).icon;
+              const icon = formatIcon(rawIcon);
               const color = (g as any).color || "#7C3AED";
 
               return (
@@ -360,8 +372,8 @@ export default function SubjectBoardStep(props: Props) {
                         style={{ backgroundColor: `${color}20` }}
                       >
                         <i
-                          className={`fa-solid ${icon} text-lg`}
-                          style={{ color }}
+                          className={`fa-solid ${icon}`}
+                          style={{ color, fontSize: "1.125rem" }}
                         />
                       </div>
 
@@ -458,7 +470,6 @@ export default function SubjectBoardStep(props: Props) {
       {modalOpen && modalCtx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-card overflow-hidden">
-            {/* Modal header */}
             <div className="flex items-start justify-between gap-4 p-6 border-b border-neutral-200">
               <div>
                 <div className="text-sm text-neutral-500">Choose exam board</div>
@@ -478,7 +489,6 @@ export default function SubjectBoardStep(props: Props) {
               </button>
             </div>
 
-            {/* Board options */}
             <div className="p-6 space-y-3 max-h-[400px] overflow-y-auto">
               {(() => {
                 const rawBoards = Array.isArray(modalCtx.boards) ? modalCtx.boards : [];
