@@ -70,9 +70,7 @@ function normaliseNotSureLabel(name: string) {
  */
 function formatIcon(dbIcon: string | null): string {
   if (!dbIcon) return "fa-book";
-  // If already has fa- prefix, return as-is
   if (dbIcon.startsWith("fa-")) return dbIcon;
-  // Otherwise add the prefix
   return `fa-${dbIcon}`;
 }
 
@@ -179,13 +177,13 @@ export default function SubjectBoardStep(props: Props) {
 
   function handleSubjectClick(group: SubjectGroupRow) {
     const key = getGroupKey(group);
-    
+
     // If already selected, toggle it off (deselect)
     if (selectedByGroupKey.has(key)) {
       removeSelection(String(group.exam_type_id), String(group.subject_name));
       return;
     }
-    
+
     // Otherwise open the board selection modal
     openBoardModal(group);
   }
@@ -259,13 +257,12 @@ export default function SubjectBoardStep(props: Props) {
     return selected.filter((s) => String(s.exam_type_id) === String(activeExamTypeId));
   }, [selected, activeExamTypeId]);
 
-  // All selected subjects across all exam types (for cumulative lozenges)
   const allSelectedSubjects = selected;
 
   return (
     <div>
       {/* Section header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold text-neutral-900 mb-2">
@@ -282,6 +279,14 @@ export default function SubjectBoardStep(props: Props) {
               <div className="font-semibold text-neutral-900">{activeExamType.name}</div>
             </div>
           )}
+        </div>
+
+        {/* Reassurance message */}
+        <div className="mt-4 flex items-start gap-3 p-4 bg-primary-50 rounded-xl border border-primary-100">
+          <i className="fa-solid fa-circle-info text-primary-600 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-primary-800">
+            Don't worry if you're not sure of all the subjects or exam boards right now — you can always edit or add these later.
+          </p>
         </div>
       </div>
 
@@ -333,7 +338,6 @@ export default function SubjectBoardStep(props: Props) {
               const selectedFlag = isGroupSelected(g);
               const boardsCount = Array.isArray((g as any).boards) ? (g as any).boards.length : 0;
 
-              // Use icon and color from database - format icon with fa- prefix
               const icon = formatIcon((g as any).icon);
               const color = (g as any).color || "#7C3AED";
 
@@ -392,7 +396,7 @@ export default function SubjectBoardStep(props: Props) {
         )}
       </div>
 
-      {/* Selected subjects lozenges - cumulative across all exam types */}
+      {/* Selected subjects lozenges */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-neutral-700 mb-4">
           Selected subjects {allSelectedSubjects.length > 0 && `(${allSelectedSubjects.length})`}
