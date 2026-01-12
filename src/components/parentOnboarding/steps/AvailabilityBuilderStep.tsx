@@ -1,5 +1,6 @@
 // src/components/parentOnboarding/steps/AvailabilityBuilderStep.tsx
-// Weekly schedule builder with copy functionality and feasibility checking
+// Weekly schedule builder with coverage-based feedback
+// Shows both Time-First (schedule → coverage) and Coverage-First (coverage → schedule) perspectives
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import {
@@ -7,6 +8,19 @@ import {
   type RecommendationResult,
   type DayTemplate,
 } from "../../../services/parentOnboarding/recommendationService";
+import {
+  calculateCoverageLocal,
+  calculateSessionsForCoverageLocal,
+  checkFeasibility,
+  DEFAULT_COVERAGE_TARGETS,
+  getCoverageStatusInfo,
+  type CoverageDistributionResult,
+  type SessionsForCoverageResult,
+  type FeasibilityResult,
+  type CoverageTargets,
+} from "../../../services/parentOnboarding/coverageService";
+import type { SubjectWithGrades } from "./SubjectPriorityGradesStep";
+import type { NeedClusterSelection } from "./NeedsStep";
 import type { RevisionPeriodData } from "./RevisionPeriodStep";
 
 /* ============================
@@ -33,26 +47,13 @@ interface AvailabilityBuilderStepProps {
   dateOverrides: DateOverride[];
   recommendation: RecommendationResult | null;
   revisionPeriod: RevisionPeriodData;
+  subjects: SubjectWithGrades[];
+  goalCode: string | undefined;
+  needClusters: NeedClusterSelection[];
   onTemplateChange: (template: DayTemplate[]) => void;
   onOverridesChange: (overrides: DateOverride[]) => void;
   onNext: () => void;
   onBack: () => void;
-}
-
-type FeasibilityStatus = "sufficient" | "marginal" | "insufficient";
-
-interface FeasibilityResult {
-  status: FeasibilityStatus;
-  recommended: number;
-  withContingency: number;
-  available: number;
-  shortfall: number;
-  surplus: number;
-  sessionsPerWeekNeeded: number;
-  currentSessionsPerWeek: number;
-  additionalSessionsPerWeek: number;
-  message: string;
-  suggestion: string | null;
 }
 
 /* ============================
@@ -119,142 +120,24 @@ function hasAnySlots(template: DayTemplate[]): boolean {
   return template.some((day) => day.slots.length > 0);
 }
 
-function checkFeasibility(
-  recommended: number,
-  withContingency: number,
-  available: number,
-  totalWeeks: number
-): FeasibilityResult {
-  const shortfall = Math.max(0, recommended - available);
-  const surplus = Math.max(0, available - withContingency);
+function getProgressBarColor(coverage: number, priorityTier: string): string {
+  const threshold = priorityTier === "high" ? 80 : priorityTier === "medium" ? 60 : 40;
+  
+  if (coverage >= threshold + 15) return "bg-green-500";
+  if (coverage >= threshold) return "bg-green-400";
+  if (coverage >= threshold - 15) return "bg-amber-400";
+  return "bg-red-400";
+}
 
-  const sessionsPerWeekNeeded = Math.ceil(withContingency / Math.max(1, totalWeeks));
-  const currentSessionsPerWeek = Math.round(available / Math.max(1, totalWeeks));
-  const additionalSessionsPerWeek = Math.max(
-    0,
-    Math.ceil((withContingency - available) / Math.max(1, totalWeeks))
-  );
-
-  let status: FeasibilityStatus;
-  let message: string;
-  let suggestion: string | null = null;
-
-  if (available >= withContingency) {
-    status = "sufficient";
-    message = `You have ${available} sessions planned, which covers the recommended ${recommended} plus contingency buffer.`;
-    if (surplus > 10) {
-      suggestion = `You have ${surplus} extra sessions as buffer — great for flexibility!`;
-    }
-  } else if (available >= recommended) {
-    status = "marginal";
-    const bufferShort = withContingency - available;
-    message = `You have ${available} sessions, which covers the ${recommended} recommended but leaves little buffer for missed days.`;
-    suggestion = `Consider adding ${Math.ceil(
-      bufferShort / totalWeeks
-    )} more session${bufferShort > totalWeeks ? "s" : ""} per week (${bufferShort} total) for contingency.`;
-  } else {
-    status = "insufficient";
-    message = `You have ${available} sessions but need at least ${recommended} to cover all topics properly.`;
-    suggestion = `Add ${additionalSessionsPerWeek} more session${
-      additionalSessionsPerWeek !== 1 ? "s" : ""
-    } per week to reach ${withContingency} sessions (includes contingency).`;
+function getPriorityBadge(tier: string): { label: string; className: string } {
+  switch (tier) {
+    case "high":
+      return { label: "High", className: "text-primary-700 bg-primary-100" };
+    case "medium":
+      return { label: "Med", className: "text-amber-700 bg-amber-100" };
+    default:
+      return { label: "Low", className: "text-neutral-600 bg-neutral-100" };
   }
-
-  return {
-    status,
-    recommended,
-    withContingency,
-    available,
-    shortfall,
-    surplus,
-    sessionsPerWeekNeeded,
-    currentSessionsPerWeek,
-    additionalSessionsPerWeek,
-    message,
-    suggestion,
-  };
-}
-
-function getStatusColors(status: FeasibilityStatus): {
-  bg: string;
-  border: string;
-  text: string;
-  icon: string;
-  iconClass: string;
-} {
-  switch (status) {
-    case "sufficient":
-      return {
-        bg: "bg-green-50",
-        border: "border-green-200",
-        text: "text-green-800",
-        icon: "fa-circle-check",
-        iconClass: "text-green-600",
-      };
-    case "marginal":
-      return {
-        bg: "bg-amber-50",
-        border: "border-amber-200",
-        text: "text-amber-800",
-        icon: "fa-triangle-exclamation",
-        iconClass: "text-amber-600",
-      };
-    case "insufficient":
-      return {
-        bg: "bg-red-50",
-        border: "border-red-200",
-        text: "text-red-800",
-        icon: "fa-circle-xmark",
-        iconClass: "text-red-600",
-      };
-  }
-}
-
-/* ============================
-   Traffic Light Component
-============================ */
-
-interface TrafficLightProps {
-  status: FeasibilityStatus;
-  label?: string;
-  message: string;
-  suggestion?: string | null;
-}
-
-function TrafficLight({ status, label, message, suggestion }: TrafficLightProps) {
-  const colors = getStatusColors(status);
-
-  return (
-    <div className={`p-4 rounded-xl border ${colors.bg} ${colors.border}`}>
-      <div className="flex items-start gap-3">
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-            status === "sufficient"
-              ? "bg-green-100"
-              : status === "marginal"
-              ? "bg-amber-100"
-              : "bg-red-100"
-          }`}
-        >
-          <i className={`fa-solid ${colors.icon} ${colors.iconClass}`} />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {label && (
-            <h4 className={`text-sm font-semibold ${colors.text} mb-1`}>{label}</h4>
-          )}
-          <p className={`text-sm ${colors.text}`}>{message}</p>
-
-          {suggestion && (
-            <div className="mt-3 flex items-start gap-2 p-3 bg-white/50 rounded-lg">
-              <i className="fa-solid fa-lightbulb text-primary-600 mt-0.5" />
-              <p className="text-sm text-neutral-700">{suggestion}</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ============================
@@ -305,7 +188,6 @@ function DayCard({
       {/* Day Header */}
       <div className="flex items-center justify-between p-4 border-b border-neutral-100">
         <div className="flex items-center gap-3">
-          {/* Toggle */}
           <button
             type="button"
             onClick={onToggle}
@@ -320,7 +202,6 @@ function DayCard({
               }`}
             />
           </button>
-
           <span
             className={`font-medium ${
               day.is_enabled ? "text-neutral-900" : "text-neutral-400"
@@ -331,16 +212,12 @@ function DayCard({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Stats summary */}
           {stats && (
             <span className="text-xs text-neutral-500">
               {day.slots.length} session{day.slots.length !== 1 ? "s" : ""} ·{" "}
-              {stats.minutes} min · {stats.topics} topic
-              {stats.topics !== 1 ? "s" : ""}
+              {stats.minutes} min
             </span>
           )}
-
-          {/* Add session button */}
           {day.is_enabled && (
             <button
               type="button"
@@ -348,7 +225,7 @@ function DayCard({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
             >
               <i className="fa-solid fa-plus text-[10px]" />
-              Add session
+              Add
             </button>
           )}
         </div>
@@ -362,21 +239,17 @@ function DayCard({
               key={idx}
               className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg border border-neutral-100"
             >
-              {/* Session number */}
               <div className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-semibold flex items-center justify-center flex-shrink-0">
                 {idx + 1}
               </div>
 
-              {/* Time of day */}
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-medium text-neutral-500 uppercase tracking-wide mb-1">
                   Time
                 </label>
                 <select
                   value={slot.time_of_day}
-                  onChange={(e) =>
-                    onUpdateSlot(idx, "time_of_day", e.target.value)
-                  }
+                  onChange={(e) => onUpdateSlot(idx, "time_of_day", e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
                   {TIME_OF_DAY_OPTIONS.map((opt) => (
@@ -387,16 +260,13 @@ function DayCard({
                 </select>
               </div>
 
-              {/* Duration */}
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-medium text-neutral-500 uppercase tracking-wide mb-1">
                   Duration
                 </label>
                 <select
                   value={slot.session_pattern}
-                  onChange={(e) =>
-                    onUpdateSlot(idx, "session_pattern", e.target.value)
-                  }
+                  onChange={(e) => onUpdateSlot(idx, "session_pattern", e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
                   {SESSION_PATTERN_OPTIONS.map((opt) => (
@@ -407,7 +277,6 @@ function DayCard({
                 </select>
               </div>
 
-              {/* Remove button */}
               <button
                 type="button"
                 onClick={() => onRemoveSlot(idx)}
@@ -421,25 +290,178 @@ function DayCard({
         </div>
       )}
 
-      {/* Empty state */}
       {day.is_enabled && day.slots.length === 0 && (
         <div className="p-6 text-center">
-          <p className="text-sm text-neutral-400 mb-3">No sessions scheduled</p>
+          <p className="text-sm text-neutral-400 mb-3">No sessions</p>
           <button
             type="button"
             onClick={onAddSlot}
             className="text-sm text-primary-600 hover:text-primary-700 font-medium"
           >
             <i className="fa-solid fa-plus mr-1.5" />
-            Add a session
+            Add session
           </button>
         </div>
       )}
 
-      {/* Disabled state */}
       {!day.is_enabled && (
         <div className="p-4 text-center">
           <p className="text-sm text-neutral-400">Rest day</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================
+   Coverage Card Component
+============================ */
+
+interface CoverageCardProps {
+  coverage: CoverageDistributionResult;
+  required: SessionsForCoverageResult;
+  feasibility: FeasibilityResult;
+}
+
+function CoverageCard({ coverage, required, feasibility }: CoverageCardProps) {
+  const statusInfo = getCoverageStatusInfo(coverage.coverage_status);
+  const [showDetails, setShowDetails] = useState(false);
+
+  return (
+    <div className={`rounded-xl border ${statusInfo.bgColor} ${statusInfo.borderColor}`}>
+      {/* Header */}
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              coverage.coverage_status === "excellent" || coverage.coverage_status === "good"
+                ? "bg-green-100"
+                : coverage.coverage_status === "adequate"
+                ? "bg-amber-100"
+                : "bg-red-100"
+            }`}
+          >
+            <i className={`fa-solid ${statusInfo.icon} text-lg ${statusInfo.color}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className={`text-sm font-semibold ${statusInfo.color}`}>
+              {statusInfo.label}
+            </h3>
+            <p className="text-xs text-neutral-600">
+              {coverage.overall_coverage_percent}% weighted coverage
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-3xl font-bold text-neutral-900">
+              {Math.round(coverage.overall_coverage_percent)}%
+            </div>
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+          <div className="p-2 bg-white/50 rounded-lg">
+            <div className="text-lg font-semibold text-neutral-900">
+              {coverage.available_sessions}
+            </div>
+            <div className="text-[10px] text-neutral-500 uppercase">Sessions</div>
+          </div>
+          <div className="p-2 bg-white/50 rounded-lg">
+            <div className="text-lg font-semibold text-neutral-900">
+              {coverage.total_topics_covered}
+            </div>
+            <div className="text-[10px] text-neutral-500 uppercase">Topics</div>
+          </div>
+          <div className="p-2 bg-white/50 rounded-lg">
+            <div className="text-lg font-semibold text-neutral-900">
+              {coverage.subjects.length}
+            </div>
+            <div className="text-[10px] text-neutral-500 uppercase">Subjects</div>
+          </div>
+        </div>
+
+        {/* Suggestion */}
+        {feasibility.suggestion && (
+          <div className="mt-4 p-3 bg-white/50 rounded-lg">
+            <div className="flex items-start gap-2">
+              <i className="fa-solid fa-lightbulb text-primary-600 mt-0.5" />
+              <p className="text-xs text-neutral-700">{feasibility.suggestion}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Toggle details */}
+        <button
+          type="button"
+          onClick={() => setShowDetails(!showDetails)}
+          className="mt-4 w-full text-xs text-neutral-600 hover:text-neutral-800 font-medium flex items-center justify-center gap-1"
+        >
+          {showDetails ? (
+            <>
+              <i className="fa-solid fa-chevron-up" />
+              Hide subject breakdown
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-chevron-down" />
+              Show subject breakdown
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Subject breakdown */}
+      {showDetails && (
+        <div className="border-t border-neutral-200/50 p-4 space-y-3">
+          {coverage.subjects
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((subject) => {
+              const badge = getPriorityBadge(subject.priority_tier);
+              const barColor = getProgressBarColor(
+                subject.coverage_percent,
+                subject.priority_tier
+              );
+
+              return (
+                <div key={subject.subject_id} className="p-3 bg-white rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-neutral-900">
+                        {subject.subject_name}
+                      </span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-neutral-900">
+                      {Math.round(subject.coverage_percent)}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${barColor} transition-all duration-300`}
+                      style={{ width: `${Math.min(100, subject.coverage_percent)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[10px] text-neutral-500">
+                    <span>
+                      {subject.topics_covered}/{subject.topic_count} topics
+                    </span>
+                    <span>{subject.allocated_sessions} sessions</span>
+                  </div>
+                </div>
+              );
+            })}
+
+          {/* Explanation */}
+          <div className="pt-2 text-[10px] text-neutral-500">
+            <p>
+              <strong>High priority</strong> subjects get more sessions automatically.
+              100% coverage isn't always needed — focus matters more than breadth.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -455,6 +477,9 @@ export default function AvailabilityBuilderStep({
   dateOverrides,
   recommendation,
   revisionPeriod,
+  subjects,
+  goalCode,
+  needClusters,
   onTemplateChange,
   onOverridesChange,
   onNext,
@@ -463,7 +488,7 @@ export default function AvailabilityBuilderStep({
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAllDays, setShowAllDays] = useState(false);
 
-  // Get default session pattern from recommendation or use p45
+  // Get default session pattern
   const defaultPattern: SessionPattern =
     recommendation?.recommended_session_pattern || "p45";
 
@@ -472,7 +497,6 @@ export default function AvailabilityBuilderStep({
     if (!hasAnySlots(weeklyTemplate)) {
       const updated = weeklyTemplate.map((day, idx) => {
         if (idx === 0) {
-          // Monday
           return {
             ...day,
             is_enabled: true,
@@ -487,7 +511,7 @@ export default function AvailabilityBuilderStep({
       onTemplateChange(updated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, []);
 
   // Calculate totals
   const weeklyStats = useMemo(
@@ -496,8 +520,7 @@ export default function AvailabilityBuilderStep({
   );
 
   const totalWeeks = useMemo(
-    () =>
-      calculateWeeksBetween(revisionPeriod.start_date, revisionPeriod.end_date),
+    () => calculateWeeksBetween(revisionPeriod.start_date, revisionPeriod.end_date),
     [revisionPeriod.start_date, revisionPeriod.end_date]
   );
 
@@ -505,24 +528,42 @@ export default function AvailabilityBuilderStep({
     return Math.round(weeklyStats.sessions * totalWeeks);
   }, [weeklyStats.sessions, totalWeeks]);
 
-  // Feasibility check with detailed suggestions
-  const feasibility: FeasibilityResult | null = useMemo(() => {
-    if (!recommendation) return null;
-    return checkFeasibility(
-      recommendation.total_recommended_sessions,
-      recommendation.with_contingency,
+  // Coverage calculations (Time-First: schedule → coverage)
+  const coverageResult = useMemo(() => {
+    if (subjects.length === 0) return null;
+    return calculateCoverageLocal(
+      subjects,
       totalPlannedSessions,
+      goalCode,
+      needClusters
+    );
+  }, [subjects, totalPlannedSessions, goalCode, needClusters]);
+
+  // Required sessions calculation (Coverage-First: coverage → schedule)
+  const requiredResult = useMemo(() => {
+    if (subjects.length === 0) return null;
+    return calculateSessionsForCoverageLocal(
+      subjects,
+      DEFAULT_COVERAGE_TARGETS,
+      goalCode,
+      needClusters,
       totalWeeks
     );
-  }, [recommendation, totalPlannedSessions, totalWeeks]);
+  }, [subjects, goalCode, needClusters, totalWeeks]);
 
-  // Get Monday's setup for copying
+  // Feasibility check
+  const feasibility = useMemo(() => {
+    if (!coverageResult || !requiredResult) return null;
+    return checkFeasibility(coverageResult, requiredResult, totalWeeks);
+  }, [coverageResult, requiredResult, totalWeeks]);
+
+  // Monday setup for copying
   const mondaySetup = weeklyTemplate[0];
+  const mondayHasSessions = mondaySetup?.slots?.length > 0;
 
   // Copy handlers
   const handleCopyToWeekdays = useCallback(() => {
     const updated = weeklyTemplate.map((day, idx) => {
-      // Skip Monday (idx 0) and weekends (idx 5, 6)
       if (idx === 0 || idx >= 5) return day;
       return {
         ...day,
@@ -537,7 +578,6 @@ export default function AvailabilityBuilderStep({
 
   const handleCopyToWeekdaysAndSaturday = useCallback(() => {
     const updated = weeklyTemplate.map((day, idx) => {
-      // Skip Monday (idx 0) and Sunday (idx 6)
       if (idx === 0 || idx === 6) return day;
       return {
         ...day,
@@ -552,7 +592,6 @@ export default function AvailabilityBuilderStep({
 
   const handleCopyToAllDays = useCallback(() => {
     const updated = weeklyTemplate.map((day, idx) => {
-      // Skip Monday (idx 0)
       if (idx === 0) return day;
       return {
         ...day,
@@ -564,46 +603,6 @@ export default function AvailabilityBuilderStep({
     onTemplateChange(updated);
     setShowAllDays(true);
   }, [weeklyTemplate, mondaySetup, onTemplateChange]);
-
-  // Quick fix: add sessions to reach recommendation
-  const handleQuickFixAddSessions = useCallback(() => {
-    if (!feasibility) return;
-
-    const sessionsToAdd = feasibility.additionalSessionsPerWeek;
-    if (sessionsToAdd <= 0) return;
-
-    const updated = weeklyTemplate.map((day, idx) => {
-      // Only add to enabled weekdays (Mon-Fri, idx 0-4)
-      if (!day.is_enabled || idx >= 5) return day;
-
-      // Determine next time slot to use
-      const existingTimes = day.slots.map((s) => s.time_of_day);
-      let nextTime: TimeOfDay = "afternoon";
-      if (existingTimes.includes("afternoon")) {
-        nextTime = "evening";
-      }
-      if (existingTimes.includes("evening")) {
-        nextTime = "morning";
-      }
-      if (existingTimes.includes("morning")) {
-        nextTime = "early_morning";
-      }
-
-      const newSlot: AvailabilitySlot = {
-        time_of_day: nextTime,
-        session_pattern: defaultPattern,
-      };
-
-      return {
-        ...day,
-        slots: [...day.slots, newSlot],
-        session_count: day.slots.length + 1,
-      };
-    });
-
-    onTemplateChange(updated);
-    setShowAllDays(true);
-  }, [weeklyTemplate, onTemplateChange, feasibility, defaultPattern]);
 
   // Day handlers
   const handleToggleDay = useCallback(
@@ -628,7 +627,6 @@ export default function AvailabilityBuilderStep({
         time_of_day: "afternoon",
         session_pattern: defaultPattern,
       };
-
       const updated = weeklyTemplate.map((day, idx) => {
         if (idx !== dayIndex) return day;
         return {
@@ -680,7 +678,6 @@ export default function AvailabilityBuilderStep({
 
   const handleQuickSetup = useCallback(async () => {
     if (!recommendation) return;
-
     setIsGenerating(true);
     try {
       const result = await generateDefaultTemplate(
@@ -688,7 +685,6 @@ export default function AvailabilityBuilderStep({
         recommendation.recommended_session_pattern,
         Math.round(totalWeeks)
       );
-
       if (result?.template) {
         onTemplateChange(result.template);
         setShowAllDays(true);
@@ -703,9 +699,6 @@ export default function AvailabilityBuilderStep({
   // Validation
   const isValid = weeklyStats.sessions > 0;
 
-  // Check if Monday has been set up
-  const mondayHasSessions = mondaySetup?.slots?.length > 0;
-
   return (
     <div>
       {/* Header */}
@@ -714,41 +707,45 @@ export default function AvailabilityBuilderStep({
           Set your weekly schedule
         </h2>
         <p className="text-neutral-500 text-sm leading-relaxed">
-          Start by setting up Monday, then copy to other days.
+          Configure when revision sessions happen. We'll show you the coverage you'll achieve.
         </p>
       </div>
 
-      {/* Recommendation Banner */}
-      {recommendation && (
+      {/* Reference: What schedule would achieve target coverage */}
+      {requiredResult && (
         <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-xl">
           <div className="flex items-start gap-3">
             <div className="w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <i className="fa-solid fa-lightbulb text-white text-xs" />
+              <i className="fa-solid fa-bullseye text-white text-xs" />
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-primary-900 mb-1">
-                We recommend approximately{" "}
-                {recommendation.total_recommended_sessions} sessions
+                For target coverage: ~{requiredResult.sessions_per_week} sessions/week
               </h3>
               <p className="text-xs text-primary-700 leading-relaxed">
-                That's about{" "}
-                {Math.round(recommendation.total_recommended_sessions / totalWeeks)}{" "}
-                sessions per week over {totalWeeks} weeks.
+                Based on {subjects.length} subject{subjects.length !== 1 ? "s" : ""}, 
+                this would mean ~{requiredResult.sessions_per_day.toFixed(1)} sessions per study day.
+                {!requiredResult.is_realistic && (
+                  <span className="block mt-1 text-amber-700">
+                    <i className="fa-solid fa-triangle-exclamation mr-1" />
+                    This may be ambitious — adjust coverage expectations or extend your revision period.
+                  </span>
+                )}
               </p>
-              {recommendation.needs_advice && (
-                <p className="text-xs text-primary-700 mt-2 italic">
-                  {recommendation.needs_advice}
-                </p>
-              )}
             </div>
           </div>
 
-          {/* Quick Setup Button */}
+          {recommendation?.needs_advice && (
+            <p className="mt-3 text-xs text-primary-700 italic pl-9">
+              {recommendation.needs_advice}
+            </p>
+          )}
+
           <button
             type="button"
             onClick={handleQuickSetup}
             disabled={isGenerating}
-            className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors disabled:opacity-50"
+            className="mt-4 ml-9 flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-white border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors disabled:opacity-50"
           >
             {isGenerating ? (
               <>
@@ -758,7 +755,7 @@ export default function AvailabilityBuilderStep({
             ) : (
               <>
                 <i className="fa-solid fa-wand-magic-sparkles" />
-                Auto-fill schedule
+                Auto-fill for target coverage
               </>
             )}
           </button>
@@ -771,11 +768,8 @@ export default function AvailabilityBuilderStep({
           <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
             1
           </div>
-          <h3 className="text-sm font-semibold text-neutral-900">
-            Set up Monday
-          </h3>
+          <h3 className="text-sm font-semibold text-neutral-900">Set up Monday</h3>
         </div>
-
         <DayCard
           day={weeklyTemplate[0]}
           onToggle={() => handleToggleDay(0)}
@@ -794,41 +788,35 @@ export default function AvailabilityBuilderStep({
             <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
               2
             </div>
-            <h3 className="text-sm font-semibold text-neutral-900">
-              Copy to other days
-            </h3>
+            <h3 className="text-sm font-semibold text-neutral-900">Copy to other days</h3>
           </div>
-
           <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
             <p className="text-sm text-neutral-600 mb-4">
               Copy Monday's {weeklyTemplate[0].slots.length} session
               {weeklyTemplate[0].slots.length !== 1 ? "s" : ""} to:
             </p>
-
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={handleCopyToWeekdays}
-                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 transition-colors"
               >
                 <i className="fa-solid fa-briefcase mr-2 text-neutral-500" />
-                Weekdays only
+                Weekdays
                 <span className="ml-1.5 text-xs text-neutral-400">(Tue–Fri)</span>
               </button>
-
               <button
                 type="button"
                 onClick={handleCopyToWeekdaysAndSaturday}
-                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 transition-colors"
               >
                 <i className="fa-solid fa-calendar-plus mr-2 text-neutral-500" />
-                Weekdays + Saturday
+                + Saturday
               </button>
-
               <button
                 type="button"
                 onClick={handleCopyToAllDays}
-                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 hover:border-neutral-400 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-100 transition-colors"
               >
                 <i className="fa-solid fa-calendar-week mr-2 text-neutral-500" />
                 All days
@@ -838,7 +826,7 @@ export default function AvailabilityBuilderStep({
         </div>
       )}
 
-      {/* Step 3: Fine-tune (collapsible) */}
+      {/* Step 3: Fine-tune */}
       {mondayHasSessions && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
@@ -846,12 +834,9 @@ export default function AvailabilityBuilderStep({
               <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-semibold flex items-center justify-center">
                 3
               </div>
-              <h3 className="text-sm font-semibold text-neutral-900">
-                Fine-tune each day
-              </h3>
+              <h3 className="text-sm font-semibold text-neutral-900">Fine-tune</h3>
               <span className="text-xs text-neutral-400">(optional)</span>
             </div>
-
             <button
               type="button"
               onClick={() => setShowAllDays(!showAllDays)}
@@ -870,7 +855,6 @@ export default function AvailabilityBuilderStep({
               )}
             </button>
           </div>
-
           {showAllDays && (
             <div className="space-y-4">
               {weeklyTemplate.slice(1).map((day, idx) => (
@@ -890,114 +874,47 @@ export default function AvailabilityBuilderStep({
         </div>
       )}
 
+      {/* Coverage Preview (Time-First result) */}
+      {coverageResult && requiredResult && feasibility && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <i className="fa-solid fa-chart-pie text-neutral-400" />
+            <h3 className="text-sm font-semibold text-neutral-900">
+              Your coverage with this schedule
+            </h3>
+          </div>
+          <CoverageCard
+            coverage={coverageResult}
+            required={requiredResult}
+            feasibility={feasibility}
+          />
+        </div>
+      )}
+
       {/* Weekly Summary */}
       <div className="mb-6 p-4 bg-neutral-50 rounded-xl border border-neutral-200">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-neutral-900">Weekly total</h3>
+          <h3 className="text-sm font-medium text-neutral-900">Weekly schedule</h3>
           <i className="fa-solid fa-calendar-days text-neutral-400" />
         </div>
-
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-2xl font-bold text-neutral-900">
               {weeklyStats.sessions}
             </div>
-            <div className="text-xs text-neutral-500">sessions</div>
+            <div className="text-xs text-neutral-500">sessions/week</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-neutral-900">
               {weeklyStats.minutes}
             </div>
-            <div className="text-xs text-neutral-500">minutes</div>
+            <div className="text-xs text-neutral-500">minutes/week</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-neutral-900">
-              {weeklyStats.topics}
+              {totalPlannedSessions}
             </div>
-            <div className="text-xs text-neutral-500">topics</div>
-          </div>
-        </div>
-
-        {/* Total over revision period */}
-        <div className="mt-4 pt-4 border-t border-neutral-200">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-neutral-600">
-              Total over {totalWeeks} weeks:
-            </span>
-            <span className="font-semibold text-neutral-900">
-              {totalPlannedSessions} sessions
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Feasibility Traffic Light */}
-      {feasibility && (
-        <div className="mb-6">
-          <TrafficLight
-            status={feasibility.status}
-            label={
-              feasibility.status === "sufficient"
-                ? "On track"
-                : feasibility.status === "marginal"
-                ? "Close but tight"
-                : "More sessions needed"
-            }
-            message={feasibility.message}
-            suggestion={feasibility.suggestion}
-          />
-
-          {/* Quick action for insufficient */}
-          {feasibility.status === "insufficient" && (
-            <div className="mt-4 p-4 bg-primary-50 rounded-xl border border-primary-200">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-primary-900">
-                    Quick fix: Add {feasibility.additionalSessionsPerWeek} session
-                    {feasibility.additionalSessionsPerWeek !== 1 ? "s" : ""} per
-                    weekday
-                  </h4>
-                  <p className="text-xs text-primary-700 mt-1">
-                    This would give you approximately{" "}
-                    {feasibility.withContingency} total sessions
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleQuickFixAddSessions}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors flex-shrink-0"
-                >
-                  <i className="fa-solid fa-plus mr-2" />
-                  Add sessions
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Session Duration Guide */}
-      <div className="mb-6 p-4 bg-neutral-50 rounded-xl border border-neutral-200">
-        <div className="flex items-start gap-3">
-          <i className="fa-solid fa-circle-info text-neutral-400 mt-0.5" />
-          <div>
-            <h4 className="text-sm font-medium text-neutral-700 mb-2">
-              Session duration guide
-            </h4>
-            <ul className="text-xs text-neutral-600 space-y-1">
-              <li>
-                <strong>20 minutes:</strong> Quick review of 1 topic — great for
-                busy days or shorter attention spans
-              </li>
-              <li>
-                <strong>45 minutes:</strong> 2 topics with a short break —
-                balanced session for most students
-              </li>
-              <li>
-                <strong>70 minutes:</strong> 3 topics with two breaks — deep
-                revision for focused study
-              </li>
-            </ul>
+            <div className="text-xs text-neutral-500">total sessions</div>
           </div>
         </div>
       </div>
@@ -1019,7 +936,6 @@ export default function AvailabilityBuilderStep({
         >
           Back
         </button>
-
         <button
           type="button"
           onClick={onNext}
