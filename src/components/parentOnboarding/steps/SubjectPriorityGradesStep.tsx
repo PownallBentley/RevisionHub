@@ -1,7 +1,6 @@
 // src/components/parentOnboarding/steps/SubjectPriorityGradesStep.tsx
-// Card sort for subject priority + current/target grade per subject
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
 import {
   DndContext,
   closestCenter,
@@ -10,22 +9,15 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faGripVertical, 
-  faChevronDown, 
-  faChevronUp, 
-  faExclamationTriangle 
-} from '@fortawesome/free-solid-svg-icons';
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 /* ============================
    Types
@@ -37,10 +29,11 @@ export interface SubjectWithGrades {
   exam_board_id?: string;
   exam_board_name: string;
   exam_type_id?: string;
+  exam_type_name?: string;
   sort_order: number;
   current_grade: number | null;
   target_grade: number | null;
-  grade_confidence: 'confirmed' | 'estimated' | 'unknown';
+  grade_confidence: "confirmed" | "estimated" | "unknown";
 }
 
 interface SubjectPriorityGradesStepProps {
@@ -54,20 +47,20 @@ interface SubjectPriorityGradesStepProps {
    Constants
 ============================ */
 
-const GRADE_OPTIONS = [
-  { value: null, label: 'Not sure' },
-  { value: 9, label: '9' },
-  { value: 8, label: '8' },
-  { value: 7, label: '7' },
-  { value: 6, label: '6' },
-  { value: 5, label: '5' },
-  { value: 4, label: '4' },
-  { value: 3, label: '3' },
-  { value: 2, label: '2' },
-  { value: 1, label: '1' },
+const GRADE_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: "Not sure" },
+  { value: 9, label: "9" },
+  { value: 8, label: "8" },
+  { value: 7, label: "7" },
+  { value: 6, label: "6" },
+  { value: 5, label: "5" },
+  { value: 4, label: "4" },
+  { value: 3, label: "3" },
+  { value: 2, label: "2" },
+  { value: 1, label: "1" },
 ];
 
-const TARGET_GRADE_OPTIONS = GRADE_OPTIONS.filter(g => g.value !== null);
+const TARGET_GRADE_OPTIONS = GRADE_OPTIONS.filter((g) => g.value !== null);
 
 /* ============================
    Sortable Card Component
@@ -75,12 +68,11 @@ const TARGET_GRADE_OPTIONS = GRADE_OPTIONS.filter(g => g.value !== null);
 
 interface SortableCardProps {
   subject: SubjectWithGrades;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onGradeChange: (field: 'current_grade' | 'target_grade', value: number | null) => void;
+  index: number;
+  onGradeChange: (field: "current_grade" | "target_grade", value: number | null) => void;
 }
 
-function SortableCard({ subject, isExpanded, onToggle, onGradeChange }: SortableCardProps) {
+function SortableCard({ subject, index, onGradeChange }: SortableCardProps) {
   const {
     attributes,
     listeners,
@@ -93,129 +85,103 @@ function SortableCard({ subject, isExpanded, onToggle, onGradeChange }: Sortable
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
   };
 
-  const gradeGap = 
+  const gradeGap =
     subject.current_grade !== null && subject.target_grade !== null
       ? subject.target_grade - subject.current_grade
       : 0;
 
-  const hasLargeGap = gradeGap >= 4;
+  const hasLargeGap = gradeGap >= 3;
 
-  const gradeDisplay = 
-    subject.current_grade !== null && subject.target_grade !== null
-      ? `${subject.current_grade} → ${subject.target_grade}`
-      : subject.target_grade !== null
-      ? `? → ${subject.target_grade}`
-      : 'Set grades';
+  // Build subtitle: "GCSE · Mathematics · AQA"
+  const subtitleParts = [
+    subject.exam_type_name,
+    subject.subject_name,
+    subject.exam_board_name,
+  ].filter(Boolean);
+  const subtitle = subtitleParts.join(" · ");
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`
-        rounded-xl border bg-white shadow-sm
-        ${isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}
-        ${hasLargeGap ? 'border-amber-300' : 'border-gray-200'}
-      `}
+      className={`bg-white border-2 rounded-xl p-5 transition-all ${
+        isDragging
+          ? "border-primary-400 shadow-lg ring-2 ring-primary-200 rotate-1 z-50"
+          : "border-neutral-200 hover:border-primary-300 hover:shadow-soft"
+      }`}
     >
-      {/* Card Header */}
-      <div className="flex items-center gap-3 p-4">
-        {/* Drag Handle */}
-        <button
-          {...attributes}
-          {...listeners}
-          className="cursor-grab touch-none p-1 text-gray-400 hover:text-gray-600"
-          aria-label="Drag to reorder"
-        >
-          <FontAwesomeIcon icon={faGripVertical} className="w-4 h-4" />
-        </button>
-
+      <div className="flex items-start gap-4">
         {/* Priority Badge */}
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-          {subject.sort_order}
-        </div>
-
-        {/* Subject Info */}
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900 truncate">
-            {subject.subject_name}
-          </div>
-          <div className="text-sm text-gray-500 truncate">
-            {subject.exam_board_name}
-          </div>
-        </div>
-
-        {/* Grade Summary (collapsed) */}
-        {!isExpanded && (
-          <div className={`text-sm font-medium ${hasLargeGap ? 'text-amber-600' : 'text-gray-600'}`}>
-            {gradeDisplay}
-            {hasLargeGap && (
-              <FontAwesomeIcon icon={faExclamationTriangle} className="ml-1 w-4 h-4 text-amber-500" />
-            )}
-          </div>
-        )}
-
-        {/* Expand/Collapse */}
-        <button
-          onClick={onToggle}
-          className="p-2 text-gray-400 hover:text-gray-600"
-          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+          style={{ background: "linear-gradient(135deg, #744FFF 0%, #5B2CFF 100%)" }}
         >
-          <FontAwesomeIcon 
-            icon={isExpanded ? faChevronUp : faChevronDown} 
-            className="w-4 h-4" 
-          />
-        </button>
-      </div>
+          {index + 1}
+        </div>
 
-      {/* Expanded Content */}
-      {isExpanded && (
-        <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          {/* Header row */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-neutral-900 truncate">
+                {subject.subject_name}
+              </h3>
+              <p className="text-sm text-neutral-500 truncate">{subtitle}</p>
+            </div>
+
+            {/* Drag Handle */}
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab touch-none p-2 text-neutral-400 hover:text-neutral-600 transition-colors flex-shrink-0"
+              aria-label="Drag to reorder"
+            >
+              <i className="fa-solid fa-grip-vertical" />
+            </button>
+          </div>
+
+          {/* Grade selectors */}
           <div className="grid grid-cols-2 gap-4">
             {/* Current Grade */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-neutral-600 mb-2">
                 Current grade
               </label>
               <select
-                value={subject.current_grade ?? ''}
+                value={subject.current_grade ?? ""}
                 onChange={(e) => {
-                  const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
-                  onGradeChange('current_grade', val);
+                  const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                  onGradeChange("current_grade", val);
                 }}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
               >
                 {GRADE_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value ?? ''}>
+                  <option key={opt.label} value={opt.value ?? ""}>
                     {opt.label}
                   </option>
                 ))}
               </select>
-              {subject.current_grade === null && (
-                <p className="mt-1 text-xs text-gray-500">
-                  We'll estimate based on averages
-                </p>
-              )}
             </div>
 
             {/* Target Grade */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-neutral-600 mb-2">
                 Target grade
               </label>
               <select
-                value={subject.target_grade ?? ''}
+                value={subject.target_grade ?? ""}
                 onChange={(e) => {
-                  const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
-                  onGradeChange('target_grade', val);
+                  const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                  onGradeChange("target_grade", val);
                 }}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent transition-all"
               >
                 <option value="">Select target</option>
                 {TARGET_GRADE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value ?? ''}>
+                  <option key={opt.value} value={opt.value ?? ""}>
                     {opt.label}
                   </option>
                 ))}
@@ -225,16 +191,16 @@ function SortableCard({ subject, isExpanded, onToggle, onGradeChange }: Sortable
 
           {/* Large Gap Warning */}
           {hasLargeGap && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3">
-              <FontAwesomeIcon icon={faExclamationTriangle} className="mt-0.5 w-4 h-4 text-amber-500" />
-              <div className="text-sm text-amber-800">
-                <strong>Ambitious target!</strong> A {gradeGap}-grade improvement will need 
-                significant time. We'll allocate more sessions to this subject.
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-accent-amber/10 border border-accent-amber/30 p-3">
+              <i className="fa-solid fa-triangle-exclamation text-accent-amber mt-0.5" />
+              <div className="text-sm text-neutral-700">
+                <strong>Ambitious target!</strong> A {gradeGap}-grade improvement will need
+                significant focus. We'll allocate more sessions to this subject.
               </div>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -249,10 +215,6 @@ export default function SubjectPriorityGradesStep({
   onNext,
   onBack,
 }: SubjectPriorityGradesStepProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(
-    subjects.length > 0 ? subjects[0].subject_id : null
-  );
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -260,89 +222,91 @@ export default function SubjectPriorityGradesStep({
     })
   );
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
 
-    if (over && active.id !== over.id) {
-      const oldIndex = subjects.findIndex(s => s.subject_id === active.id);
-      const newIndex = subjects.findIndex(s => s.subject_id === over.id);
+      if (over && active.id !== over.id) {
+        const oldIndex = subjects.findIndex((s) => s.subject_id === active.id);
+        const newIndex = subjects.findIndex((s) => s.subject_id === over.id);
 
-      const reordered = arrayMove(subjects, oldIndex, newIndex).map((s, idx) => ({
-        ...s,
-        sort_order: idx + 1,
-      }));
+        const reordered = arrayMove(subjects, oldIndex, newIndex).map((s, idx) => ({
+          ...s,
+          sort_order: idx + 1,
+        }));
 
-      onSubjectsChange(reordered);
-    }
-  }, [subjects, onSubjectsChange]);
-
-  const handleGradeChange = useCallback((
-    subjectId: string,
-    field: 'current_grade' | 'target_grade',
-    value: number | null
-  ) => {
-    const updated = subjects.map(s => {
-      if (s.subject_id !== subjectId) return s;
-
-      const newSubject = { ...s, [field]: value };
-
-      // Update grade_confidence based on current grade selection
-      if (field === 'current_grade') {
-        newSubject.grade_confidence = value === null ? 'unknown' : 'confirmed';
+        onSubjectsChange(reordered);
       }
+    },
+    [subjects, onSubjectsChange]
+  );
 
-      return newSubject;
-    });
+  const handleGradeChange = useCallback(
+    (subjectId: string, field: "current_grade" | "target_grade", value: number | null) => {
+      const updated = subjects.map((s) => {
+        if (s.subject_id !== subjectId) return s;
 
-    onSubjectsChange(updated);
-  }, [subjects, onSubjectsChange]);
+        const newSubject = { ...s, [field]: value };
 
-  const toggleExpand = useCallback((subjectId: string) => {
-    setExpandedId(prev => prev === subjectId ? null : subjectId);
-  }, []);
+        if (field === "current_grade") {
+          newSubject.grade_confidence = value === null ? "unknown" : "confirmed";
+        }
+
+        return newSubject;
+      });
+
+      onSubjectsChange(updated);
+    },
+    [subjects, onSubjectsChange]
+  );
 
   // Validation: all subjects must have target grade
-  const isValid = subjects.every(s => s.target_grade !== null);
-
-  const incompleteCount = subjects.filter(s => s.target_grade === null).length;
+  const isValid = subjects.every((s) => s.target_grade !== null);
+  const incompleteCount = subjects.filter((s) => s.target_grade === null).length;
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">
-          Prioritise subjects and set grades
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-neutral-900 mb-2">
+          Prioritise subjects
         </h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Drag to reorder by priority. Set current and target grades to help us 
-          recommend the right amount of revision.
+        <p className="text-neutral-500 text-sm leading-relaxed">
+          Tell us where the biggest gaps are so we can focus the plan.
         </p>
       </div>
 
-      {/* Instructions */}
-      <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
-        <strong>Tip:</strong> Put the subject that needs most attention at the top. 
-        We'll allocate more sessions to higher-priority subjects.
+      {/* Tip Box */}
+      <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 mb-6">
+        <div className="flex items-start gap-3">
+          <div className="w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <i className="fa-solid fa-lightbulb text-white text-xs" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-primary-900 mb-1">How to prioritise</h3>
+            <p className="text-xs text-primary-700 leading-relaxed">
+              Focus on subjects with the largest grade gaps or where your child needs the most
+              support. Drag to reorder — highest priority at the top.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Sortable List */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext
-          items={subjects.map(s => s.subject_id)}
+          items={subjects.map((s) => s.subject_id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-3">
-            {subjects.map(subject => (
+          <div className="space-y-4 mb-6">
+            {subjects.map((subject, index) => (
               <SortableCard
                 key={subject.subject_id}
                 subject={subject}
-                isExpanded={expandedId === subject.subject_id}
-                onToggle={() => toggleExpand(subject.subject_id)}
-                onGradeChange={(field, value) => handleGradeChange(subject.subject_id, field, value)}
+                index={index}
+                onGradeChange={(field, value) =>
+                  handleGradeChange(subject.subject_id, field, value)
+                }
               />
             ))}
           </div>
@@ -351,8 +315,17 @@ export default function SubjectPriorityGradesStep({
 
       {/* Validation Message */}
       {!isValid && (
-        <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
-          Please set a target grade for {incompleteCount === 1 ? 'the remaining subject' : `all ${incompleteCount} remaining subjects`}.
+        <div className="rounded-xl bg-neutral-100 border border-neutral-200 p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <i className="fa-solid fa-circle-info text-neutral-500 mt-0.5" />
+            <p className="text-sm text-neutral-600">
+              Please set a target grade for{" "}
+              {incompleteCount === 1
+                ? "the remaining subject"
+                : `all ${incompleteCount} remaining subjects`}
+              .
+            </p>
+          </div>
         </div>
       )}
 
@@ -361,7 +334,7 @@ export default function SubjectPriorityGradesStep({
         <button
           type="button"
           onClick={onBack}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="px-6 py-3 rounded-full font-medium text-neutral-700 bg-neutral-200 hover:bg-neutral-300 transition-all"
         >
           Back
         </button>
@@ -370,9 +343,9 @@ export default function SubjectPriorityGradesStep({
           type="button"
           onClick={onNext}
           disabled={!isValid}
-          className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+          className="px-8 py-3 rounded-full font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          Continue
         </button>
       </div>
     </div>
