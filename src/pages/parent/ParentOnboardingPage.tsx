@@ -1,3 +1,5 @@
+
+
 // src/pages/parent/ParentOnboardingPage.tsx
 // Multi-step onboarding flow for parents to set up their child's revision plan
 // Steps: Child Details → Goal → Needs → Exam Type → Subjects → Pathways → Priority/Grades → Revision Period → Availability → Confirm → Invite
@@ -5,7 +7,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-// CHANGED: Import OnboardingModal instead of StepShell
 import OnboardingModal from "../../components/parentOnboarding/OnboardingModal";
 import ChildDetailsStep, {
   ChildDetails,
@@ -27,7 +28,7 @@ import SubjectPriorityGradesStep, {
 import RevisionPeriodStep, {
   type RevisionPeriodData,
 } from "../../components/parentOnboarding/steps/RevisionPeriodStep";
-import AvailabilityBuilderStep,{
+import AvailabilityBuilderStep, {
   type DateOverride,
 } from "../../components/parentOnboarding/steps/AvailabilityBuilderStep";
 import ConfirmStep from "../../components/parentOnboarding/steps/ConfirmStep";
@@ -47,7 +48,6 @@ import { useAuth } from "../../contexts/AuthContext";
 
 /* ============================
    Constants & Helpers
-   (ALL UNCHANGED)
 ============================ */
 
 function createEmptyTemplate(): DayTemplate[] {
@@ -105,7 +105,7 @@ async function copyToClipboard(text: string) {
 }
 
 /* ============================
-   Step Configuration (UNCHANGED)
+   Step Configuration
 ============================ */
 
 const STEPS = {
@@ -122,10 +122,6 @@ const STEPS = {
   INVITE: 10,
 } as const;
 
-/* ============================
-   NEW: Step display config for modal
-============================ */
-
 const STEP_TITLES: Record<number, string> = {
   [STEPS.CHILD_DETAILS]: "Add your child",
   [STEPS.GOAL]: "Set a goal",
@@ -140,7 +136,6 @@ const STEP_TITLES: Record<number, string> = {
   [STEPS.INVITE]: "Invite your child",
 };
 
-// Steps shown in progress bar (1-10, excludes INVITE)
 const PROGRESS_STEPS = 10;
 
 /* ============================
@@ -161,7 +156,6 @@ export default function ParentOnboardingPage() {
   const [invite, setInvite] = useState<ChildInviteCreateResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // ALL STATE UNCHANGED
   const [child, setChild] = useState<ChildDetails>({
     first_name: "",
     last_name: "",
@@ -185,7 +179,7 @@ export default function ParentOnboardingPage() {
   const [, setIsLoadingRecommendation] = useState(false);
 
   /* ============================
-     ALL useEffects UNCHANGED
+     Effects
   ============================ */
   
   useEffect(() => {
@@ -247,13 +241,13 @@ export default function ParentOnboardingPage() {
   }, [step, subjectsWithGrades, goalCode, recommendation, calculateRecommendations]);
 
   /* ============================
-     payload useMemo UNCHANGED
+     Payload - UPDATED to include subject_name and exam_board_name
   ============================ */
   const payload = useMemo(() => {
     const weekly_availability: Record<string, {
       enabled: boolean;
       slots: Array<{
-        time_of_day: 'before_school' | 'after_school' | 'evening';
+        time_of_day: 'early_morning' | 'morning' | 'afternoon' | 'evening';
         session_pattern: 'p20' | 'p45' | 'p70';
       }>
     }> = {};
@@ -262,14 +256,17 @@ export default function ParentOnboardingPage() {
       weekly_availability[day.day_of_week.toString()] = {
         enabled: day.is_enabled,
         slots: day.slots.map(s => ({
-          time_of_day: s.time_of_day as 'before_school' | 'after_school' | 'evening',
+          time_of_day: s.time_of_day as 'early_morning' | 'morning' | 'afternoon' | 'evening',
           session_pattern: s.session_pattern as 'p20' | 'p45' | 'p70',
         })),
       };
     }
 
+    // UPDATED: Now includes subject_name and exam_board_name for ConfirmStep display
     const subjects = subjectsWithGrades.map(s => ({
       subject_id: s.subject_id,
+      subject_name: s.subject_name,
+      exam_board_name: s.exam_board_name,
       sort_order: s.sort_order,
       current_grade: s.current_grade,
       target_grade: s.target_grade,
@@ -306,7 +303,7 @@ export default function ParentOnboardingPage() {
   }, [child, goalCode, subjectsWithGrades, needClusters, pathwaySelections, revisionPeriod, weeklyTemplate, dateOverrides]);
 
   /* ============================
-     canNext useMemo UNCHANGED
+     Validation
   ============================ */
   const canNext = useMemo(() => {
     switch (step) {
@@ -333,9 +330,6 @@ export default function ParentOnboardingPage() {
     }
   }, [step, child.first_name, goalCode, examTypeIds, subjectsWithGrades, revisionPeriod, weeklyTemplate]);
 
-  /* ============================
-     ALL validation & submit functions UNCHANGED
-  ============================ */
   function validatePayload(): string | null {
     if (!payload.child?.first_name?.trim()) {
       return "Please enter your child's first name.";
@@ -363,6 +357,9 @@ export default function ParentOnboardingPage() {
     return null;
   }
 
+  /* ============================
+     Submit
+  ============================ */
   async function resolveLatestChildIdForThisParent(): Promise<string> {
     if (!user?.id) throw new Error("No user session");
 
@@ -428,7 +425,7 @@ export default function ParentOnboardingPage() {
     child.preferred_name?.trim() || child.first_name?.trim() || "your child";
 
   /* ============================
-     ALL navigation handlers UNCHANGED
+     Navigation
   ============================ */
   const selfNavigatingSteps = [STEPS.SUBJECTS, STEPS.PATHWAYS, STEPS.PRIORITY_GRADES, STEPS.REVISION_PERIOD, STEPS.AVAILABILITY];
   const showDefaultNav = !selfNavigatingSteps.includes(step as typeof STEPS.SUBJECTS) && step < STEPS.INVITE;
@@ -476,14 +473,10 @@ export default function ParentOnboardingPage() {
   }, [selectedSubjects]);
 
   /* ============================
-     CHANGED: Render with OnboardingModal
+     Render
   ============================ */
-
-  // Calculate display step (1-based) for progress bar
   const displayStep = Math.min(step + 1, PROGRESS_STEPS);
   const showProgress = step < STEPS.INVITE;
-
-  // Determine button labels
   const continueLabel = step === STEPS.NEEDS && needClusters.length === 0 ? "Skip" : "Continue";
 
   return (
@@ -545,7 +538,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 4: Subject & Board Selection (self-navigating) */}
+      {/* Step 4: Subject & Board Selection */}
       {step === STEPS.SUBJECTS && (
         <SubjectBoardStep
           examTypeIds={normaliseStringArray(examTypeIds)}
@@ -562,7 +555,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 5: Pathway Selection (self-navigating) */}
+      {/* Step 5: Pathway Selection */}
       {step === STEPS.PATHWAYS && (
         <PathwaySelectionStep
           subjectIds={subjectIdsForPathways}
@@ -573,7 +566,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 6: Priority & Grades (self-navigating) */}
+      {/* Step 6: Priority & Grades */}
       {step === STEPS.PRIORITY_GRADES && (
         <SubjectPriorityGradesStep
           subjects={subjectsWithGrades}
@@ -583,7 +576,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 7: Revision Period (self-navigating) */}
+      {/* Step 7: Revision Period */}
       {step === STEPS.REVISION_PERIOD && (
         <RevisionPeriodStep
           revisionPeriod={revisionPeriod}
@@ -593,7 +586,7 @@ export default function ParentOnboardingPage() {
         />
       )}
 
-      {/* Step 8: Availability (self-navigating) - UPDATED with coverage props */}
+      {/* Step 8: Availability */}
       {step === STEPS.AVAILABILITY && (
         <AvailabilityBuilderStep
           weeklyTemplate={weeklyTemplate}
