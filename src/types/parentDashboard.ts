@@ -64,13 +64,17 @@ export interface WeekSummary {
   days_active: number;
 }
 
+
 export interface DailyPattern {
-  day_of_week: string;
-  day_index: number;
-  sessions_completed: number;
-  total_minutes: number;
-  is_rest_day: boolean;
-}
+     day_index: number;
+     day_name: string;
+     sessions_completed: number;
+     sessions_planned?: number;    // NEW
+     sessions_total?: number;      // NEW
+     total_minutes: number;
+     planned_minutes?: number;     // NEW
+     is_rest_day: boolean;
+   }
 
 export interface GentleReminder {
   type: "mocks_coming_up" | "topic_to_revisit" | "building_momentum" | "subject_neglected";
