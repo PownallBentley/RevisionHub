@@ -14,30 +14,66 @@ import {
   faFire,
   faStar,
   faTrophy,
+  faDna,
+  faLanguage,
+  faPalette,
+  faMusic,
+  faLaptopCode,
+  faRunning,
+  faTheaterMasks,
+  faCross,
+  faBalanceScale,
+  faChartLine,
+  IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
 import { fetchTodayData } from "../../services/todayService";
 import type { TodayData, SessionRow } from "../../types/today";
 
-// Subject icon mapping
-const SUBJECT_ICONS: Record<string, any> = {
-  maths: faCalculator,
-  mathematics: faCalculator,
-  english: faBook,
-  "english literature": faBook,
-  "english language": faBook,
-  chemistry: faFlask,
-  physics: faAtom,
-  biology: faFlask,
-  science: faFlask,
-  geography: faGlobe,
+// Map database icon names to FontAwesome icons
+const ICON_MAP: Record<string, IconDefinition> = {
+  calculator: faCalculator,
+  book: faBook,
+  flask: faFlask,
+  atom: faAtom,
+  globe: faGlobe,
+  landmark: faLandmark,
+  dna: faDna,
+  language: faLanguage,
+  palette: faPalette,
+  music: faMusic,
+  "laptop-code": faLaptopCode,
+  running: faRunning,
+  "theater-masks": faTheaterMasks,
+  cross: faCross,
+  "balance-scale": faBalanceScale,
+  "chart-line": faChartLine,
+  // Fallbacks
   history: faLandmark,
+  science: faFlask,
+  maths: faCalculator,
+  english: faBook,
+  geography: faGlobe,
+  physics: faAtom,
+  chemistry: faFlask,
+  biology: faDna,
 };
 
-function getSubjectIcon(subjectName: string) {
-  const key = subjectName.toLowerCase();
-  return SUBJECT_ICONS[key] || faBook;
+function getIconFromName(iconName: string): IconDefinition {
+  return ICON_MAP[iconName.toLowerCase()] || faBook;
+}
+
+/**
+ * Generate a lighter shade of a hex color for backgrounds
+ */
+function hexToLightBg(hex: string, opacity: number = 0.15): string {
+  // Remove # if present
+  const cleanHex = hex.replace("#", "");
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
 /**
@@ -47,17 +83,17 @@ function formatDayLabel(dateStr: string): string {
   const date = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  
+
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
-  
+
   if (targetDate.getTime() === tomorrow.getTime()) {
     return "Tomorrow";
   }
-  
+
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   return days[date.getDay()];
 }
@@ -249,69 +285,14 @@ export default function Today() {
           ) : (
             <>
               <div className="space-y-4 mb-6">
-                {todaySessions.map((session, index) => {
-                  const isCompleted = session.status === "completed";
-                  const isNext = nextSession?.planned_session_id === session.planned_session_id;
-                  const isScheduled = !isCompleted && !isNext;
-                  
-                  // Container styles - matching design exactly
-                  const containerClass = isNext
-                    ? "bg-primary-50 border-2 border-primary-200"
-                    : "bg-neutral-50";
-                  
-                  // Icon background - matching design exactly
-                  const iconBgClass = isCompleted
-                    ? "bg-primary-100"
-                    : isNext
-                    ? "bg-primary-600"
-                    : "bg-neutral-200";
-                  
-                  // Icon color
-                  const iconColorClass = isNext ? "text-white" : isCompleted ? "text-primary-600" : "text-neutral-500";
-                  
-                  // Topic display
-                  const topicDisplay = session.topic_names?.[0] || "Topic TBD";
-                  
-                  return (
-                    <div
-                      key={session.planned_session_id}
-                      className={`flex items-center justify-between p-4 rounded-xl ${containerClass}`}
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconBgClass}`}>
-                          <FontAwesomeIcon
-                            icon={getSubjectIcon(session.subject_name)}
-                            className={iconColorClass}
-                          />
-                        </div>
-                        <div>
-                          <div className="font-medium text-neutral-700">{session.subject_name}</div>
-                          <div className="text-sm text-neutral-500">{topicDisplay}</div>
-                          <div className="text-sm text-neutral-400">
-                            {isNext ? "Any time today" : `${session.session_duration_minutes} mins`}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Status badges - matching design exactly */}
-                      {isCompleted && (
-                        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
-                          Completed
-                        </span>
-                      )}
-                      {isNext && (
-                        <span className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full">
-                          {session.status === "started" ? "Continue" : "Ready"}
-                        </span>
-                      )}
-                      {isScheduled && (
-                        <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
-                          Scheduled
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                {todaySessions.map((session) => (
+                  <SessionItem
+                    key={session.planned_session_id}
+                    session={session}
+                    isNext={nextSession?.planned_session_id === session.planned_session_id}
+                    onStart={() => handleStartSession(session.planned_session_id)}
+                  />
+                ))}
               </div>
 
               {nextSession && (
@@ -342,10 +323,14 @@ export default function Today() {
                       className="flex items-center justify-between py-2"
                     >
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-neutral-100 rounded-lg flex items-center justify-center">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: hexToLightBg(session.color || "#6B7280", 0.15) }}
+                        >
                           <FontAwesomeIcon
-                            icon={getSubjectIcon(session.subject_name)}
-                            className="text-neutral-500 text-sm"
+                            icon={getIconFromName(session.icon || "book")}
+                            className="text-sm"
+                            style={{ color: session.color || "#6B7280" }}
                           />
                         </div>
                         <div>
@@ -353,7 +338,7 @@ export default function Today() {
                             {session.subject_name}
                           </div>
                           <div className="text-xs text-neutral-500">
-                            {session.topic_names?.[0] || "Topic TBD"}
+                            {session.topic_names?.[0] || session.topics_preview?.[0]?.topic_name || "Topic TBD"}
                           </div>
                         </div>
                       </div>
@@ -431,5 +416,101 @@ export default function Today() {
         </div>
       </main>
     </PageLayout>
+  );
+}
+
+/**
+ * Session Item Component - uses database color and icon
+ */
+function SessionItem({
+  session,
+  isNext,
+  onStart,
+}: {
+  session: SessionRow;
+  isNext: boolean;
+  onStart: () => void;
+}) {
+  const isCompleted = session.status === "completed";
+  const isStarted = session.status === "started";
+  const isNotStarted = session.status === "not_started";
+  const isReady = isNext && (isNotStarted || isStarted);
+  const isScheduled = !isCompleted && !isReady;
+
+  // Get subject color from database (fallback to gray)
+  const subjectColor = session.color || "#6B7280";
+  const subjectIcon = getIconFromName(session.icon || "book");
+
+  // Container styles based on state
+  const containerClass = isReady
+    ? "bg-primary-50 border-2 border-primary-200"
+    : "bg-neutral-50";
+
+  // Topic display
+  const topicDisplay = session.topic_names?.[0] || session.topics_preview?.[0]?.topic_name || "Topic TBD";
+
+  // Icon styling based on state
+  const getIconStyles = () => {
+    if (isReady) {
+      // Ready: solid subject color background, white icon
+      return {
+        backgroundColor: subjectColor,
+        iconColor: "#FFFFFF",
+      };
+    }
+    if (isCompleted) {
+      // Completed: light subject color background, subject color icon
+      return {
+        backgroundColor: hexToLightBg(subjectColor, 0.2),
+        iconColor: subjectColor,
+      };
+    }
+    // Scheduled: gray background, gray icon
+    return {
+      backgroundColor: "#E1E4EE",
+      iconColor: "#6B7280",
+    };
+  };
+
+  const iconStyles = getIconStyles();
+
+  return (
+    <div className={`flex items-center justify-between p-4 rounded-xl ${containerClass}`}>
+      <div className="flex items-center space-x-4">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: iconStyles.backgroundColor }}
+        >
+          <FontAwesomeIcon
+            icon={subjectIcon}
+            style={{ color: iconStyles.iconColor }}
+          />
+        </div>
+        <div>
+          <div className="font-medium text-neutral-700">{session.subject_name}</div>
+          <div className="text-sm text-neutral-500">{topicDisplay}</div>
+          <div className="text-sm text-neutral-400">
+            {isReady ? "Any time today" : `${session.session_duration_minutes} mins`}
+          </div>
+        </div>
+      </div>
+
+      {/* Status badges */}
+      {isCompleted && (
+        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
+          Completed
+        </span>
+      )}
+      {isReady && (
+        <span className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full">
+          {isStarted ? "Continue" : "Ready"}
+        </span>
+      )}
+      {isScheduled && (
+        <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
+          Scheduled
+        </span>
+      )}
+    </div>
   );
 }
