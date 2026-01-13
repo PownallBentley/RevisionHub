@@ -57,6 +57,15 @@ export default function BlockDatesModal({
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("holiday");
 
+  // Auto-update end date when start date changes
+  function handleStartDateChange(newStartDate: string) {
+    setStartDate(newStartDate);
+    // If end date is empty or before start date, set it to start date
+    if (!endDate || endDate < newStartDate) {
+      setEndDate(newStartDate);
+    }
+  }
+
   useEffect(() => {
     if (isOpen && childId) {
       loadOverrides();
@@ -243,7 +252,7 @@ export default function BlockDatesModal({
                 <input
                   type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
