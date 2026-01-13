@@ -1,94 +1,91 @@
-// src/pages/child/SessionRun.tsx
-// UPDATED: 6-Step Session Model - January 2026
-// Main runner that orchestrates all session steps
+// src/pages/child/SessionOverview.tsx
+// UPDATED: 7-Step Session Model - January 2026
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowLeft,
-  faXmark,
   faClock,
-  faSpinner,
-  faExclamationTriangle,
-  faCheckCircle,
+  faChartSimple,
+  faFire,
+  faLightbulb,
+  faRocket,
+  faVolumeXmark,
+  faPencil,
+  faHeart,
+  faCheckDouble,
+  faChartLine,
+  faBullseye,
+  faCircleCheck,
   faFlask,
   faCalculator,
+  faBook,
   faAtom,
   faGlobe,
   faLandmark,
   faDna,
-  faBook,
-  faCircle,
+  faLanguage,
+  faPalette,
+  faMusic,
+  faLaptopCode,
+  faRunning,
+  faTheaterMasks,
+  faCross,
+  faBalanceScale,
+  faFaceSmile,
+  faFaceMeh,
+  faSeedling,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
-
-// Step Components
-import PreviewStep from "./sessionSteps/PreviewStep";
-import RecallStep from "./sessionSteps/RecallStep";
-import ReinforceStep from "./sessionSteps/ReinforceStep";
-import PracticeStep from "./sessionSteps/PracticeStep";
-import SummaryStep from "./sessionSteps/SummaryStep";
-import CompleteStep from "./sessionSteps/CompleteStep";
-
-// Services
-import {
-  getRevisionSession,
-  patchRevisionSessionStep,
-  completeRevisionSession,
-  startPlannedSession,
-} from "../../services/revisionSessionApi";
+import { supabase } from "../../lib/supabase";
+import { PageLayout } from "../../components/layout";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type StepKey = "preview" | "recall" | "reinforce" | "practice" | "summary" | "complete";
-
-type SessionData = {
-  revision_session_id: string;
-  planned_session_id: string;
-  child_id: string;
-  child_name: string;
-  subject_id: string;
-  subject_name: string;
-  subject_icon: string | null;
-  subject_color: string | null;
-  topic_id: string;
+type TopicInfo = {
+  id: string;
   topic_name: string;
+};
+
+type SubjectInfo = {
+  id: string;
+  subject_name: string;
+  icon: string | null;
+  color: string | null;
+};
+
+type PlannedSessionOverview = {
+  planned_session_id: string;
+  subject: SubjectInfo | null;
+  topic_ids: string[];
+  topics: TopicInfo[];
   session_duration_minutes: number;
-  status: "in_progress" | "completed" | "abandoned";
-  current_step_key: StepKey;
-  steps: Array<{
-    step_key: StepKey;
-    step_index: number;
-    status: "pending" | "in_progress" | "completed";
-    answer_summary: Record<string, any>;
-  }>;
-  generated_payload: Record<string, any>;
+  session_pattern: string;
 };
 
-// =============================================================================
-// Constants
-// =============================================================================
-
-const STEP_ORDER: StepKey[] = [
-  "preview",
-  "recall",
-  "reinforce",
-  "practice",
-  "summary",
-  "complete",
-];
-
-const STEP_LABELS: Record<StepKey, string> = {
-  preview: "Preview",
-  recall: "Recall",
-  reinforce: "Core Teaching",
-  practice: "Practice",
-  summary: "Summary",
-  complete: "Complete",
+type SessionStats = {
+  total_sessions_completed: number;
+  current_streak: number;
+  points_balance: number;
+  subject_history: {
+    last_session_date: string | null;
+    last_topic_name: string | null;
+    last_confidence: string | null;
+  } | null;
 };
+
+type PreConfidenceLevel =
+  | "very_confident"
+  | "somewhat_confident"
+  | "not_confident"
+  | "new_to_this";
+
+// =============================================================================
+// Icon Mapping
+// =============================================================================
 
 const ICON_MAP: Record<string, IconDefinition> = {
   calculator: faCalculator,
@@ -98,475 +95,728 @@ const ICON_MAP: Record<string, IconDefinition> = {
   globe: faGlobe,
   landmark: faLandmark,
   dna: faDna,
+  language: faLanguage,
+  palette: faPalette,
+  music: faMusic,
+  "laptop-code": faLaptopCode,
+  running: faRunning,
+  "theater-masks": faTheaterMasks,
+  cross: faCross,
+  "balance-scale": faBalanceScale,
+  "chart-line": faChartLine,
+  history: faLandmark,
+  science: faFlask,
+  maths: faCalculator,
+  english: faBook,
+  geography: faGlobe,
+  physics: faAtom,
+  chemistry: faFlask,
+  biology: faDna,
 };
 
-function getIconFromName(iconName?: string | null): IconDefinition {
-  if (!iconName) return faFlask;
-  return ICON_MAP[iconName.toLowerCase()] || faFlask;
+function getIconFromName(iconName: string): IconDefinition {
+  return ICON_MAP[iconName?.toLowerCase()] || faBook;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+// Darken/lighten a hex color
+function adjustColor(hex: string, amount: number): string {
+  const cleanHex = hex.replace("#", "");
+  const r = Math.max(0, Math.min(255, parseInt(cleanHex.substring(0, 2), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(cleanHex.substring(2, 4), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(cleanHex.substring(4, 6), 16) + amount));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
 // =============================================================================
-// Sub-components
+// Pre-Confidence Options
 // =============================================================================
 
-function SessionHeader({
-  subjectName,
-  subjectIcon,
-  subjectColor,
-  topicName,
-  onExit,
-}: {
-  subjectName: string;
-  subjectIcon: IconDefinition;
-  subjectColor: string;
-  topicName: string;
-  onExit: () => void;
-}) {
-  return (
-    <header className="bg-white border-b border-neutral-200 sticky top-0 z-40">
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        {/* Subject Info */}
-        <div className="flex items-center space-x-3">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: subjectColor }}
-          >
-            <FontAwesomeIcon icon={subjectIcon} className="text-white text-lg" />
-          </div>
-          <div>
-            <p className="font-semibold text-primary-900">{subjectName}</p>
-            <p className="text-neutral-500 text-sm truncate max-w-[200px]">{topicName}</p>
-          </div>
-        </div>
+const PRE_CONFIDENCE_OPTIONS: Array<{
+  value: PreConfidenceLevel;
+  label: string;
+  description: string;
+  icon: IconDefinition;
+  colorClass: string;
+  bgClass: string;
+}> = [
+  {
+    value: "very_confident",
+    label: "Very Confident",
+    description: "I know this topic well",
+    icon: faFaceSmile,
+    colorClass: "text-accent-green",
+    bgClass: "bg-accent-green/10",
+  },
+  {
+    value: "somewhat_confident",
+    label: "Somewhat Confident",
+    description: "I remember some things",
+    icon: faFaceMeh,
+    colorClass: "text-primary-600",
+    bgClass: "bg-primary-100",
+  },
+  {
+    value: "not_confident",
+    label: "Not Very Confident",
+    description: "I need more practice",
+    icon: faFaceMeh,
+    colorClass: "text-accent-amber",
+    bgClass: "bg-accent-amber/10",
+  },
+  {
+    value: "new_to_this",
+    label: "New to This",
+    description: "I haven't studied this yet",
+    icon: faSeedling,
+    colorClass: "text-neutral-600",
+    bgClass: "bg-neutral-200",
+  },
+];
 
-        {/* Exit Button */}
-        <button
-          type="button"
-          onClick={onExit}
-          className="flex items-center space-x-2 px-4 py-2 text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100 rounded-lg transition"
-        >
-          <FontAwesomeIcon icon={faXmark} />
-          <span className="font-medium">Exit session</span>
-        </button>
-      </div>
-    </header>
-  );
-}
+// =============================================================================
+// 7-Step Definitions
+// =============================================================================
 
-function StepProgressBar({
-  currentStepIndex,
-  totalSteps,
-  steps,
-  timeRemainingMinutes,
-}: {
-  currentStepIndex: number;
-  totalSteps: number;
-  steps: SessionData["steps"];
-  timeRemainingMinutes: number | null;
-}) {
-  const progressPercent = ((currentStepIndex) / totalSteps) * 100;
-
-  return (
-    <div className="bg-white border-b border-neutral-200 py-4">
-      <div className="max-w-4xl mx-auto px-4">
-        {/* Top row: label + time */}
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-neutral-600 text-sm">
-            {STEP_LABELS[STEP_ORDER[currentStepIndex - 1] ?? "preview"]}
-          </p>
-          <div className="flex items-center space-x-4">
-            <span className="text-neutral-500 text-sm">
-              {currentStepIndex} of {totalSteps} steps
-            </span>
-            {timeRemainingMinutes !== null && (
-              <div className="flex items-center space-x-1 text-neutral-500 text-sm">
-                <FontAwesomeIcon icon={faClock} className="text-xs" />
-                <span>~{timeRemainingMinutes} min left</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="w-full bg-neutral-200 rounded-full h-2 mb-4">
-          <div
-            className="bg-primary-600 h-full rounded-full transition-all duration-500"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-
-        {/* Step dots */}
-        <div className="flex items-center justify-between">
-          {STEP_ORDER.map((stepKey, idx) => {
-            const stepData = steps.find((s) => s.step_key === stepKey);
-            const isComplete = stepData?.status === "completed";
-            const isCurrent = idx + 1 === currentStepIndex;
-            const isPending = !isComplete && !isCurrent;
-
-            return (
-              <div key={stepKey} className="flex flex-col items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                    isComplete
-                      ? "bg-accent-green"
-                      : isCurrent
-                      ? "bg-primary-600"
-                      : "bg-neutral-200"
-                  }`}
-                >
-                  {isComplete ? (
-                    <FontAwesomeIcon icon={faCheckCircle} className="text-white text-sm" />
-                  ) : (
-                    <span
-                      className={`text-sm font-semibold ${
-                        isCurrent ? "text-white" : "text-neutral-500"
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-xs mt-1 hidden md:block ${
-                    isCurrent ? "text-primary-600 font-semibold" : "text-neutral-400"
-                  }`}
-                >
-                  {STEP_LABELS[stepKey]}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
-      <div className="text-center">
-        <FontAwesomeIcon
-          icon={faSpinner}
-          className="text-primary-600 text-4xl animate-spin mb-4"
-        />
-        <p className="text-neutral-600 font-medium">Loading session...</p>
-      </div>
-    </div>
-  );
-}
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-card p-8 max-w-md text-center">
-        <FontAwesomeIcon
-          icon={faExclamationTriangle}
-          className="text-accent-red text-4xl mb-4"
-        />
-        <h2 className="text-xl font-bold text-neutral-900 mb-2">
-          Something went wrong
-        </h2>
-        <p className="text-neutral-600 mb-6">{message}</p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition"
-        >
-          Try Again
-        </button>
-      </div>
-    </div>
-  );
-}
+const SESSION_STEPS = [
+  {
+    number: 1,
+    title: "Preview",
+    description: "Overview of today's topic and your starting confidence",
+    duration: "1 min",
+  },
+  {
+    number: 2,
+    title: "Recall",
+    description: "Quick flashcards to activate what you already know",
+    duration: "3 min",
+  },
+  {
+    number: 3,
+    title: "Reinforce",
+    description: "Key concepts explained with examples and worked solutions",
+    duration: "8 min",
+  },
+  {
+    number: 4,
+    title: "Practice",
+    description: "Apply your understanding with exam-style questions",
+    duration: "5 min",
+  },
+  {
+    number: 5,
+    title: "Summary",
+    description: "Key takeaways and optional memory aids",
+    duration: "2 min",
+  },
+  {
+    number: 6,
+    title: "Reflection",
+    description: "Think about what you've learned and how you feel",
+    duration: "1 min",
+  },
+  {
+    number: 7,
+    title: "Complete",
+    description: "Celebrate your progress and see what's next",
+    duration: "30 sec",
+  },
+];
 
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export default function SessionRun() {
-  const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
+export default function SessionOverview() {
   const navigate = useNavigate();
+  const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
 
-  // State
-  const [sessionData, setSessionData] = useState<SessionData | null>(null);
-  const [revisionSessionId, setRevisionSessionId] = useState<string | null>(null);
-  const [currentStepIndex, setCurrentStepIndex] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [overview, setOverview] = useState<PlannedSessionOverview | null>(null);
+  const [stats, setStats] = useState<SessionStats | null>(null);
+  const [preConfidence, setPreConfidence] = useState<PreConfidenceLevel | null>(null);
 
   // Load session data
-  const loadSession = useCallback(async () => {
-    if (!plannedSessionId) {
-      setError("No session ID provided");
-      setLoading(false);
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
 
-    try {
+    async function load() {
+      const id = String(plannedSessionId ?? "");
+      if (!id || !isUuid(id)) {
+        setError("That session link looks invalid. Please go back and start again.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
-      
-      // First, start/get the revision session from planned session
-      const rsId = await startPlannedSession(plannedSessionId);
-      setRevisionSessionId(rsId);
-      
-      // Then load the full revision session data
-      const data = await getRevisionSession(rsId);
-      setSessionData(data);
 
-      // Find current step index
-      const currentStep = data.steps.find((s) => s.status === "in_progress");
-      if (currentStep) {
-        setCurrentStepIndex(currentStep.step_index);
-      } else {
-        // Find first non-completed step
-        const firstPending = data.steps.find((s) => s.status === "pending");
-        if (firstPending) {
-          setCurrentStepIndex(firstPending.step_index);
-        } else {
-          // All complete
-          setCurrentStepIndex(data.steps.length);
+      try {
+        // 1) Pull planned session data
+        const { data: planned, error: plannedErr } = await supabase
+          .from("planned_sessions")
+          .select("id, child_id, subject_id, topic_ids, session_duration_minutes, session_pattern")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (plannedErr) throw plannedErr;
+        if (!planned) throw new Error("Session not found.");
+
+        // 2) Get subject info including icon and color
+        let subject: SubjectInfo | null = null;
+        if (planned.subject_id) {
+          const { data: subjectData, error: subjectErr } = await supabase
+            .from("subjects")
+            .select("id, subject_name, icon, color")
+            .eq("id", planned.subject_id)
+            .maybeSingle();
+
+          if (!subjectErr && subjectData) {
+            subject = subjectData;
+          }
         }
+
+        // 3) Get all topic details
+        const topicIds: string[] = Array.isArray(planned.topic_ids)
+          ? planned.topic_ids.filter((tid: any) => tid && isUuid(String(tid))).map(String)
+          : [];
+
+        let topics: TopicInfo[] = [];
+        if (topicIds.length > 0) {
+          const { data: topicsData, error: topicsErr } = await supabase
+            .from("topics")
+            .select("id, topic_name")
+            .in("id", topicIds);
+
+          if (!topicsErr && topicsData) {
+            // Maintain the order from topic_ids
+            topics = topicIds
+              .map((tid) => topicsData.find((t) => t.id === tid))
+              .filter((t): t is TopicInfo => t !== undefined);
+          }
+        }
+
+        if (cancelled) return;
+
+        setOverview({
+          planned_session_id: id,
+          subject,
+          topic_ids: topicIds,
+          topics,
+          session_duration_minutes: planned.session_duration_minutes ?? 20,
+          session_pattern: planned.session_pattern ?? "SINGLE_20",
+        });
+
+        // 4) Load stats (using existing RPCs where available)
+        await loadStats(planned.child_id, planned.subject_id);
+
+        setLoading(false);
+      } catch (e: any) {
+        if (cancelled) return;
+        console.error("[SessionOverview] load error:", e);
+        setError(e?.message ?? "Failed to load session.");
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("[SessionRun] Failed to load session:", err);
-      setError("Failed to load session. Please try again.");
-    } finally {
-      setLoading(false);
     }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [plannedSessionId]);
 
-  useEffect(() => {
-    loadSession();
-  }, [loadSession]);
-
-  // Handlers
-  async function handlePatchStep(stepKey: StepKey, patch: Record<string, any>) {
-    if (!sessionData || !revisionSessionId) return;
-
-    setSaving(true);
+  // Load stats from existing gamification RPC
+  async function loadStats(childId: string, subjectId: string) {
     try {
-      await patchRevisionSessionStep(revisionSessionId, stepKey, patch);
-
-      // Update local state
-      setSessionData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          steps: prev.steps.map((s) =>
-            s.step_key === stepKey
-              ? { ...s, answer_summary: { ...s.answer_summary, ...patch } }
-              : s
-          ),
-        };
-      });
-    } catch (err) {
-      console.error("[SessionRun] Failed to patch step:", err);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleNextStep() {
-    if (!sessionData || !revisionSessionId) return;
-
-    const nextIndex = currentStepIndex + 1;
-
-    // Mark current step complete and move to next
-    setSaving(true);
-    try {
-      const currentStepKey = STEP_ORDER[currentStepIndex - 1];
-      await patchRevisionSessionStep(revisionSessionId, currentStepKey, {
-        status: "completed",
-        completed_at: new Date().toISOString(),
+      // Use existing gamification summary RPC
+      const { data: gamification } = await supabase.rpc("rpc_get_child_gamification_summary", {
+        p_child_id: childId,
       });
 
-      // Update local state
-      setSessionData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          steps: prev.steps.map((s) =>
-            s.step_key === currentStepKey ? { ...s, status: "completed" } : s
-          ),
-        };
-      });
+      // Count completed sessions (simple query)
+      const { count: sessionsCount } = await supabase
+        .from("planned_sessions")
+        .select("*", { count: "exact", head: true })
+        .eq("child_id", childId)
+        .eq("status", "completed");
 
-      if (nextIndex <= STEP_ORDER.length) {
-        setCurrentStepIndex(nextIndex);
+      // Get last session in this subject
+      const { data: lastSession } = await supabase
+        .from("revision_sessions")
+        .select("completed_at, confidence_level, topic_id")
+        .eq("child_id", childId)
+        .eq("subject_id", subjectId)
+        .eq("status", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let lastTopicName: string | null = null;
+      if (lastSession?.topic_id) {
+        const { data: topicData } = await supabase
+          .from("topics")
+          .select("topic_name")
+          .eq("id", lastSession.topic_id)
+          .maybeSingle();
+        lastTopicName = topicData?.topic_name ?? null;
       }
-    } catch (err) {
-      console.error("[SessionRun] Failed to advance step:", err);
-    } finally {
-      setSaving(false);
+
+      setStats({
+        total_sessions_completed: sessionsCount ?? 0,
+        current_streak: gamification?.streak?.current ?? 0,
+        points_balance: gamification?.points?.balance ?? 0,
+        subject_history: lastSession
+          ? {
+              last_session_date: lastSession.completed_at,
+              last_topic_name: lastTopicName,
+              last_confidence: lastSession.confidence_level,
+            }
+          : null,
+      });
+    } catch (e) {
+      console.error("[SessionOverview] loadStats error:", e);
+      // Stats are optional - don't fail the page
     }
   }
 
-  function handleBack() {
-    if (currentStepIndex > 1) {
-      setCurrentStepIndex(currentStepIndex - 1);
-    }
-  }
+  // Start the session
+  async function handleStartSession() {
+    if (!overview) return;
 
-  function handleExit() {
-    // Could show confirmation modal
-    navigate("/child/today");
-  }
+    setStarting(true);
 
-  async function handleFinish() {
-    if (!revisionSessionId) return;
-
-    setSaving(true);
     try {
-      await completeRevisionSession(revisionSessionId);
-      navigate("/child/today", { state: { sessionCompleted: true } });
-    } catch (err) {
-      console.error("[SessionRun] Failed to complete session:", err);
-    } finally {
-      setSaving(false);
+      // 1) Start the session (creates revision_session and step rows)
+      const { data: startData, error: startError } = await supabase.rpc("rpc_start_planned_session", {
+        p_planned_session_id: overview.planned_session_id,
+      });
+
+      if (startError) throw startError;
+
+      // Extract revision session ID from various possible return shapes
+      const rId =
+        (startData as any)?.out_revision_session_id ??
+        (Array.isArray(startData) ? (startData[0] as any)?.out_revision_session_id : null) ??
+        (startData as any)?.revision_session_id ??
+        (startData as any)?.id ??
+        (Array.isArray(startData) ? (startData[0] as any)?.id : null);
+
+      const rIdStr = String(rId ?? "");
+      if (!isUuid(rIdStr)) {
+        throw new Error("Couldn't start the session (no valid revision session id returned).");
+      }
+
+      // Pre-confidence is now captured in PreviewStep (step 1 of 6-step model)
+      // No need to save it here anymore
+
+      // Navigate to session runner
+      navigate(`/child/session/${overview.planned_session_id}/run`);
+    } catch (e: any) {
+      console.error("[SessionOverview] handleStartSession error:", e);
+      setError(e?.message ?? "Failed to start session.");
+      setStarting(false);
     }
   }
-
-  // Loading / Error states
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadSession} />;
-  if (!sessionData) return <ErrorState message="Session data not found" onRetry={loadSession} />;
 
   // Derived values
-  const subjectIcon = getIconFromName(sessionData.subject_icon);
-  const subjectColor = sessionData.subject_color || "#5B2CFF";
-  const currentStepKey = STEP_ORDER[currentStepIndex - 1] ?? "preview";
-  const currentStepData = sessionData.steps.find((s) => s.step_key === currentStepKey);
+  const subjectName = overview?.subject?.subject_name ?? "Revision";
+  const subjectIcon = getIconFromName(overview?.subject?.icon || "book");
+  const subjectColor = overview?.subject?.color || "#5B2CFF";
+  const topicCount = overview?.topics.length ?? 0;
+  const duration = overview?.session_duration_minutes ?? 20;
+  const primaryTopic = overview?.topics[0]?.topic_name ?? "Topics";
 
-  // Build overview object passed to all steps
-  const stepOverview = {
-    subject_name: sessionData.subject_name,
-    subject_icon: sessionData.subject_icon,
-    subject_color: sessionData.subject_color,
-    topic_name: sessionData.topic_name,
-    topic_id: sessionData.topic_id,
-    session_duration_minutes: sessionData.session_duration_minutes,
-    step_key: currentStepKey,
-    step_index: currentStepIndex,
-    total_steps: STEP_ORDER.length,
-    child_name: sessionData.child_name,
-  };
+  // ==========================================================================
+  // Render
+  // ==========================================================================
 
-  // Build payload from generated_payload + step answer_summary
-  const stepPayload = {
-    ...sessionData.generated_payload,
-    [currentStepKey]: currentStepData?.answer_summary ?? {},
-  };
-
-  // Estimate time remaining (rough: assume equal time per step)
-  const stepsRemaining = STEP_ORDER.length - currentStepIndex + 1;
-  const timePerStep = Math.ceil(sessionData.session_duration_minutes / STEP_ORDER.length);
-  const timeRemainingMinutes = stepsRemaining * timePerStep;
-
-  // Render current step
-  function renderStep() {
-    const commonProps = {
-      overview: stepOverview,
-      payload: stepPayload,
-      saving,
-      onPatch: (patch: Record<string, any>) => handlePatchStep(currentStepKey, patch),
-      onNext: handleNextStep,
-      onBack: handleBack,
-      onExit: handleExit,
-    };
-
-    switch (currentStepKey) {
-      case "preview":
-        return <PreviewStep {...commonProps} />;
-
-      case "recall":
-        return (
-          <RecallStep
-            {...commonProps}
-            onUpdateFlashcardProgress={async (cardId, status) => {
-              // Could call RPC to update child_flashcard_progress
-              console.log("[SessionRun] Update flashcard:", cardId, status);
-            }}
-          />
-        );
-
-      case "reinforce":
-        return <ReinforceStep {...commonProps} />;
-
-      case "practice":
-        return (
-          <PracticeStep
-            {...commonProps}
-            onRequestAIFeedback={async (answers) => {
-              // In production: call AI feedback endpoint
-              // For now, let PracticeStep use its internal mock
-              throw new Error("Use mock feedback");
-            }}
-          />
-        );
-
-      case "summary":
-        return (
-          <SummaryStep
-            {...commonProps}
-            onRequestMnemonic={async (style) => {
-              // In production: call n8n webhook for mnemonic generation
-              throw new Error("Use mock mnemonic");
-            }}
-          />
-        );
-
-      case "complete":
-        return (
-          <CompleteStep
-            {...commonProps}
-            onFinish={handleFinish}
-            onStartNextSession={() => {
-              // Could navigate to next session if available
-              navigate("/child/today");
-            }}
-            onUploadAudio={async (blob) => {
-              // In production: upload to Supabase storage
-              console.log("[SessionRun] Would upload audio blob:", blob.size, "bytes");
-              return "https://placeholder-audio-url.com/note.webm";
-            }}
-          />
-        );
-
-      default:
-        return (
-          <div className="text-center py-12">
-            <p className="text-neutral-600">Unknown step: {currentStepKey}</p>
+  // Loading state
+  if (loading) {
+    return (
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Preparing your session...</p>
           </div>
-        );
-    }
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="max-w-[1120px] mx-auto px-4 py-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h1 className="text-xl font-semibold text-neutral-700 mb-2">Session</h1>
+            <p className="text-neutral-600 mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => navigate("/child/today")}
+              className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 hover:bg-neutral-50 font-medium"
+            >
+              Back to Today
+            </button>
+          </div>
+        </div>
+      </PageLayout>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-neutral-100">
-      {/* Header - NO duplicate avatar, just subject info + exit */}
-      <SessionHeader
-        subjectName={sessionData.subject_name}
-        subjectIcon={subjectIcon}
-        subjectColor={subjectColor}
-        topicName={sessionData.topic_name}
-        onExit={handleExit}
-      />
+    <PageLayout bgColor="bg-neutral-100">
+      <main className="max-w-[1120px] mx-auto px-4 py-6">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate("/child/today")}
+          className="flex items-center space-x-2 text-neutral-600 hover:text-neutral-700 mb-6 transition"
+        >
+          <FontAwesomeIcon icon={faArrowLeft} />
+          <span className="font-medium">Back to Today</span>
+        </button>
 
-      {/* Progress Bar - 6 steps */}
-      <StepProgressBar
-        currentStepIndex={currentStepIndex}
-        totalSteps={STEP_ORDER.length}
-        steps={sessionData.steps}
-        timeRemainingMinutes={timeRemainingMinutes}
-      />
+        {/* Hero Section */}
+        <section className="mb-8">
+          <div
+            className="rounded-2xl shadow-card p-8 text-white relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${subjectColor} 0%, ${adjustColor(subjectColor, -30)} 100%)`,
+            }}
+          >
+            {/* Decorative circles */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
 
-      {/* Step Content */}
-      <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
-        {renderStep()}
+            <div className="relative z-10">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <FontAwesomeIcon icon={subjectIcon} className="text-white text-2xl" />
+                </div>
+                <div>
+                  <p className="text-white/70 text-sm font-medium">{subjectName}</p>
+                  <h1 className="text-3xl font-bold">
+                    {topicCount > 1 ? `${topicCount} Topics` : primaryTopic}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 mt-6">
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faClock} className="text-white/60" />
+                  <span className="text-white/90 font-medium">{duration} minutes</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faChartSimple} className="text-white/60" />
+                  <span className="text-white/90 font-medium">
+                    {topicCount} {topicCount === 1 ? "topic" : "topics"}
+                  </span>
+                </div>
+                {stats && stats.current_streak > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <FontAwesomeIcon icon={faFire} className="text-accent-green" />
+                    <span className="text-white/90 font-medium">Day {stats.current_streak} streak</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* What You'll Revise */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <div className="flex items-start space-x-4 mb-6">
+              <div className="w-12 h-12 bg-accent-green/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <FontAwesomeIcon icon={faBullseye} className="text-accent-green text-xl" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-primary-900 mb-2">What You'll Revise</h2>
+                <p className="text-neutral-600">
+                  {topicCount > 1
+                    ? `Today you'll work through ${topicCount} topics in ${subjectName}.`
+                    : `Today's session focuses on ${primaryTopic}.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 ml-16">
+              {overview?.topics.map((topic) => (
+                <div key={topic.id} className="flex items-start space-x-3">
+                  <div className="w-6 h-6 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <FontAwesomeIcon icon={faCircleCheck} className="text-primary-600 text-xs" />
+                  </div>
+                  <p className="text-neutral-700 font-medium">{topic.topic_name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* How This Session Works - 7 Steps */}
+        <section className="mb-8">
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
+            <div className="flex items-start space-x-4 mb-6">
+              <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <FontAwesomeIcon icon={faLightbulb} className="text-white text-xl" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-primary-900 mb-2">How This Session Works</h2>
+                <p className="text-neutral-600">
+                  Each topic follows a proven 7-step structure designed to help you learn effectively.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {SESSION_STEPS.slice(0, 4).map((step) => (
+                <StepCard key={step.number} {...step} />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {SESSION_STEPS.slice(4).map((step) => (
+                <StepCard key={step.number} {...step} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Your Progress So Far (if stats available) */}
+        {stats && stats.total_sessions_completed > 0 && (
+          <section className="mb-8">
+            <div className="bg-white rounded-2xl shadow-card p-6">
+              <h2 className="text-xl font-bold text-primary-900 mb-4">Your Progress So Far</h2>
+
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-neutral-50 rounded-xl p-4 text-center">
+                  <div className="w-12 h-12 bg-accent-green/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <FontAwesomeIcon icon={faCheckDouble} className="text-accent-green text-xl" />
+                  </div>
+                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.total_sessions_completed}</p>
+                  <p className="text-neutral-600 text-sm">Sessions completed</p>
+                </div>
+
+                <div className="bg-neutral-50 rounded-xl p-4 text-center">
+                  <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <FontAwesomeIcon icon={faChartLine} className="text-primary-600 text-xl" />
+                  </div>
+                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.points_balance}</p>
+                  <p className="text-neutral-600 text-sm">Points earned</p>
+                </div>
+
+                <div className="bg-neutral-50 rounded-xl p-4 text-center">
+                  <div className="w-12 h-12 bg-accent-green/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <FontAwesomeIcon icon={faFire} className="text-accent-green text-xl" />
+                  </div>
+                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.current_streak}</p>
+                  <p className="text-neutral-600 text-sm">Day streak</p>
+                </div>
+              </div>
+
+              {stats.subject_history && (
+                <div className="bg-primary-50 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <FontAwesomeIcon icon={faLightbulb} className="text-primary-600 text-lg mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-primary-900 mb-1">Last time you studied {subjectName}:</p>
+                      <p className="text-neutral-700 text-sm">
+                        You completed "{stats.subject_history.last_topic_name}" and felt{" "}
+                        <span className="font-medium">{stats.subject_history.last_confidence?.replace("_", " ")}</span>.
+                        Great foundation to build on!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Pre-Confidence Check */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h2 className="text-xl font-bold text-primary-900 mb-2">How Confident Do You Feel?</h2>
+            <p className="text-neutral-600 mb-6">
+              Let us know your starting point so we can tailor the session to you. Don't worry—this is
+              just to help us, not a test!
+            </p>
+
+            <div className="space-y-3">
+              {PRE_CONFIDENCE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setPreConfidence(option.value)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition ${
+                    preConfidence === option.value
+                      ? "border-primary-600 bg-primary-50"
+                      : "border-transparent bg-neutral-50 hover:bg-primary-50 hover:border-primary-200"
+                  }`}
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-12 h-12 ${option.bgClass} rounded-full flex items-center justify-center`}>
+                      <FontAwesomeIcon icon={option.icon} className={`${option.colorClass} text-xl`} />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-semibold text-neutral-700">{option.label}</p>
+                      <p className="text-neutral-500 text-sm">{option.description}</p>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      preConfidence === option.value
+                        ? "border-primary-600 bg-primary-600"
+                        : "border-neutral-300"
+                    }`}
+                  >
+                    {preConfidence === option.value && (
+                      <FontAwesomeIcon icon={faCircleCheck} className="text-white text-xs" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Quick Tips */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h2 className="text-xl font-bold text-primary-900 mb-4">Quick Tips for Success</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <TipItem
+                icon={faVolumeXmark}
+                title="Find a quiet space"
+                description="Minimize distractions so you can focus"
+              />
+              <TipItem
+                icon={faPencil}
+                title="Have paper handy"
+                description="Writing helps you remember better"
+              />
+              <TipItem
+                icon={faClock}
+                title="Take your time"
+                description="Understanding matters more than speed"
+              />
+              <TipItem
+                icon={faHeart}
+                title="Be kind to yourself"
+                description="Learning takes time—you're doing great!"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Ready to Begin CTA */}
+        <section className="mb-8">
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FontAwesomeIcon icon={faRocket} className="text-white text-3xl" />
+              </div>
+              <h2 className="text-2xl font-bold text-primary-900 mb-2">Ready to Begin?</h2>
+              <p className="text-neutral-600 mb-6 max-w-md mx-auto">
+                You're all set! Take a deep breath, and let's dive into {primaryTopic} together.
+              </p>
+
+              <div className="flex items-center justify-center space-x-3 mb-6">
+                <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-full">
+                  <FontAwesomeIcon icon={faClock} className="text-neutral-600" />
+                  <span className="text-neutral-700 font-medium text-sm">{duration} minutes</span>
+                </div>
+                <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-full">
+                  <FontAwesomeIcon icon={faChartSimple} className="text-neutral-600" />
+                  <span className="text-neutral-700 font-medium text-sm">7 steps</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={starting}
+                onClick={handleStartSession}
+                className="bg-primary-600 text-white font-bold px-12 py-4 rounded-xl hover:bg-primary-700 transition shadow-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {starting ? "Starting..." : "Begin Session"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Alternative Actions */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h3 className="font-semibold text-neutral-700 mb-4 text-center">Not ready yet?</h3>
+            <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-3">
+              <button
+                onClick={() => navigate("/child/today")}
+                className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-3 bg-neutral-50 text-neutral-700 font-medium rounded-xl hover:bg-neutral-100 transition"
+              >
+                <FontAwesomeIcon icon={faArrowLeft} />
+                <span>Back to Dashboard</span>
+              </button>
+            </div>
+          </div>
+        </section>
       </main>
+    </PageLayout>
+  );
+}
+
+// =============================================================================
+// Sub-Components
+// =============================================================================
+
+function StepCard({
+  number,
+  title,
+  description,
+  duration,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  duration: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-4">
+      <div className="flex items-center space-x-3 mb-2">
+        <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
+          <span className="text-primary-700 font-bold text-sm">{number}</span>
+        </div>
+        <h3 className="font-semibold text-neutral-700">{title}</h3>
+        <span className="text-neutral-500 text-sm ml-auto">{duration}</span>
+      </div>
+      <p className="text-neutral-600 text-sm ml-11">{description}</p>
+    </div>
+  );
+}
+
+function TipItem({
+  icon,
+  title,
+  description,
+}: {
+  icon: IconDefinition;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start space-x-3 p-3 bg-neutral-50 rounded-lg">
+      <FontAwesomeIcon icon={icon} className="text-neutral-600 text-lg mt-0.5" />
+      <div>
+        <p className="font-semibold text-neutral-700 text-sm mb-1">{title}</p>
+        <p className="text-neutral-600 text-sm">{description}</p>
+      </div>
     </div>
   );
 }
