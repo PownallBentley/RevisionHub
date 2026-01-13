@@ -38,6 +38,10 @@ import {
   completeRevisionSession,
   startPlannedSession,
 } from "../../services/revisionSessionApi";
+import {
+  requestMnemonic,
+  transformToMnemonicData,
+} from "../../services/mnemonicApi";
 
 // =============================================================================
 // Types
@@ -507,7 +511,23 @@ export default function SessionRun() {
         return (
           <SummaryStep
             {...commonProps}
-            // Don't pass onRequestMnemonic - let SummaryStep use its internal mock
+            onRequestMnemonic={async (style) => {
+              console.log("[SessionRun] Requesting mnemonic:", {
+                subject: sessionData?.subject_name,
+                topic: sessionData?.topic_name,
+                style,
+              });
+              
+              const response = await requestMnemonic(
+                sessionData?.subject_name || "unknown",
+                sessionData?.topic_name || "unknown topic",
+                style
+              );
+              
+              console.log("[SessionRun] Mnemonic response:", response);
+              
+              return transformToMnemonicData(response, style);
+            }}
           />
         );
 
