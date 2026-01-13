@@ -2,7 +2,7 @@
 // Service for revision session operations
 // UPDATED: 6-Step Session Model - January 2026
 
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabase";
 
 // =============================================================================
 // Types
