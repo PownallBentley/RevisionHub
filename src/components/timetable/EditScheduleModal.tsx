@@ -10,7 +10,6 @@ import {
   faSave,
   faRotate,
   faExclamationTriangle,
-  faCheckCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import WeeklyScheduleEditor from "../shared/scheduling/WeeklyScheduleEditor";
 import { createEmptyTemplate, type DayTemplate } from "../shared/scheduling/DayCard";
@@ -42,7 +41,6 @@ export default function EditScheduleModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [showSaveOptions, setShowSaveOptions] = useState(false);
 
   // Load template on open
@@ -92,44 +90,46 @@ export default function EditScheduleModal({
   async function handleSave(mode: SaveMode) {
     setSaving(true);
     setError(null);
-    setSuccess(null);
+    // Keep showSaveOptions as-is during save, the saving state will show loading
 
     try {
       if (mode === "regenerate") {
         const result = await saveTemplateAndRegenerate(childId, template);
         if (result.success) {
-          setSuccess(`Schedule saved! ${result.sessionsCreated} sessions generated.`);
+          // Update original to prevent "unsaved changes" warning
           setOriginalTemplate(JSON.parse(JSON.stringify(template)));
-          setTimeout(() => {
-            onScheduleUpdated();
-            onClose();
-          }, 1500);
+          setShowSaveOptions(false);
+          // Call callbacks and close
+          onScheduleUpdated();
+          onClose();
         } else {
           setError(result.error || "Failed to save schedule");
+          setShowSaveOptions(false); // Go back to main view to show error
         }
       } else {
         const result = await saveWeeklyTemplate(childId, template);
         if (result.success) {
-          setSuccess("Schedule template saved! Future sessions unchanged.");
+          // Update original to prevent "unsaved changes" warning
           setOriginalTemplate(JSON.parse(JSON.stringify(template)));
-          setTimeout(() => {
-            onScheduleUpdated();
-            onClose();
-          }, 1500);
+          setShowSaveOptions(false);
+          // Call callbacks and close
+          onScheduleUpdated();
+          onClose();
         } else {
           setError(result.error || "Failed to save schedule");
+          setShowSaveOptions(false); // Go back to main view to show error
         }
       }
     } catch (err: any) {
       setError(err.message || "An error occurred");
+      setShowSaveOptions(false); // Go back to main view to show error
     } finally {
       setSaving(false);
-      setShowSaveOptions(false);
     }
   }
 
   function handleClose() {
-    if (hasChanges && !success) {
+    if (hasChanges) {
       if (!confirm("You have unsaved changes. Are you sure you want to close?")) {
         return;
       }
@@ -174,18 +174,11 @@ export default function EditScheduleModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Messages */}
+          {/* Error Message */}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center gap-2">
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-600 flex items-center gap-2">
-              <FontAwesomeIcon icon={faCheckCircle} />
-              {success}
             </div>
           )}
 
@@ -206,7 +199,15 @@ export default function EditScheduleModal({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 shrink-0">
-          {showSaveOptions ? (
+          {/* Show saving state */}
+          {saving ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="flex items-center gap-3 text-primary-600">
+                <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                <span className="font-medium">Saving schedule...</span>
+              </div>
+            </div>
+          ) : showSaveOptions ? (
             <div className="space-y-3">
               <p className="text-sm text-neutral-600 font-medium">
                 How would you like to save?
@@ -245,7 +246,8 @@ export default function EditScheduleModal({
               </div>
               <button
                 onClick={() => setShowSaveOptions(false)}
-                className="w-full text-sm text-neutral-500 hover:text-neutral-700 py-2"
+                disabled={saving}
+                className="w-full text-sm text-neutral-500 hover:text-neutral-700 py-2 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -267,17 +269,8 @@ export default function EditScheduleModal({
                   disabled={!isValid || !hasChanges || saving}
                   className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <FontAwesomeIcon icon={faSave} />
-                      Save Changes
-                    </>
-                  )}
+                  <FontAwesomeIcon icon={faSave} />
+                  Save Changes
                 </button>
               </div>
             </div>
