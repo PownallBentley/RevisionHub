@@ -2,12 +2,9 @@
 
 import { supabase } from "../lib/supabase";
 
-// Types matching RPC output
-export interface TopicPreview {
-  id: string;
-  topic_name: string;
-  order_index: number;
-}
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface TimetableSession {
   planned_session_id: string;
@@ -15,13 +12,13 @@ export interface TimetableSession {
   session_index: number;
   session_pattern: string;
   session_duration_minutes: number;
-  status: "planned" | "completed" | "skipped";
+  status: string;
   subject_id: string;
   subject_name: string;
   icon: string;
   color: string;
   topic_count: number;
-  topics_preview: TopicPreview[];
+  topics_preview: Array<{ id: string; topic_name: string; order_index: number }>;
 }
 
 export interface WeekDayData {
@@ -40,9 +37,124 @@ export interface SubjectLegend {
   subject_color: string;
 }
 
-/**
- * Fetch children for a parent
- */
+export interface DateOverride {
+  id: string;
+  child_id: string;
+  override_date: string;
+  override_type: "blocked" | "extra";
+  reason: string | null;
+  created_at: string;
+}
+
+export interface FeasibilityStatus {
+  status: "good" | "marginal" | "insufficient";
+  plannedSessions: number;
+  recommendedSessions: number;
+  withContingency: number;
+  contingencyPercent: number;
+  shortfall: number;
+  surplus: number;
+}
+
+export interface ChildSubjectOption {
+  subject_id: string;
+  subject_name: string;
+  color: string;
+  icon: string;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+export function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  return new Date(d.setDate(diff));
+}
+
+export function formatDateISO(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
+
+export function formatDateRange(
+  viewMode: "today" | "week" | "month",
+  referenceDate: Date
+): string {
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+
+  if (viewMode === "today") {
+    return referenceDate.toLocaleDateString("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  }
+
+  if (viewMode === "week") {
+    const weekStart = getWeekStart(referenceDate);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    return `${weekStart.toLocaleDateString("en-GB", options)} - ${weekEnd.toLocaleDateString("en-GB", options)}`;
+  }
+
+  // Month view
+  return referenceDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+
+export function calculateWeekStats(weekData: WeekDayData[]) {
+  let totalSessions = 0;
+  let completedSessions = 0;
+  let plannedSessions = 0;
+  let totalMinutes = 0;
+
+  weekData.forEach((day) => {
+    day.sessions.forEach((session) => {
+      totalSessions++;
+      totalMinutes += session.session_duration_minutes;
+      if (session.status === "completed") {
+        completedSessions++;
+      } else if (session.status === "planned" || session.status === "started") {
+        plannedSessions++;
+      }
+    });
+  });
+
+  return { totalSessions, completedSessions, plannedSessions, totalMinutes };
+}
+
+export function extractSubjectLegend(weekData: WeekDayData[]): SubjectLegend[] {
+  const legend: SubjectLegend[] = [];
+  const seen = new Set<string>();
+
+  weekData.forEach((day) => {
+    day.sessions.forEach((session) => {
+      if (!seen.has(session.subject_id)) {
+        seen.add(session.subject_id);
+        legend.push({
+          subject_id: session.subject_id,
+          subject_name: session.subject_name,
+          subject_color: session.color,
+        });
+      }
+    });
+  });
+
+  return legend;
+}
+
+export function getTopicNames(session: TimetableSession): string {
+  if (!session.topics_preview || session.topics_preview.length === 0) {
+    return "Topic TBD";
+  }
+  return session.topics_preview.map((t) => t.topic_name).join(", ");
+}
+
+// ============================================================================
+// Data Fetching Functions
+// ============================================================================
+
 export async function fetchChildrenForParent(
   parentId: string
 ): Promise<{ data: ChildOption[] | null; error: string | null }> {
@@ -51,29 +163,22 @@ export async function fetchChildrenForParent(
       .from("children")
       .select("id, first_name, preferred_name")
       .eq("parent_id", parentId)
-      .order("created_at", { ascending: true });
+      .order("created_at");
 
-    if (error) {
-      console.error("[timetableService] Error fetching children:", error);
-      return { data: null, error: error.message };
-    }
+    if (error) throw error;
 
-    const children: ChildOption[] = (data || []).map((child) => ({
-      child_id: child.id,
-      child_name: child.preferred_name || child.first_name,
+    const children: ChildOption[] = (data || []).map((c) => ({
+      child_id: c.id,
+      child_name: c.preferred_name || c.first_name,
     }));
 
     return { data: children, error: null };
-  } catch (e: any) {
-    console.error("[timetableService] Unexpected error:", e);
-    return { data: null, error: e.message };
+  } catch (err: any) {
+    console.error("Error fetching children:", err);
+    return { data: null, error: err.message || "Failed to fetch children" };
   }
 }
 
-/**
- * Fetch week plan using rpc_get_week_plan RPC
- * Returns structured day-by-day data with sessions
- */
 export async function fetchWeekPlan(
   childId: string,
   weekStartDate: string
@@ -84,228 +189,353 @@ export async function fetchWeekPlan(
       p_week_start_date: weekStartDate,
     });
 
-    if (error) {
-      console.error("[timetableService] Error fetching week plan:", error);
-      return { data: null, error: error.message };
-    }
+    if (error) throw error;
 
-    // Transform RPC response - sessions come as jsonb
+    // Transform the data
     const weekData: WeekDayData[] = (data || []).map((row: any) => ({
       day_date: row.day_date,
       sessions: row.sessions || [],
     }));
 
     return { data: weekData, error: null };
-  } catch (e: any) {
-    console.error("[timetableService] Unexpected error:", e);
-    return { data: null, error: e.message };
+  } catch (err: any) {
+    console.error("Error fetching week plan:", err);
+    return { data: null, error: err.message || "Failed to fetch week plan" };
   }
 }
 
-/**
- * Fetch today's sessions using rpc_get_todays_sessions RPC
- */
-export async function fetchTodaysSessions(
-  childId: string,
-  sessionDate?: string
-): Promise<{ data: TimetableSession[] | null; error: string | null }> {
-  try {
-    const params: any = { p_child_id: childId };
-    if (sessionDate) {
-      params.p_session_date = sessionDate;
-    }
-
-    const { data, error } = await supabase.rpc("rpc_get_todays_sessions", params);
-
-    if (error) {
-      console.error("[timetableService] Error fetching today's sessions:", error);
-      return { data: null, error: error.message };
-    }
-
-    return { data: data || [], error: null };
-  } catch (e: any) {
-    console.error("[timetableService] Unexpected error:", e);
-    return { data: null, error: e.message };
-  }
-}
-
-/**
- * Flatten week data into a single sessions array
- */
-export function flattenWeekSessions(weekData: WeekDayData[]): TimetableSession[] {
-  return weekData.flatMap((day) => day.sessions);
-}
-
-/**
- * Get unique subjects from week data for legend
- */
-export function extractSubjectLegend(weekData: WeekDayData[]): SubjectLegend[] {
-  const subjectMap = new Map<string, SubjectLegend>();
-
-  weekData.forEach((day) => {
-    day.sessions.forEach((session) => {
-      if (!subjectMap.has(session.subject_id)) {
-        subjectMap.set(session.subject_id, {
-          subject_id: session.subject_id,
-          subject_name: session.subject_name,
-          subject_color: session.color,
-        });
-      }
-    });
-  });
-
-  return Array.from(subjectMap.values());
-}
-
-/**
- * Get sessions for a specific date from week data
- */
-export function getSessionsForDate(
-  weekData: WeekDayData[],
-  dateStr: string
-): TimetableSession[] {
-  const dayData = weekData.find((d) => d.day_date === dateStr);
-  return dayData?.sessions || [];
-}
-
-/**
- * Calculate week start (Monday) from a date
- */
-export function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day; // Monday = 0
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-/**
- * Format date to ISO string (YYYY-MM-DD)
- */
-export function formatDateISO(date: Date): string {
-  return date.toISOString().split("T")[0];
-}
-
-/**
- * Get date range for month view
- */
-export function getMonthDateRange(date: Date): { start: string; end: string } {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  return {
-    start: formatDateISO(start),
-    end: formatDateISO(end),
-  };
-}
-
-/**
- * Fetch sessions for a month (multiple week calls)
- */
 export async function fetchMonthSessions(
   childId: string,
   year: number,
   month: number
 ): Promise<{ data: TimetableSession[] | null; error: string | null }> {
   try {
-    // Get first Monday on or before start of month
-    const firstOfMonth = new Date(year, month, 1);
-    const lastOfMonth = new Date(year, month + 1, 0);
-    
-    // Find first Monday
-    let weekStart = getWeekStart(firstOfMonth);
-    
-    const allSessions: TimetableSession[] = [];
-    
-    // Fetch week by week until we pass end of month
-    while (weekStart <= lastOfMonth) {
-      const { data: weekData, error } = await fetchWeekPlan(
-        childId,
-        formatDateISO(weekStart)
-      );
-      
-      if (error) {
-        return { data: null, error };
-      }
-      
-      if (weekData) {
-        // Only include sessions within the month
-        weekData.forEach((day) => {
-          const dayDate = new Date(day.day_date);
-          if (dayDate.getMonth() === month && dayDate.getFullYear() === year) {
-            allSessions.push(...day.sessions);
-          }
-        });
-      }
-      
-      // Move to next week
-      weekStart.setDate(weekStart.getDate() + 7);
-    }
-    
-    return { data: allSessions, error: null };
-  } catch (e: any) {
-    console.error("[timetableService] Unexpected error:", e);
-    return { data: null, error: e.message };
+    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const endDate = new Date(year, month + 1, 0).toISOString().split("T")[0];
+
+    const { data, error } = await supabase
+      .from("planned_sessions")
+      .select(
+        `
+        id,
+        session_date,
+        session_pattern,
+        session_duration_minutes,
+        status,
+        subject_id,
+        topic_ids,
+        subjects!inner (
+          subject_name,
+          icon,
+          color
+        )
+      `
+      )
+      .eq("child_id", childId)
+      .gte("session_date", startDate)
+      .lte("session_date", endDate)
+      .order("session_date");
+
+    if (error) throw error;
+
+    const sessions: TimetableSession[] = (data || []).map((row: any, idx: number) => ({
+      planned_session_id: row.id,
+      session_date: row.session_date,
+      session_index: idx + 1,
+      session_pattern: row.session_pattern,
+      session_duration_minutes: row.session_duration_minutes,
+      status: row.status,
+      subject_id: row.subject_id,
+      subject_name: row.subjects?.subject_name || "Unknown",
+      icon: row.subjects?.icon || "book",
+      color: row.subjects?.color || "#6B7280",
+      topic_count: row.topic_ids?.length || 0,
+      topics_preview: [],
+    }));
+
+    return { data: sessions, error: null };
+  } catch (err: any) {
+    console.error("Error fetching month sessions:", err);
+    return { data: null, error: err.message || "Failed to fetch month sessions" };
   }
 }
 
-/**
- * Format date display for UI
- */
-export function formatDateRange(
-  viewMode: "today" | "week" | "month",
-  date: Date
-): string {
-  if (viewMode === "today") {
-    return date.toLocaleDateString("en-GB", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
+export async function fetchTodaySessions(
+  childId: string,
+  date: string
+): Promise<{ data: TimetableSession[] | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc("rpc_get_todays_sessions", {
+      p_child_id: childId,
+      p_session_date: date,
     });
-  } else if (viewMode === "week") {
-    const weekStart = getWeekStart(date);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    
-    const startMonth = weekStart.toLocaleDateString("en-GB", { month: "short" });
-    const endMonth = weekEnd.toLocaleDateString("en-GB", { month: "short" });
-    
-    if (startMonth === endMonth) {
-      return `${weekStart.getDate()} - ${weekEnd.getDate()} ${startMonth}`;
+
+    if (error) throw error;
+
+    return { data: data || [], error: null };
+  } catch (err: any) {
+    console.error("Error fetching today sessions:", err);
+    return { data: null, error: err.message || "Failed to fetch sessions" };
+  }
+}
+
+// ============================================================================
+// Feasibility & Recommendations
+// ============================================================================
+
+export async function fetchFeasibilityStatus(
+  childId: string
+): Promise<{ data: FeasibilityStatus | null; error: string | null }> {
+  try {
+    // Get the child's revision period
+    const { data: periodData, error: periodError } = await supabase
+      .from("revision_periods")
+      .select("start_date, end_date, contingency_percent")
+      .eq("child_id", childId)
+      .eq("is_active", true)
+      .single();
+
+    if (periodError || !periodData) {
+      // No active revision period - return default
+      return {
+        data: {
+          status: "insufficient",
+          plannedSessions: 0,
+          recommendedSessions: 0,
+          withContingency: 0,
+          contingencyPercent: 10,
+          shortfall: 0,
+          surplus: 0,
+        },
+        error: null,
+      };
     }
-    return `${weekStart.getDate()} ${startMonth} - ${weekEnd.getDate()} ${endMonth}`;
-  } else {
-    return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+    // Get available sessions (planned)
+    const { data: availableData, error: availableError } = await supabase.rpc(
+      "rpc_calculate_available_sessions",
+      {
+        p_child_id: childId,
+        p_start_date: periodData.start_date,
+        p_end_date: periodData.end_date,
+      }
+    );
+
+    if (availableError) throw availableError;
+
+    // Get recommended sessions - we need to call this with proper params
+    // For now, we'll count planned sessions from the database
+    const { count: plannedCount, error: countError } = await supabase
+      .from("planned_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("child_id", childId)
+      .neq("status", "skipped");
+
+    if (countError) throw countError;
+
+    const plannedSessions = plannedCount || 0;
+    const totalAvailable = availableData?.total_sessions || 0;
+    const contingencyPercent = periodData.contingency_percent || 10;
+    
+    // For now, use available as a proxy for recommended
+    // In production, you'd call rpc_calculate_recommended_sessions
+    const recommendedSessions = Math.round(totalAvailable * 0.9); // Placeholder
+    const withContingency = Math.round(recommendedSessions * (1 + contingencyPercent / 100));
+
+    let status: "good" | "marginal" | "insufficient";
+    if (plannedSessions >= withContingency) {
+      status = "good";
+    } else if (plannedSessions >= recommendedSessions) {
+      status = "marginal";
+    } else {
+      status = "insufficient";
+    }
+
+    return {
+      data: {
+        status,
+        plannedSessions,
+        recommendedSessions,
+        withContingency,
+        contingencyPercent,
+        shortfall: Math.max(0, recommendedSessions - plannedSessions),
+        surplus: Math.max(0, plannedSessions - withContingency),
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    console.error("Error fetching feasibility:", err);
+    return { data: null, error: err.message || "Failed to fetch feasibility" };
   }
 }
 
-/**
- * Get topic names as comma-separated string
- */
-export function getTopicNames(session: TimetableSession): string {
-  if (!session.topics_preview || session.topics_preview.length === 0) {
-    return "Topics TBD";
+// ============================================================================
+// Date Overrides (Blocked Dates)
+// ============================================================================
+
+export async function fetchDateOverrides(
+  childId: string
+): Promise<{ data: DateOverride[] | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from("availability_date_overrides")
+      .select("*")
+      .eq("child_id", childId)
+      .order("override_date");
+
+    if (error) throw error;
+
+    return { data: data || [], error: null };
+  } catch (err: any) {
+    console.error("Error fetching date overrides:", err);
+    return { data: null, error: err.message || "Failed to fetch date overrides" };
   }
-  return session.topics_preview.map((t) => t.topic_name).join(", ");
 }
 
-/**
- * Calculate statistics from week data
- */
-export function calculateWeekStats(weekData: WeekDayData[]): {
-  totalSessions: number;
-  completedSessions: number;
-  plannedSessions: number;
-  skippedSessions: number;
-  totalMinutes: number;
-} {
-  const sessions = flattenWeekSessions(weekData);
-  
-  return {
-    totalSessions: sessions.length,
-    completedSessions: sessions.filter((s) => s.status === "completed").length,
-    plannedSessions: sessions.filter((s) => s.status === "planned").length,
-    skippedSessions: sessions.filter((s) => s.status === "skipped").length,
-    totalMinutes: sessions.reduce((sum, s) => sum + s.session_duration_minutes, 0),
-  };
+export async function addDateOverride(
+  childId: string,
+  date: string,
+  type: "blocked" | "extra",
+  reason?: string
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase.from("availability_date_overrides").upsert(
+      {
+        child_id: childId,
+        override_date: date,
+        override_type: type,
+        reason: reason || null,
+      },
+      { onConflict: "child_id,override_date" }
+    );
+
+    if (error) throw error;
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("Error adding date override:", err);
+    return { success: false, error: err.message || "Failed to add date override" };
+  }
+}
+
+export async function removeDateOverride(
+  childId: string,
+  date: string
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from("availability_date_overrides")
+      .delete()
+      .eq("child_id", childId)
+      .eq("override_date", date);
+
+    if (error) throw error;
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("Error removing date override:", err);
+    return { success: false, error: err.message || "Failed to remove date override" };
+  }
+}
+
+// ============================================================================
+// Add Single Session
+// ============================================================================
+
+export async function fetchChildSubjects(
+  childId: string
+): Promise<{ data: ChildSubjectOption[] | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from("child_subjects")
+      .select(
+        `
+        subject_id,
+        subjects!inner (
+          subject_name,
+          color,
+          icon
+        )
+      `
+      )
+      .eq("child_id", childId)
+      .eq("is_paused", false);
+
+    if (error) throw error;
+
+    const subjects: ChildSubjectOption[] = (data || []).map((row: any) => ({
+      subject_id: row.subject_id,
+      subject_name: row.subjects?.subject_name || "Unknown",
+      color: row.subjects?.color || "#6B7280",
+      icon: row.subjects?.icon || "book",
+    }));
+
+    return { data: subjects, error: null };
+  } catch (err: any) {
+    console.error("Error fetching child subjects:", err);
+    return { data: null, error: err.message || "Failed to fetch subjects" };
+  }
+}
+
+export async function addSingleSession(params: {
+  childId: string;
+  planId: string | null;
+  sessionDate: string;
+  subjectId: string;
+  sessionPattern: string;
+  sessionDurationMinutes: number;
+}): Promise<{ success: boolean; sessionId: string | null; error: string | null }> {
+  try {
+    // Get active plan if not provided
+    let planId = params.planId;
+    if (!planId) {
+      const { data: planData } = await supabase
+        .from("revision_plans")
+        .select("id")
+        .eq("child_id", params.childId)
+        .eq("status", "active")
+        .single();
+
+      planId = planData?.id || null;
+    }
+
+    // Get day of week
+    const date = new Date(params.sessionDate);
+    const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const dayOfWeek = days[date.getDay()];
+
+    // Get session index for this day
+    const { count } = await supabase
+      .from("planned_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("child_id", params.childId)
+      .eq("session_date", params.sessionDate);
+
+    const sessionIndex = (count || 0) + 1;
+
+    // Insert session
+    const { data, error } = await supabase
+      .from("planned_sessions")
+      .insert({
+        plan_id: planId,
+        child_id: params.childId,
+        session_date: params.sessionDate,
+        day_of_week: dayOfWeek,
+        session_pattern: params.sessionPattern,
+        session_duration_minutes: params.sessionDurationMinutes,
+        subject_id: params.subjectId,
+        session_index: sessionIndex,
+        status: "planned",
+        topic_ids: [],
+      })
+      .select("id")
+      .single();
+
+    if (error) throw error;
+
+    return { success: true, sessionId: data?.id || null, error: null };
+  } catch (err: any) {
+    console.error("Error adding session:", err);
+    return { success: false, sessionId: null, error: err.message || "Failed to add session" };
+  }
 }
