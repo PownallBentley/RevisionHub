@@ -107,12 +107,15 @@ export default function EditScheduleModal({
   async function handleSave(mode: SaveMode) {
     setSaving(true);
     setError(null);
-    // Keep showSaveOptions as-is during save, the saving state will show loading
 
     try {
       if (mode === "regenerate") {
         const result = await saveTemplateAndRegenerate(childId, template);
         if (result.success) {
+          // Log warning if any (non-blocking)
+          if (result.warning) {
+            console.warn("Schedule save warning:", result.warning);
+          }
           // Update original to prevent "unsaved changes" warning
           setOriginalTemplate(JSON.parse(JSON.stringify(template)));
           setShowSaveOptions(false);
