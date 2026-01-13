@@ -25,6 +25,9 @@ import {
   faRocket,
   faFire,
   faDna,
+  faSliders,
+  faCircleCheck,
+  faTriangleExclamation,
   type IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import type { PlanCoverageOverview } from "../../services/timetableService";
@@ -53,11 +56,13 @@ const ICON_MAP: Record<string, IconDefinition> = {
 interface TimetableHeroCardProps {
   planOverview: PlanCoverageOverview | null;
   loading?: boolean;
+  onEditSchedule?: () => void;
 }
 
 export default function TimetableHeroCard({
   planOverview,
   loading = false,
+  onEditSchedule,
 }: TimetableHeroCardProps) {
   // Loading state
   if (loading) {
@@ -84,7 +89,7 @@ export default function TimetableHeroCard({
     return (
       <div className="bg-white rounded-2xl shadow-card p-6 mb-6">
         <div className="flex items-start gap-6">
-          <div className="w-24 h-24 bg-neutral-200 rounded-2xl flex flex-col items-center justify-center text-neutral-500">
+          <div className="w-24 h-24 bg-neutral-100 rounded-2xl flex flex-col items-center justify-center text-neutral-400">
             <FontAwesomeIcon icon={faExclamationTriangle} className="text-2xl mb-1" />
             <span className="text-xs font-medium">No Plan</span>
           </div>
@@ -101,59 +106,84 @@ export default function TimetableHeroCard({
     );
   }
 
-  const { totals, subjects, status, pace, revision_period } = planOverview;
+  const { totals, subjects, pace, revision_period } = planOverview;
 
-  // Status configuration
-  const getStatusConfig = () => {
-    switch (status) {
-      case "complete":
-        return {
-          color: "bg-accent-green",
-          icon: faCheckCircle,
-          label: "Complete!",
-          message: "All sessions completed. Well done!",
-        };
-      case "on_track":
-        return {
-          color: "bg-accent-green",
-          icon: faCheckCircle,
-          label: "On Track",
-          message: pace 
-            ? `${pace.sessions_per_week_needed} sessions/week to finish on time`
-            : "You're making good progress",
-        };
-      case "manageable":
-        return {
-          color: "bg-accent-amber",
-          icon: faClock,
-          label: "Manageable",
-          message: pace 
-            ? `${pace.sessions_per_week_needed} sessions/week needed — pick up the pace`
-            : "A bit behind, but catchable",
-        };
-      case "intensive":
-        return {
-          color: "bg-accent-red",
-          icon: faFire,
-          label: "Intensive",
-          message: pace 
-            ? `${pace.sessions_per_week_needed} sessions/week needed — requires dedication`
-            : "You'll need to work hard to catch up",
-        };
-      default:
-        return {
-          color: "bg-primary-500",
-          icon: faRocket,
-          label: "In Progress",
-          message: "Keep going!",
-        };
+  // Calculate schedule metrics
+  const weeksRemaining = revision_period?.weeks_remaining || 0;
+  const scheduledPerWeek = weeksRemaining > 0 
+    ? Math.round(totals.planned_sessions / weeksRemaining) 
+    : 0;
+  const neededPerWeek = pace?.sessions_per_week_needed || scheduledPerWeek;
+  
+  // Determine actual status based on schedule vs need
+  const scheduleGap = scheduledPerWeek - neededPerWeek;
+  const completionPercent = totals.completion_percent || 0;
+  
+  // Status logic:
+  // - Complete: All done
+  // - On Track: scheduled >= needed (or very close)
+  // - Needs Attention: scheduled < needed by a small margin
+  // - Behind: scheduled significantly < needed
+  const getStatus = () => {
+    if (completionPercent >= 100) {
+      return {
+        key: "complete",
+        color: "bg-accent-green",
+        textColor: "text-accent-green",
+        borderColor: "border-accent-green",
+        bgLight: "bg-green-50",
+        icon: faCircleCheck,
+        label: "Complete!",
+        description: "All sessions completed. Excellent work!",
+        isHealthy: true,
+      };
     }
+    
+    if (scheduleGap >= 0) {
+      return {
+        key: "on_track",
+        color: "bg-accent-green",
+        textColor: "text-accent-green", 
+        borderColor: "border-accent-green",
+        bgLight: "bg-green-50",
+        icon: faCircleCheck,
+        label: "On Track",
+        description: `Your schedule covers ${scheduledPerWeek} sessions/week`,
+        isHealthy: true,
+      };
+    }
+    
+    if (scheduleGap >= -3) {
+      return {
+        key: "needs_attention",
+        color: "bg-accent-amber",
+        textColor: "text-accent-amber",
+        borderColor: "border-accent-amber",
+        bgLight: "bg-amber-50",
+        icon: faTriangleExclamation,
+        label: "Needs Attention",
+        description: `${Math.abs(scheduleGap)} more sessions/week recommended`,
+        isHealthy: false,
+      };
+    }
+    
+    return {
+      key: "behind",
+      color: "bg-accent-red",
+      textColor: "text-accent-red",
+      borderColor: "border-accent-red",
+      bgLight: "bg-red-50",
+      icon: faFire,
+      label: "Behind Schedule",
+      description: `${Math.abs(scheduleGap)} more sessions/week needed`,
+      isHealthy: false,
+    };
   };
 
-  const statusConfig = getStatusConfig();
+  const status = getStatus();
   const getIcon = (iconName: string): IconDefinition => ICON_MAP[iconName] || faBook;
 
-  // Consolidate subjects with same name (handles duplicate UUIDs)
+  // Consolidate subjects with same name
   const consolidatedSubjects = subjects.reduce((acc, subject) => {
     const existing = acc.find(s => s.subject_name === subject.subject_name);
     if (existing) {
@@ -172,54 +202,115 @@ export default function TimetableHeroCard({
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-6 mb-6">
-      {/* Top Section: Status + Key Metrics */}
-      <div className="flex items-start gap-6 mb-6">
-        {/* Status Badge */}
+      {/* Header Row: Status Badge + Title + Key Stats */}
+      <div className="flex items-start gap-5 mb-6">
+        {/* Status Indicator */}
         <div
-          className={`w-24 h-24 ${statusConfig.color} rounded-2xl flex flex-col items-center justify-center text-white shrink-0`}
+          className={`w-20 h-20 ${status.color} rounded-2xl flex flex-col items-center justify-center text-white shrink-0`}
         >
-          <FontAwesomeIcon icon={statusConfig.icon} className="text-2xl mb-1" />
-          <span className="text-2xl font-bold">{totals.completion_percent}%</span>
-          <span className="text-xs font-medium">{statusConfig.label}</span>
+          <FontAwesomeIcon icon={status.icon} className="text-xl mb-1" />
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-center leading-tight px-1">
+            {status.label}
+          </span>
         </div>
 
-        {/* Header & Message */}
-        <div className="flex-1">
-          <h2 className="text-xl font-semibold text-neutral-700 mb-1">
-            Revision Progress
-          </h2>
-          <p className="text-neutral-500 text-sm mb-4">{statusConfig.message}</p>
-
-          {/* Key Metrics Row */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="bg-neutral-50 rounded-xl p-3 text-center">
-              <div className="text-2xl font-bold text-primary-600">
-                {totals.planned_sessions}
-              </div>
-              <div className="text-xs text-neutral-500">Total Sessions</div>
+        {/* Main Content */}
+        <div className="flex-1 min-w-0">
+          {/* Title Row */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-800">
+                Revision Plan
+              </h2>
+              <p className="text-sm text-neutral-500">
+                {weeksRemaining > 0 
+                  ? `${Math.round(weeksRemaining)} weeks until exams`
+                  : "Exam period"}
+              </p>
             </div>
-            <div className="bg-neutral-50 rounded-xl p-3 text-center">
-              <div className="text-2xl font-bold text-accent-green">
-                {totals.completed_sessions}
+            
+            {/* Completion Badge */}
+            <div className="text-right">
+              <div className="text-2xl font-bold text-neutral-800">
+                {completionPercent}%
               </div>
-              <div className="text-xs text-neutral-500">Completed</div>
-            </div>
-            <div className="bg-neutral-50 rounded-xl p-3 text-center">
-              <div className="text-2xl font-bold text-neutral-600">
-                {totals.remaining_sessions}
-              </div>
-              <div className="text-xs text-neutral-500">Remaining</div>
-            </div>
-            <div className="bg-neutral-50 rounded-xl p-3 text-center">
-              <div className="text-2xl font-bold text-neutral-600 flex items-center justify-center gap-1">
-                <FontAwesomeIcon icon={faCalendarAlt} className="text-sm" />
-                {revision_period?.weeks_remaining 
-                  ? Math.floor(revision_period.weeks_remaining)
-                  : "—"}
-              </div>
-              <div className="text-xs text-neutral-500">Weeks Left</div>
+              <div className="text-xs text-neutral-500">complete</div>
             </div>
           </div>
+
+          {/* Progress Bar */}
+          <div className="h-3 bg-neutral-100 rounded-full overflow-hidden mb-4">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${status.color}`}
+              style={{ width: `${Math.max(completionPercent, 0)}%` }}
+            />
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="text-center">
+              <div className="text-xl font-bold text-neutral-800">
+                {totals.planned_sessions}
+              </div>
+              <div className="text-[11px] text-neutral-500">Total</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl font-bold text-accent-green">
+                {totals.completed_sessions}
+              </div>
+              <div className="text-[11px] text-neutral-500">Done</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl font-bold text-neutral-600">
+                {totals.remaining_sessions}
+              </div>
+              <div className="text-[11px] text-neutral-500">Remaining</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl font-bold text-neutral-600">
+                {scheduledPerWeek}
+              </div>
+              <div className="text-[11px] text-neutral-500">Per Week</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Schedule Status Banner */}
+      <div className={`${status.bgLight} border ${status.borderColor} rounded-xl p-4 mb-5`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FontAwesomeIcon 
+              icon={status.isHealthy ? faCircleCheck : faClock} 
+              className={status.textColor}
+            />
+            <div>
+              {status.isHealthy ? (
+                <p className="text-sm text-neutral-700">
+                  <strong className="text-neutral-800">{scheduledPerWeek} sessions/week</strong> scheduled 
+                  {neededPerWeek > 0 && (
+                    <span className="text-neutral-500"> • {neededPerWeek}/week needed for full coverage</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-neutral-700">
+                  You have <strong>{scheduledPerWeek} sessions/week</strong> but need{" "}
+                  <strong>{neededPerWeek}/week</strong> for full coverage
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* CTA Button when behind */}
+          {!status.isHealthy && onEditSchedule && (
+            <button
+              onClick={onEditSchedule}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 transition-colors shrink-0"
+            >
+              <FontAwesomeIcon icon={faSliders} className="text-xs" />
+              Adjust Schedule
+            </button>
+          )}
         </div>
       </div>
 
@@ -259,31 +350,19 @@ export default function TimetableHeroCard({
                       width: `${Math.max(subject.completion_percent, 0)}%`,
                     }}
                   />
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-neutral-700">
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-neutral-600">
                     {subject.completed_sessions} / {subject.planned_sessions}
                   </span>
                 </div>
 
                 {/* Remaining */}
-                <div className="w-24 text-right shrink-0">
+                <div className="w-16 text-right shrink-0">
                   <span className="text-sm text-neutral-500">
                     {subject.remaining_sessions} left
                   </span>
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Pace recommendation if behind */}
-      {pace && (status === "manageable" || status === "intensive") && (
-        <div className="mt-4 bg-primary-50 border border-primary-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <FontAwesomeIcon icon={faClock} className="text-primary-600" />
-            <p className="text-sm text-neutral-700">
-              To finish on time, aim for <strong>{pace.sessions_per_week_needed} sessions</strong> ({pace.hours_per_week_needed} hours) per week.
-            </p>
           </div>
         </div>
       )}
