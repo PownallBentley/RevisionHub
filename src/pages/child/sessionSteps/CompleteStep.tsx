@@ -31,6 +31,7 @@ import {
   faDna,
   faBook,
   faNoteSticky,
+  faStar,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
