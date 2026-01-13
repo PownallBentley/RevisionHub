@@ -61,24 +61,19 @@ export interface SubjectCoverage {
   subject_name: string;
   color: string;
   icon: string;
-  topic_count: number;
   planned_sessions: number;
   completed_sessions: number;
-  recommended_sessions: number;
-  coverage_percent: number;
-  shortfall: number;
-  surplus: number;
-  status: "on_track" | "marginal" | "behind";
+  remaining_sessions: number;
+  total_minutes: number;
+  completion_percent: number;
 }
 
 export interface PlanCoverageOverview {
   child_id: string;
   revision_period: {
-    start_date: string;
     end_date: string;
     days_remaining: number;
     weeks_remaining: number;
-    contingency_percent: number;
   } | null;
   totals: {
     planned_sessions: number;
@@ -86,16 +81,14 @@ export interface PlanCoverageOverview {
     remaining_sessions: number;
     total_minutes: number;
     total_hours: number;
-    recommended_sessions: number;
-    with_contingency: number;
+    completion_percent: number;
   };
   subjects: SubjectCoverage[];
-  status: "good" | "marginal" | "insufficient" | "no_plan";
-  recommendations: {
-    total_shortfall: number;
-    priority_subjects: Array<{ subject: string; sessions_needed: number }>;
+  status: "no_plan" | "complete" | "on_track" | "manageable" | "intensive";
+  pace: {
     sessions_per_week_needed: number;
-  };
+    hours_per_week_needed: number;
+  } | null;
 }
 
 export interface ChildSubjectOption {
