@@ -1,4 +1,5 @@
 // src/components/layout/AppHeader.tsx
+// FIXED: Never shows "User" - handles loading state properly
 
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -7,7 +8,9 @@ import {
   faBookOpen,
   faChevronDown,
   faSignOutAlt,
+  faCog,
   faUser,
+  faSpinner,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import ParentNav from "./ParentNav";
@@ -19,8 +22,9 @@ function getInitials(name: string | null | undefined): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function getDisplayName(profile: any, isChild: boolean): string {
-  if (!profile) return "User";
+function getDisplayName(profile: any, isChild: boolean): string | null {
+  // Return null if profile not loaded yet - caller should show loading state
+  if (!profile) return null;
 
   if (isChild) {
     return profile.preferred_name || profile.first_name || "Student";
@@ -32,18 +36,23 @@ function getDisplayName(profile: any, isChild: boolean): string {
   if (profile.email) {
     return profile.email.split("@")[0];
   }
-  return "User";
+  
+  // Last resort - use email prefix or "Parent"
+  return "Parent";
 }
 
 export default function AppHeader() {
   const navigate = useNavigate();
-  const { user, profile, isChild, isParent, signOut } = useAuth();
+  const { user, profile, loading, isChild, isParent, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isLoggedIn = !!user;
   const displayName = getDisplayName(profile, isChild);
-  const initials = getInitials(displayName);
+  const initials = displayName ? getInitials(displayName) : "?";
+  
+  // Profile is still loading if we have a user but no profile yet
+  const isProfileLoading = isLoggedIn && !profile;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -108,7 +117,13 @@ export default function AppHeader() {
         </div>
 
         {/* Right side */}
-        {!isLoggedIn ? (
+        {loading ? (
+          // Initial auth loading - show spinner
+          <div className="w-9 h-9 flex items-center justify-center">
+            <FontAwesomeIcon icon={faSpinner} className="text-gray-400 animate-spin" />
+          </div>
+        ) : !isLoggedIn ? (
+          // Not logged in - show login/signup buttons
           <div className="flex items-center gap-2">
             <Link
               to="/login"
@@ -123,7 +138,17 @@ export default function AppHeader() {
               Sign up
             </Link>
           </div>
+        ) : isProfileLoading ? (
+          // Logged in but profile loading - show avatar placeholder with spinner
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div
+              className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center`}
+            >
+              <FontAwesomeIcon icon={faSpinner} className="text-white text-sm animate-spin" />
+            </div>
+          </div>
         ) : (
+          // Fully loaded - show user menu
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
@@ -150,6 +175,20 @@ export default function AppHeader() {
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
                 {!isChild && (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        navigate("/settings");
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FontAwesomeIcon
+                        icon={faCog}
+                        className="text-gray-400 w-4"
+                      />
+                      Settings
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
