@@ -53,19 +53,36 @@ export default function EditScheduleModal({
   async function loadTemplate() {
     setLoading(true);
     setError(null);
-    setSuccess(null);
 
-    const { data, error } = await fetchWeeklyTemplate(childId);
+    try {
+      const { data, error } = await fetchWeeklyTemplate(childId);
 
-    if (error) {
-      setError(error);
-      setTemplate(createEmptyTemplate());
-    } else if (data) {
-      setTemplate(data);
-      setOriginalTemplate(JSON.parse(JSON.stringify(data))); // Deep copy
+      if (error) {
+        console.error("Error loading template:", error);
+        setError(error);
+        // Still set a default template so user can create one
+        const defaultTemplate = createEmptyTemplate();
+        setTemplate(defaultTemplate);
+        setOriginalTemplate(JSON.parse(JSON.stringify(defaultTemplate)));
+      } else if (data) {
+        console.log("Loaded template data:", data);
+        setTemplate(data);
+        setOriginalTemplate(JSON.parse(JSON.stringify(data)));
+      } else {
+        // No data returned - use default
+        const defaultTemplate = createEmptyTemplate();
+        setTemplate(defaultTemplate);
+        setOriginalTemplate(JSON.parse(JSON.stringify(defaultTemplate)));
+      }
+    } catch (err: any) {
+      console.error("Exception loading template:", err);
+      setError(err.message || "Failed to load schedule");
+      const defaultTemplate = createEmptyTemplate();
+      setTemplate(defaultTemplate);
+      setOriginalTemplate(JSON.parse(JSON.stringify(defaultTemplate)));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   // Check if template has changed
