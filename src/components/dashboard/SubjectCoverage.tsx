@@ -1,10 +1,10 @@
 // src/components/dashboard/SubjectCoverage.tsx
 
 import { useNavigate } from "react-router-dom";
-import type { SubjectCoverageItem } from "../../types/parentDashboard";
+import type { SubjectCoverageEntry } from "../../types/parentDashboard";
 
 interface SubjectCoverageProps {
-  coverage: SubjectCoverageItem[];
+  coverage: SubjectCoverageEntry[];
 }
 
 export default function SubjectCoverage({ coverage }: SubjectCoverageProps) {

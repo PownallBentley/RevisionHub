@@ -40,7 +40,7 @@ export default function TimelineView({ timeline }: TimelineViewProps) {
           >
             <p className="text-xs font-medium text-gray-500 mb-2">{group.group_label}</p>
             <div className="space-y-2">
-              {group.sessions.map((session) => (
+              {group.sessions.map((session: any) => (
                 <div key={session.planned_session_id} className="flex items-center gap-3">
                   <div 
                     className="w-2 h-2 rounded-full"

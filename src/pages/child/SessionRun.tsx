@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faArrowLeft,
   faXmark,
   faClock,
   faSpinner,
@@ -19,7 +18,6 @@ import {
   faLandmark,
   faDna,
   faBook,
-  faCircle,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -396,7 +394,7 @@ export default function SessionRun() {
     }
   }
 
-  function handleBack() {
+  async function handleBack() {
     if (currentStepIndex > 1) {
       setCurrentStepIndex(currentStepIndex - 1);
     }
@@ -435,13 +433,14 @@ export default function SessionRun() {
   // Build overview object passed to all steps
   const stepOverview = {
     subject_name: sessionData.subject_name,
-    subject_icon: sessionData.subject_icon,
-    subject_color: sessionData.subject_color,
+    subject_icon: sessionData.subject_icon || undefined,
+    subject_color: sessionData.subject_color || undefined,
     topic_name: sessionData.topic_name,
     topic_id: sessionData.topic_id,
     session_duration_minutes: sessionData.session_duration_minutes,
     step_key: currentStepKey,
     step_index: currentStepIndex,
+    step_percent: Math.round((currentStepIndex / STEP_ORDER.length) * 100),
     total_steps: STEP_ORDER.length,
     child_name: sessionData.child_name,
   };
@@ -491,11 +490,6 @@ export default function SessionRun() {
         return (
           <PracticeStep
             {...commonProps}
-            onRequestAIFeedback={async (answers) => {
-              // In production: call AI feedback endpoint
-              // For now, let PracticeStep use its internal mock
-              throw new Error("Use mock feedback");
-            }}
           />
         );
 

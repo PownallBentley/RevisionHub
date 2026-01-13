@@ -74,6 +74,10 @@ function createDefaultRevisionPeriod(): RevisionPeriodData {
   return {
     start_date: startDate.toISOString().split('T')[0],
     end_date: endDate.toISOString().split('T')[0],
+    contingency_enabled: true,
+    current_revision_score: 5,
+    past_revision_score: 5,
+    is_first_time: true,
     contingency_percent: 10,
     feeling_code: null,
     history_code: null,
@@ -376,7 +380,7 @@ export default function ParentOnboardingPage() {
     setInvite(null);
 
     try {
-      const result: any = await rpcParentCreateChildAndPlan(payload);
+      const result: any = await rpcParentCreateChildAndPlan(payload as any);
 
       await refresh();
 

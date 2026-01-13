@@ -85,3 +85,20 @@ export interface SubjectProgressData {
   timeline: TimelineSession[];
   suggestions: Suggestion[];
 }
+
+export interface FocusArea {
+  id: string;
+  name: string;
+  progress: number;
+  subject_id?: string;
+  subject_name?: string;
+  subject_color?: string;
+  subject_icon?: string;
+  focus_topics?: any[];
+}
+
+export interface TimelineGroup {
+  date: string;
+  group_label?: string;
+  sessions: any[];
+}

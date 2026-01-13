@@ -99,21 +99,11 @@ export default function AvatarUpload({
     reader.onload = (e) => {
       const src = e.target?.result as string;
 
-      if (!src) {
-        setError("Failed to read image file");
-        return;
-      }
-
       // Load image to get natural dimensions
       const img = new Image();
       img.onload = () => {
         const natWidth = img.naturalWidth;
         const natHeight = img.naturalHeight;
-
-        if (natWidth === 0 || natHeight === 0) {
-          setError("Invalid image dimensions");
-          return;
-        }
 
         setNaturalSize({ width: natWidth, height: natHeight });
 
@@ -129,19 +119,13 @@ export default function AvatarUpload({
         setFitZoom(calculatedFitZoom);
         setMinZoom(calculatedMinZoom);
 
-        // Start at 0% (minZoom - whole image visible, quite zoomed out)
-        setSliderValue(0);
+        // Start at 50% (fitZoom - image fills circle nicely)
+        setSliderValue(50);
         setPosition({ x: 0, y: 0 });
         setImageSrc(src);
         setShowCropper(true);
       };
-      img.onerror = () => {
-        setError("Failed to load image");
-      };
       img.src = src;
-    };
-    reader.onerror = () => {
-      setError("Failed to read file");
     };
     reader.readAsDataURL(file);
   }, []);
@@ -486,40 +470,21 @@ export default function AvatarUpload({
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
               >
-                {imageSrc ? (
-                  displayWidth > 0 && displayHeight > 0 ? (
-                    <img
-                      src={imageSrc}
-                      alt="Crop preview"
-                      className="absolute select-none pointer-events-none"
-                      style={{
-                        width: `${displayWidth}px`,
-                        height: `${displayHeight}px`,
-                        left: `calc(50% + ${position.x}px)`,
-                        top: `calc(50% + ${position.y}px)`,
-                        transform: "translate(-50%, -50%)",
-                        maxWidth: "none",
-                        maxHeight: "none",
-                      }}
-                      draggable={false}
-                      onError={() => console.error("Image failed to render")}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: "#6C7280" }}>
-                      Loading dimensions...
-                    </div>
-                  )
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: "#6C7280" }}>
-                    Loading image...
-                  </div>
-                )}
+                <img
+                  src={imageSrc}
+                  alt="Crop preview"
+                  className="absolute select-none pointer-events-none"
+                  style={{
+                    width: displayWidth,
+                    height: displayHeight,
+                    left: `calc(50% + ${position.x}px)`,
+                    top: `calc(50% + ${position.y}px)`,
+                    transform: "translate(-50%, -50%)",
+                    maxWidth: "none",
+                  }}
+                  draggable={false}
+                />
               </div>
-            </div>
-
-            {/* Debug info */}
-            <div className="text-xs text-center mb-2" style={{ color: "#A8AEBD" }}>
-              Zoom: {actualZoom.toFixed(3)} | Size: {Math.round(displayWidth)} × {Math.round(displayHeight)}
             </div>
 
             {/* Instructions */}

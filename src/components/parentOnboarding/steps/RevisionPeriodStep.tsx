@@ -13,6 +13,9 @@ export interface RevisionPeriodData {
   current_revision_score: number;
   past_revision_score: number;
   is_first_time: boolean;
+  contingency_percent: number;
+  feeling_code: string | null;
+  history_code: string | null;
 }
 
 interface RevisionPeriodStepProps {

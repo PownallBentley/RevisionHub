@@ -58,22 +58,22 @@ export default function WeekSummary({ summary }: WeekSummaryProps) {
             <div>
               <span className="text-neutral-500">Time Spent</span>
               <p className="font-medium text-neutral-700">
-                {summary.time_spent_minutes >= 60
-                  ? `${Math.floor(summary.time_spent_minutes / 60)}h ${summary.time_spent_minutes % 60}m`
-                  : `${summary.time_spent_minutes} mins`}
+                {summary.total_minutes >= 60
+                  ? `${Math.floor(summary.total_minutes / 60)}h ${summary.total_minutes % 60}m`
+                  : `${summary.total_minutes} mins`}
               </p>
             </div>
             <div>
               <span className="text-neutral-500">vs Last Week</span>
               <p className={`font-medium ${
-                summary.comparison_to_last_week > 0
+                summary.sessions_difference > 0
                   ? "text-accent-green"
-                  : summary.comparison_to_last_week < 0
+                  : summary.sessions_difference < 0
                   ? "text-accent-amber"
                   : "text-neutral-700"
               }`}>
-                {summary.comparison_to_last_week > 0 ? "+" : ""}
-                {summary.comparison_to_last_week} sessions
+                {summary.sessions_difference > 0 ? "+" : ""}
+                {summary.sessions_difference} sessions
               </p>
             </div>
           </div>

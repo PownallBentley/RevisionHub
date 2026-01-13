@@ -67,11 +67,11 @@ export default function FocusAreasCard({ focusAreas, childName }: FocusAreasCard
             key={area.subject_id}
             className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg"
           >
-            <div 
+            <div
               className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: `${area.subject_color}15` }}
+              style={{ backgroundColor: `${area.subject_color || '#5B2CFF'}15` }}
             >
-              <SubjectIcon icon={area.subject_icon} color={area.subject_color} />
+              <SubjectIcon icon={area.subject_icon || 'default'} color={area.subject_color || '#5B2CFF'} />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">{area.subject_name}</p>
