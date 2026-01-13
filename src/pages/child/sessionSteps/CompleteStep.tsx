@@ -31,7 +31,6 @@ import {
   faDna,
   faBook,
   faNoteSticky,
-  faSparkles,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -707,7 +706,7 @@ export default function CompleteStep({
         <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-card p-6 text-white">
           <div className="flex items-start space-x-4">
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <FontAwesomeIcon icon={faSparkles} className="text-white text-2xl" />
+              <FontAwesomeIcon icon={faStar} className="text-white text-2xl" />
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3">Well done, {childName}!</h3>
@@ -716,7 +715,7 @@ export default function CompleteStep({
                 and gets you closer to exam success. Take a well-deserved break!
               </p>
               <div className="flex items-center space-x-2 text-primary-100 text-sm">
-                <FontAwesomeIcon icon={faSparkles} />
+                <FontAwesomeIcon icon={faStar} />
                 <span>
                   Tip: Try explaining what you learned to someone — it's one of the
                   best ways to remember!
