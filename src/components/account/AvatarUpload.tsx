@@ -98,34 +98,50 @@ export default function AvatarUpload({
     const reader = new FileReader();
     reader.onload = (e) => {
       const src = e.target?.result as string;
-      
+
+      if (!src) {
+        setError("Failed to read image file");
+        return;
+      }
+
       // Load image to get natural dimensions
       const img = new Image();
       img.onload = () => {
         const natWidth = img.naturalWidth;
         const natHeight = img.naturalHeight;
-        
+
+        if (natWidth === 0 || natHeight === 0) {
+          setError("Invalid image dimensions");
+          return;
+        }
+
         setNaturalSize({ width: natWidth, height: natHeight });
-        
+
         // Calculate zoom bounds
         // fitZoom: smallest dimension fills the circle exactly
         const minDim = Math.min(natWidth, natHeight);
         const calculatedFitZoom = PREVIEW_SIZE / minDim;
-        
+
         // minZoom: largest dimension fills the circle (see whole image)
         const maxDim = Math.max(natWidth, natHeight);
         const calculatedMinZoom = PREVIEW_SIZE / maxDim;
-        
+
         setFitZoom(calculatedFitZoom);
         setMinZoom(calculatedMinZoom);
-        
-        // Start at 50% (fitZoom - image fills circle nicely)
-        setSliderValue(50);
+
+        // Start at 0% (minZoom - whole image visible, quite zoomed out)
+        setSliderValue(0);
         setPosition({ x: 0, y: 0 });
         setImageSrc(src);
         setShowCropper(true);
       };
+      img.onerror = () => {
+        setError("Failed to load image");
+      };
       img.src = src;
+    };
+    reader.onerror = () => {
+      setError("Failed to read file");
     };
     reader.readAsDataURL(file);
   }, []);
@@ -459,32 +475,51 @@ export default function AvatarUpload({
 
             {/* Crop preview area */}
             <div className="flex justify-center mb-4">
-              <div 
+              <div
                 className="relative overflow-hidden rounded-full cursor-move"
-                style={{ 
-                  width: PREVIEW_SIZE, 
-                  height: PREVIEW_SIZE, 
+                style={{
+                  width: PREVIEW_SIZE,
+                  height: PREVIEW_SIZE,
                   backgroundColor: "#F6F7FB",
                   border: "3px solid #5B2CFF"
                 }}
                 onMouseDown={handleDragStart}
                 onTouchStart={handleDragStart}
               >
-                <img
-                  src={imageSrc}
-                  alt="Crop preview"
-                  className="absolute select-none pointer-events-none"
-                  style={{
-                    width: displayWidth,
-                    height: displayHeight,
-                    left: `calc(50% + ${position.x}px)`,
-                    top: `calc(50% + ${position.y}px)`,
-                    transform: "translate(-50%, -50%)",
-                    maxWidth: "none",
-                  }}
-                  draggable={false}
-                />
+                {imageSrc ? (
+                  displayWidth > 0 && displayHeight > 0 ? (
+                    <img
+                      src={imageSrc}
+                      alt="Crop preview"
+                      className="absolute select-none pointer-events-none"
+                      style={{
+                        width: `${displayWidth}px`,
+                        height: `${displayHeight}px`,
+                        left: `calc(50% + ${position.x}px)`,
+                        top: `calc(50% + ${position.y}px)`,
+                        transform: "translate(-50%, -50%)",
+                        maxWidth: "none",
+                        maxHeight: "none",
+                      }}
+                      draggable={false}
+                      onError={() => console.error("Image failed to render")}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: "#6C7280" }}>
+                      Loading dimensions...
+                    </div>
+                  )
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: "#6C7280" }}>
+                    Loading image...
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* Debug info */}
+            <div className="text-xs text-center mb-2" style={{ color: "#A8AEBD" }}>
+              Zoom: {actualZoom.toFixed(3)} | Size: {Math.round(displayWidth)} × {Math.round(displayHeight)}
             </div>
 
             {/* Instructions */}
