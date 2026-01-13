@@ -78,8 +78,8 @@ export default function TimetableHeroCard({
     );
   }
 
-  // No data state
-  if (!planOverview) {
+  // No data state - only show if truly no data
+  if (!planOverview || (planOverview.totals.planned_sessions === 0 && planOverview.subjects.length === 0)) {
     return (
       <div className="bg-white rounded-2xl shadow-card p-6 mb-6">
         <div className="flex items-start gap-6">
@@ -106,7 +106,18 @@ export default function TimetableHeroCard({
   const getStatusConfig = () => {
     const coveragePercent = totals.recommended_sessions > 0
       ? Math.round((totals.planned_sessions / totals.recommended_sessions) * 100)
-      : 0;
+      : (totals.planned_sessions > 0 ? 100 : 0);
+
+    // Handle no_plan status (has sessions but no formal plan)
+    if (status === "no_plan") {
+      return {
+        color: "bg-accent-amber",
+        icon: faExclamationTriangle,
+        label: "Setup Needed",
+        percent: coveragePercent,
+        message: "Set up a revision period to get coverage recommendations",
+      };
+    }
 
     switch (status) {
       case "good":
@@ -126,6 +137,7 @@ export default function TimetableHeroCard({
           message: `${totals.planned_sessions} of ${totals.with_contingency} sessions — consider adding ${recommendations.total_shortfall} more`,
         };
       case "insufficient":
+      default:
         return {
           color: "bg-accent-red",
           icon: faTimesCircle,
