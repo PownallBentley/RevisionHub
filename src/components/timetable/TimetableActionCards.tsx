@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPlus,
   faCalendarAlt,
-  faBan,
+  faUmbrellaBeach,
 } from "@fortawesome/free-solid-svg-icons";
 
 interface TimetableActionCardsProps {
@@ -23,24 +23,18 @@ export default function TimetableActionCards({
       icon: faPlus,
       title: "Add Session",
       description: "Quick add a one-time revision session",
-      color: "bg-primary-600",
-      hoverColor: "hover:bg-primary-700",
       onClick: onAddSession,
     },
     {
       icon: faCalendarAlt,
       title: "Edit Schedule",
       description: "Change weekly availability pattern",
-      color: "bg-primary-500",
-      hoverColor: "hover:bg-primary-600",
       onClick: onEditSchedule,
     },
     {
-      icon: faBan,
+      icon: faUmbrellaBeach,
       title: "Block Dates",
       description: "Mark holidays, events, or time off",
-      color: "bg-neutral-600",
-      hoverColor: "hover:bg-neutral-700",
       onClick: onBlockDates,
     },
   ];
@@ -51,15 +45,15 @@ export default function TimetableActionCards({
         <button
           key={card.title}
           onClick={card.onClick}
-          className={`${card.color} ${card.hoverColor} text-white rounded-xl p-4 text-left transition-all hover:shadow-lg hover:-translate-y-0.5 group`}
+          className="bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5 group"
         >
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-white/30 transition">
-              <FontAwesomeIcon icon={card.icon} className="text-lg" />
+            <div className="w-10 h-10 bg-primary-100 group-hover:bg-primary-200 rounded-lg flex items-center justify-center shrink-0 transition">
+              <FontAwesomeIcon icon={card.icon} className="text-lg text-primary-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm mb-0.5">{card.title}</h3>
-              <p className="text-xs text-white/80">{card.description}</p>
+              <h3 className="font-semibold text-sm mb-0.5 text-primary-900">{card.title}</h3>
+              <p className="text-xs text-neutral-600">{card.description}</p>
             </div>
           </div>
         </button>
