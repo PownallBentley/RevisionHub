@@ -1,9 +1,74 @@
 // src/pages/child/SessionOverview.tsx
+// UPDATED: New design implementation - January 2026
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faArrowLeft,
+  faClock,
+  faChartSimple,
+  faFire,
+  faLightbulb,
+  faRocket,
+  faVolumeXmark,
+  faPencil,
+  faComments,
+  faHeart,
+  faCalendarDays,
+  faArrowRight,
+  faFlask,
+  faCalculator,
+  faBook,
+  faAtom,
+  faGlobe,
+  faLandmark,
+  faDna,
+  faLanguage,
+  faPalette,
+  faMusic,
+  faLaptopCode,
+  faRunning,
+  faTheaterMasks,
+  faCross,
+  faBalanceScale,
+  faChartLine,
+  IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../../lib/supabase";
-import { useAuth } from "../../contexts/AuthContext";
+import { PageLayout } from "../../components/layout";
+
+// Icon mapping
+const ICON_MAP: Record<string, IconDefinition> = {
+  calculator: faCalculator,
+  book: faBook,
+  flask: faFlask,
+  atom: faAtom,
+  globe: faGlobe,
+  landmark: faLandmark,
+  dna: faDna,
+  language: faLanguage,
+  palette: faPalette,
+  music: faMusic,
+  "laptop-code": faLaptopCode,
+  running: faRunning,
+  "theater-masks": faTheaterMasks,
+  cross: faCross,
+  "balance-scale": faBalanceScale,
+  "chart-line": faChartLine,
+  history: faLandmark,
+  science: faFlask,
+  maths: faCalculator,
+  english: faBook,
+  geography: faGlobe,
+  physics: faAtom,
+  chemistry: faFlask,
+  biology: faDna,
+};
+
+function getIconFromName(iconName: string): IconDefinition {
+  return ICON_MAP[iconName?.toLowerCase()] || faBook;
+}
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -26,41 +91,36 @@ type TopicInfo = {
   topic_name: string;
 };
 
+type SubjectInfo = {
+  id: string;
+  subject_name: string;
+  icon: string | null;
+  color: string | null;
+};
+
 type PlannedSessionOverview = {
   planned_session_id: string;
-  subject_name: string | null;
+  subject: SubjectInfo | null;
   topic_ids: string[];
   topics: TopicInfo[];
   session_duration_minutes: number;
+  session_pattern: string;
 };
 
-const subjectIcons: Record<string, string> = {
-  chemistry: "🧪",
-  mathematics: "🔢",
-  "english literature": "📚",
-  physics: "⚛️",
-  biology: "🧬",
-  history: "📜",
-  geography: "🌍",
-  "religious studies": "🕊️",
-};
-
-const topicColors = [
-  { bg: "bg-indigo-50", number: "bg-indigo-600", text: "text-indigo-700" },
-  { bg: "bg-purple-50", number: "bg-purple-600", text: "text-purple-700" },
-  { bg: "bg-blue-50", number: "bg-blue-600", text: "text-blue-700" },
-  { bg: "bg-teal-50", number: "bg-teal-600", text: "text-teal-700" },
-  { bg: "bg-green-50", number: "bg-green-600", text: "text-green-700" },
+// Step colors for the 4-step model
+const STEP_COLORS = [
+  { bg: "bg-blue-100", text: "text-blue-600", border: "border-blue-200" },
+  { bg: "bg-indigo-100", text: "text-indigo-600", border: "border-indigo-200" },
+  { bg: "bg-green-100", text: "text-green-600", border: "border-green-200" },
+  { bg: "bg-purple-100", text: "text-purple-600", border: "border-purple-200" },
 ];
 
 export default function SessionOverview() {
   const navigate = useNavigate();
   const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
-  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [overview, setOverview] = useState<PlannedSessionOverview | null>(null);
   const [revisionSessionId, setRevisionSessionId] = useState<string | null>(null);
 
@@ -82,25 +142,29 @@ export default function SessionOverview() {
         // 1) Pull planned session data
         const { data: planned, error: plannedErr } = await supabase
           .from("planned_sessions")
-          .select("id, subject_id, topic_ids, session_duration_minutes")
+          .select("id, subject_id, topic_ids, session_duration_minutes, session_pattern")
           .eq("id", id)
           .maybeSingle();
 
         if (plannedErr) throw plannedErr;
         if (!planned) throw new Error("Session not found.");
 
-        // 2) Get subject name
-        let subjectName: string | null = null;
-        const subjectRes = await supabase
-          .from("subjects")
-          .select("subject_name")
-          .eq("id", planned.subject_id)
-          .maybeSingle();
+        // 2) Get subject info including icon and color
+        let subject: SubjectInfo | null = null;
+        if (planned.subject_id) {
+          const { data: subjectData, error: subjectErr } = await supabase
+            .from("subjects")
+            .select("id, subject_name, icon, color")
+            .eq("id", planned.subject_id)
+            .maybeSingle();
 
-        if (!subjectRes.error) subjectName = subjectRes.data?.subject_name ?? null;
+          if (!subjectErr && subjectData) {
+            subject = subjectData;
+          }
+        }
 
         // 3) Get all topic details
-        const topicIds: string[] = Array.isArray(planned.topic_ids) 
+        const topicIds: string[] = Array.isArray(planned.topic_ids)
           ? planned.topic_ids.filter((tid: any) => tid && isUuid(String(tid))).map(String)
           : [];
 
@@ -114,7 +178,7 @@ export default function SessionOverview() {
           if (!topicsErr && topicsData) {
             // Maintain the order from topic_ids
             topics = topicIds
-              .map(tid => topicsData.find(t => t.id === tid))
+              .map((tid) => topicsData.find((t) => t.id === tid))
               .filter((t): t is TopicInfo => t !== undefined);
           }
         }
@@ -123,10 +187,11 @@ export default function SessionOverview() {
 
         setOverview({
           planned_session_id: id,
-          subject_name: subjectName,
+          subject,
           topic_ids: topicIds,
           topics,
           session_duration_minutes: planned.session_duration_minutes ?? 20,
+          session_pattern: planned.session_pattern ?? "SINGLE_20",
         });
 
         // 4) Start (or resume) the revision session
@@ -167,242 +232,327 @@ export default function SessionOverview() {
     };
   }, [plannedSessionId]);
 
-  const title = useMemo(() => {
-    if (!overview) return "Session";
-    return overview.subject_name ?? "Session";
-  }, [overview]);
+  const subjectName = overview?.subject?.subject_name ?? "Revision";
+  const subjectIcon = getIconFromName(overview?.subject?.icon || "book");
+  const subjectColor = overview?.subject?.color || "#5B2CFF";
+  const topicCount = overview?.topics.length ?? 0;
+  const duration = overview?.session_duration_minutes ?? 20;
+  const primaryTopic = overview?.topics[0]?.topic_name ?? "Topics";
 
-  const childName = profile?.preferred_name || profile?.first_name || profile?.full_name || profile?.email?.split("@")[0] || "Student";
-  const avatarUrl = profile?.avatar_url;
-  const subjectKey = (title || "").toLowerCase();
-  const icon = subjectIcons[subjectKey] || "📖";
-
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <div className="text-gray-700">Preparing your session…</div>
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-neutral-600">Preparing your session...</p>
+          </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-        <div className="max-w-lg w-full bg-white rounded-2xl border border-gray-200 p-6">
-          <h1 className="text-xl font-semibold text-gray-900">Session</h1>
-          <p className="mt-2 text-gray-600">{error}</p>
-
-          <div className="mt-4">
+      <PageLayout bgColor="bg-neutral-100">
+        <div className="max-w-[1120px] mx-auto px-4 py-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h1 className="text-xl font-semibold text-neutral-700 mb-2">Session</h1>
+            <p className="text-neutral-600 mb-4">{error}</p>
             <button
               type="button"
               onClick={() => navigate("/child/today")}
-              className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+              className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 hover:bg-neutral-50 font-medium"
             >
               Back to Today
             </button>
           </div>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
-  const topicCount = overview?.topics.length ?? 0;
-  const duration = overview?.session_duration_minutes ?? 20;
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/child/today")}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
+    <PageLayout bgColor="bg-neutral-100">
+      <main className="max-w-[1120px] mx-auto px-4 py-6">
+        
+        {/* Back Button */}
+        <button
+          onClick={() => navigate("/child/today")}
+          className="flex items-center space-x-2 text-neutral-600 hover:text-neutral-700 mb-6 transition"
+        >
+          <FontAwesomeIcon icon={faArrowLeft} />
+          <span className="font-medium">Back to Today</span>
+        </button>
 
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <h1 className="text-xl font-semibold text-gray-900">Revision</h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors" aria-label="Help">
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-
-            <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={childName} className="w-9 h-9 rounded-full object-cover" />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-semibold">
-                  {childName.charAt(0).toUpperCase()}
+        {/* Hero Section */}
+        <section className="mb-8">
+          <div 
+            className="rounded-2xl shadow-card p-8 text-white relative overflow-hidden"
+            style={{ 
+              background: `linear-gradient(135deg, ${subjectColor} 0%, ${adjustColor(subjectColor, -30)} 100%)` 
+            }}
+          >
+            {/* Decorative circles */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
+            
+            <div className="relative z-10">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <FontAwesomeIcon icon={subjectIcon} className="text-white text-2xl" />
                 </div>
-              )}
-              <span className="text-sm font-medium text-gray-900">{childName}</span>
+                <div>
+                  <p className="text-white/70 text-sm font-medium">{subjectName}</p>
+                  <h1 className="text-3xl font-bold">
+                    {topicCount > 1 
+                      ? `${topicCount} Topics`
+                      : primaryTopic
+                    }
+                  </h1>
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-4 mt-6">
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faClock} className="text-white/60" />
+                  <span className="text-white/90 font-medium">{duration} minutes</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <FontAwesomeIcon icon={faChartSimple} className="text-white/60" />
+                  <span className="text-white/90 font-medium">
+                    {topicCount} {topicCount === 1 ? "topic" : "topics"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </section>
 
-      {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        {/* Subject Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-3">
-            <div className="w-20 h-20 rounded-3xl bg-indigo-100 flex items-center justify-center text-4xl">
-              {icon}
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900">{title}</h2>
-              <p className="text-gray-600 mt-1">Ready to revise</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 text-sm text-gray-600 mt-4">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              About {duration} minutes
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              {topicCount} {topicCount === 1 ? "topic" : "topics"} to cover
-            </div>
-          </div>
-        </div>
-
-        {/* Session Progress */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Session progress</h3>
-            <span className="text-sm text-gray-600">Not started</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">0 of 4 steps</span>
-            <span className="text-sm font-medium text-indigo-600">Ready to begin</span>
-          </div>
-        </div>
-
-        {/* What You'll Cover Today - DYNAMIC */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 mb-8">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">What you'll cover today</h3>
-
-          {topicCount === 0 ? (
-            <p className="text-gray-600">No topics assigned to this session.</p>
-          ) : (
-            <div className="space-y-4">
-              {overview?.topics.map((topic, index) => {
-                const colorScheme = topicColors[index % topicColors.length];
-                return (
-                  <div
+        {/* Topics to Cover */}
+        {topicCount > 0 && (
+          <section className="mb-8">
+            <div className="bg-white rounded-2xl shadow-card p-6">
+              <h2 className="text-xl font-bold text-primary-900 mb-4">
+                {topicCount > 1 ? "Topics You'll Cover" : "Topic Overview"}
+              </h2>
+              
+              <div className="space-y-3">
+                {overview?.topics.map((topic, index) => (
+                  <div 
                     key={topic.id}
-                    className={`flex gap-4 p-6 ${colorScheme.bg} rounded-2xl`}
+                    className="flex items-center space-x-4 p-4 bg-neutral-50 rounded-xl"
                   >
-                    <div
-                      className={`flex-shrink-0 w-10 h-10 rounded-xl ${colorScheme.number} text-white flex items-center justify-center font-semibold`}
+                    <div 
+                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold"
+                      style={{ backgroundColor: subjectColor }}
                     >
                       {index + 1}
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-2">
-                        {topic.topic_name}
-                      </h4>
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white ${colorScheme.text} text-xs font-medium`}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                        Topic {index + 1} of {topicCount}
-                      </span>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-neutral-700">{topic.topic_name}</h3>
+                      <p className="text-neutral-500 text-sm">
+                        {index === 0 ? "Starting topic" : `Topic ${index + 1} of ${topicCount}`}
+                      </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* How This Session Works */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 mb-8">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6">How this session works</h3>
-
-          <div className="space-y-5">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Recall</h4>
-                <p className="text-sm text-gray-600">Test what you remember from before</p>
+                ))}
               </div>
             </div>
+          </section>
+        )}
 
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
+        {/* How This Session Works - 4 Steps */}
+        <section className="mb-8">
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
+            <div className="flex items-start space-x-4 mb-6">
+              <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <FontAwesomeIcon icon={faLightbulb} className="text-white text-xl" />
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Reinforce</h4>
-                <p className="text-sm text-gray-600">Flashcards and worked examples to strengthen understanding</p>
+                <h2 className="text-xl font-bold text-primary-900 mb-2">How This Session Works</h2>
+                <p className="text-neutral-600">
+                  Each topic follows a proven 4-step learning structure
+                </p>
               </div>
             </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Practice</h4>
-                <p className="text-sm text-gray-600">Apply what you've learned with questions</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Reflection</h4>
-                <p className="text-sm text-gray-600">Review what you've learned and how you feel</p>
-              </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <StepCard
+                number={1}
+                title="Recall"
+                description="Quick questions to activate what you already know"
+                colorScheme={STEP_COLORS[0]}
+              />
+              <StepCard
+                number={2}
+                title="Reinforce"
+                description="Flashcards and examples to strengthen understanding"
+                colorScheme={STEP_COLORS[1]}
+              />
+              <StepCard
+                number={3}
+                title="Practice"
+                description="Apply your knowledge with exam-style questions"
+                colorScheme={STEP_COLORS[2]}
+              />
+              <StepCard
+                number={4}
+                title="Reflect"
+                description="Think about what you've learned and how you feel"
+                colorScheme={STEP_COLORS[3]}
+              />
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Start Button */}
-        <button
-          type="button"
-          disabled={!revisionSessionId}
-          onClick={() => navigate(`/child/session/${plannedSessionId}/run`)}
-          className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg"
-        >
-          Start session
-        </button>
+        {/* Quick Tips */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h2 className="text-xl font-bold text-primary-900 mb-4">Quick Tips for Success</h2>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <TipItem
+                icon={faVolumeXmark}
+                title="Find a quiet space"
+                description="Minimize distractions so you can focus"
+              />
+              <TipItem
+                icon={faPencil}
+                title="Have paper handy"
+                description="Writing helps you remember better"
+              />
+              <TipItem
+                icon={faClock}
+                title="Take your time"
+                description="Understanding matters more than speed"
+              />
+              <TipItem
+                icon={faHeart}
+                title="Be kind to yourself"
+                description="Learning takes time—you're doing great!"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Ready to Begin CTA */}
+        <section className="mb-8">
+          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-primary-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FontAwesomeIcon icon={faRocket} className="text-white text-3xl" />
+              </div>
+              <h2 className="text-2xl font-bold text-primary-900 mb-2">Ready to Begin?</h2>
+              <p className="text-neutral-600 mb-6 max-w-md mx-auto">
+                You're all set! Take a deep breath, and let's dive into {primaryTopic} together.
+              </p>
+              
+              <div className="flex items-center justify-center space-x-3 mb-6">
+                <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-full">
+                  <FontAwesomeIcon icon={faClock} className="text-neutral-600" />
+                  <span className="text-neutral-700 font-medium text-sm">{duration} minutes</span>
+                </div>
+                <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-full">
+                  <FontAwesomeIcon icon={faChartSimple} className="text-neutral-600" />
+                  <span className="text-neutral-700 font-medium text-sm">
+                    {topicCount} {topicCount === 1 ? "topic" : "topics"}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={!revisionSessionId}
+                onClick={() => navigate(`/child/session/${plannedSessionId}/run`)}
+                className="bg-primary-600 text-white font-bold px-12 py-4 rounded-xl hover:bg-primary-700 transition shadow-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Begin Session
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Alternative Actions */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <h3 className="font-semibold text-neutral-700 mb-4 text-center">Not ready yet?</h3>
+            <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-3">
+              <button 
+                onClick={() => navigate("/child/today")}
+                className="w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-3 bg-neutral-50 text-neutral-700 font-medium rounded-xl hover:bg-neutral-100 transition"
+              >
+                <FontAwesomeIcon icon={faArrowLeft} />
+                <span>Back to Dashboard</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </PageLayout>
+  );
+}
+
+/**
+ * Step Card Component
+ */
+function StepCard({
+  number,
+  title,
+  description,
+  colorScheme,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  colorScheme: { bg: string; text: string; border: string };
+}) {
+  return (
+    <div className="bg-white rounded-xl p-4">
+      <div className="flex items-center space-x-3 mb-2">
+        <div className={`w-8 h-8 ${colorScheme.bg} rounded-lg flex items-center justify-center`}>
+          <span className={`${colorScheme.text} font-bold text-sm`}>{number}</span>
+        </div>
+        <h3 className="font-semibold text-neutral-700">{title}</h3>
+      </div>
+      <p className="text-neutral-600 text-sm ml-11">{description}</p>
+    </div>
+  );
+}
+
+/**
+ * Tip Item Component
+ */
+function TipItem({
+  icon,
+  title,
+  description,
+}: {
+  icon: IconDefinition;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start space-x-3 p-3 bg-neutral-50 rounded-lg">
+      <FontAwesomeIcon icon={icon} className="text-neutral-600 text-lg mt-0.5" />
+      <div>
+        <p className="font-semibold text-neutral-700 text-sm mb-1">{title}</p>
+        <p className="text-neutral-600 text-sm">{description}</p>
       </div>
     </div>
   );
+}
+
+/**
+ * Darken/lighten a hex color
+ */
+function adjustColor(hex: string, amount: number): string {
+  const cleanHex = hex.replace("#", "");
+  const r = Math.max(0, Math.min(255, parseInt(cleanHex.substring(0, 2), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(cleanHex.substring(2, 4), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(cleanHex.substring(4, 6), 16) + amount));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
