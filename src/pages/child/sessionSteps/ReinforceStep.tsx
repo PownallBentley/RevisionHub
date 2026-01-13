@@ -1,268 +1,499 @@
 // src/pages/child/sessionSteps/ReinforceStep.tsx
+// UPDATED: 7-Step Session Model - January 2026
+// This is now "Core Teaching" (Step 3) - delivers 3-4 learning slides
 
 import { useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faArrowLeft,
+  faArrowRight,
+  faCheck,
+  faLightbulb,
+  faCalculator,
+  faExclamation,
+  faRobot,
+  faCommentDots,
+  faBookOpen,
+  faFlask,
+  faAtom,
+  faGlobe,
+  faLandmark,
+  faDna,
+  faBook,
+  IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+type SlideKeyPoint = {
+  title: string;
+  text: string;
+};
+
+type SlideExample = {
+  title: string;
+  description: string;
+  data?: Record<string, string | number>; // e.g., { "Protons": 6, "Neutrons": 6 }
+};
+
+type SlideGridItem = {
+  icon?: string;
+  iconColor?: string;
+  title: string;
+  subtitle: string;
+  detail?: string;
+};
+
+type LearningSlide = {
+  id: string;
+  slideNumber: number;
+  sectionTitle: string;
+  heading: string;
+  bodyText: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  keyPoint?: SlideKeyPoint;
+  example?: SlideExample;
+  gridItems?: SlideGridItem[];
+  isMisconception?: boolean;
+  misconceptionWrong?: string;
+  misconceptionCorrect?: string;
+};
 
 type ReinforceStepProps = {
   overview: {
     subject_name: string;
+    subject_icon?: string;
+    subject_color?: string;
     topic_name: string;
     session_duration_minutes: number | null;
     step_key: string;
-    step_percent: number;
+    step_index: number;
+    total_steps: number;
   };
-  payload: any;
+  payload: {
+    reinforce?: {
+      slides?: LearningSlide[];
+      total_slides?: number;
+    };
+  };
   saving: boolean;
   onPatch: (patch: Record<string, any>) => Promise<void>;
   onNext: () => Promise<void>;
-  onBack: () => Promise<void>;
+  onBack: () => void;
   onExit: () => void;
 };
 
-// Safe extraction of front content - handles multiple formats
-const getFront = (card: any): string => {
-  if (!card) return "Question";
-  // Format 1: direct string (from RPC)
-  if (typeof card.front === 'string') return card.front;
-  // Format 2: object with text property
-  if (typeof card.front === 'object' && card.front?.text) return card.front.text;
-  // Format 3: front_content as string
-  if (typeof card.front_content === 'string') return card.front_content;
-  // Format 4: front_content as object with text
-  if (typeof card.front_content === 'object' && card.front_content?.text) return card.front_content.text;
-  // Format 5: prompt field (raw content_body structure)
-  if (typeof card.prompt === 'string') return card.prompt;
-  return "Question";
+// =============================================================================
+// Icon Mapping
+// =============================================================================
+
+const ICON_MAP: Record<string, IconDefinition> = {
+  calculator: faCalculator,
+  book: faBook,
+  flask: faFlask,
+  atom: faAtom,
+  globe: faGlobe,
+  landmark: faLandmark,
+  dna: faDna,
+  plus: faLightbulb, // placeholder
+  minus: faLightbulb,
+  circle: faLightbulb,
 };
 
-// Safe extraction of back content - handles multiple formats
-const getBack = (card: any): string => {
-  if (!card) return "No answer provided";
-  // Format 1: direct string (from RPC)
-  if (typeof card.back === 'string') return card.back;
-  // Format 2: object with text property
-  if (typeof card.back === 'object' && card.back?.text) return card.back.text;
-  // Format 3: back_content as string
-  if (typeof card.back_content === 'string') return card.back_content;
-  // Format 4: back_content as object with text
-  if (typeof card.back_content === 'object' && card.back_content?.text) return card.back_content.text;
-  // Format 5: answer field (raw content_body structure)
-  if (typeof card.answer === 'string') return card.answer;
-  return "No answer provided";
-};
+function getIconFromName(iconName?: string): IconDefinition {
+  if (!iconName) return faBookOpen;
+  return ICON_MAP[iconName.toLowerCase()] || faBookOpen;
+}
 
-// Safe extraction of worked example step content - handles multiple formats
-const getStepContent = (step: any): string => {
-  if (!step) return "";
-  // Format 1: direct string
-  if (typeof step === 'string') return step;
-  // Format 2: object with content property (our seeded format)
-  if (typeof step === 'object' && typeof step.content === 'string') return step.content;
-  // Format 3: object with text property
-  if (typeof step === 'object' && typeof step.text === 'string') return step.text;
-  // Format 4: object with description property
-  if (typeof step === 'object' && typeof step.description === 'string') return step.description;
-  return String(step);
-};
+// =============================================================================
+// Sub-components
+// =============================================================================
 
-export default function ReinforceStep({
-  payload,
-  saving,
-  onNext,
-}: ReinforceStepProps) {
-  const reinforce = payload?.reinforce ?? {};
-  const cards = Array.isArray(reinforce.cards) ? reinforce.cards : [];
-  const workedExample = reinforce.worked_example;
-
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [showWorkedExample, setShowWorkedExample] = useState(false);
-
-  const currentCard = cards[currentCardIndex] ?? null;
-  const hasCards = cards.length > 0;
-
-  const handleNextCard = () => {
-    if (currentCardIndex < cards.length - 1) {
-      setCurrentCardIndex((i) => i + 1);
-      setShowAnswer(false);
-    } else {
-      setShowWorkedExample(true);
-    }
-  };
-
-  const handlePrevCard = () => {
-    if (currentCardIndex > 0) {
-      setCurrentCardIndex((i) => i - 1);
-      setShowAnswer(false);
-    }
-  };
-
+function KeyPointCard({ keyPoint }: { keyPoint: SlideKeyPoint }) {
   return (
-    <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-8 py-6 border-b border-gray-200">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center">
-            <svg className="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Reinforcing concepts</h2>
-            <p className="text-sm text-gray-600">Review these key ideas</p>
-          </div>
-          {hasCards && !showWorkedExample && (
-            <div className="ml-auto text-right">
-              <div className="text-sm font-medium text-gray-900">Card {currentCardIndex + 1} of {cards.length}</div>
+    <div className="bg-primary-50 border-l-4 border-primary-600 rounded-r-xl p-6 mb-8">
+      <div className="flex items-start space-x-3">
+        <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+          <FontAwesomeIcon icon={faLightbulb} className="text-white text-sm" />
+        </div>
+        <div>
+          <h3 className="font-bold text-primary-900 mb-2">{keyPoint.title}</h3>
+          <p className="text-neutral-700" dangerouslySetInnerHTML={{ __html: keyPoint.text }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExampleCard({ example }: { example: SlideExample }) {
+  return (
+    <div className="bg-accent-green/5 border border-accent-green/20 rounded-xl p-6">
+      <div className="flex items-start space-x-3">
+        <div className="w-8 h-8 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+          <FontAwesomeIcon icon={faCheck} className="text-white text-sm" />
+        </div>
+        <div>
+          <h3 className="font-bold text-neutral-900 mb-2">{example.title}</h3>
+          <p className="text-neutral-700 mb-3">{example.description}</p>
+          {example.data && (
+            <div className="flex items-center space-x-6 text-sm">
+              {Object.entries(example.data).map(([key, value]) => (
+                <div key={key} className="flex items-center space-x-2">
+                  <span className="text-neutral-600">{key}:</span>
+                  <span className="font-bold text-neutral-900">{value}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Content */}
-      <div className="p-8">
-        {/* Flashcards */}
-        {hasCards && !showWorkedExample ? (
-          <div>
-            <div className="min-h-[400px] p-12 bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 rounded-3xl flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 rounded-2xl bg-white shadow-lg flex items-center justify-center mb-8">
-                <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
+function GridItemCard({ item }: { item: SlideGridItem }) {
+  const bgColorMap: Record<string, string> = {
+    red: "bg-accent-red/10",
+    green: "bg-accent-green/10",
+    amber: "bg-accent-amber/10",
+    primary: "bg-primary-100",
+    neutral: "bg-neutral-200",
+  };
+  const textColorMap: Record<string, string> = {
+    red: "text-accent-red",
+    green: "text-accent-green",
+    amber: "text-accent-amber",
+    primary: "text-primary-600",
+    neutral: "text-neutral-600",
+  };
 
-              {!showAnswer ? (
-                <div className="max-w-2xl">
-                  <h3 className="text-3xl font-bold text-gray-900 mb-8">
-                    {getFront(currentCard)}
-                  </h3>
-                  <p className="text-gray-600 mb-8">Think about what you learned...</p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAnswer(true)}
-                    className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-lg hover:bg-indigo-700 transition-colors shadow-lg"
-                  >
-                    Show answer
-                  </button>
-                </div>
-              ) : (
-                <div className="max-w-2xl w-full">
-                  <div className="bg-white rounded-2xl p-8 shadow-lg">
-                    <p className="text-lg text-gray-900 leading-relaxed">
-                      {getBack(currentCard)}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
+  const bgColor = bgColorMap[item.iconColor || "primary"] || "bg-primary-100";
+  const textColor = textColorMap[item.iconColor || "primary"] || "text-primary-600";
 
-            {/* Card Navigation */}
-            <div className="mt-8 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={handlePrevCard}
-                disabled={currentCardIndex === 0}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Previous
-              </button>
+  return (
+    <div className="bg-white border-2 border-neutral-200 rounded-xl p-4 text-center">
+      <div className={`w-12 h-12 ${bgColor} rounded-full flex items-center justify-center mx-auto mb-3`}>
+        {item.icon && (
+          <FontAwesomeIcon icon={getIconFromName(item.icon)} className={`${textColor} text-xl`} />
+        )}
+      </div>
+      <h4 className="font-bold text-neutral-900 mb-1">{item.title}</h4>
+      <p className="text-sm text-neutral-600">{item.subtitle}</p>
+      {item.detail && <p className="text-xs text-neutral-500 mt-2">{item.detail}</p>}
+    </div>
+  );
+}
 
-              <div className="flex gap-1.5">
-                {cards.map((_: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className={`w-2 h-2 rounded-full transition-colors ${
-                      idx === currentCardIndex
-                        ? "bg-indigo-600"
-                        : idx < currentCardIndex
-                        ? "bg-green-500"
-                        : "bg-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
+function MisconceptionSlide({ slide }: { slide: LearningSlide }) {
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Section header */}
+      <div className="flex items-center space-x-2 mb-6">
+        <div className="w-8 h-8 bg-accent-amber/20 rounded-full flex items-center justify-center">
+          <FontAwesomeIcon icon={faExclamation} className="text-accent-amber text-sm" />
+        </div>
+        <span className="text-sm font-semibold text-accent-amber uppercase tracking-wide">
+          Common Misconception
+        </span>
+      </div>
 
-              <button
-                type="button"
-                onClick={handleNextCard}
-                disabled={!showAnswer}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {currentCardIndex < cards.length - 1 ? "Next card" : workedExample ? "See example" : "Continue"}
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+      <h2 className="text-4xl font-bold text-primary-900 mb-6 leading-tight">{slide.heading}</h2>
+
+      {/* The Wrong Way */}
+      <div className="bg-accent-amber/5 border-2 border-accent-amber/30 rounded-2xl p-8 mb-8">
+        <div className="flex items-start space-x-4 mb-6">
+          <div className="w-12 h-12 bg-accent-red/10 rounded-full flex items-center justify-center flex-shrink-0">
+            <span className="text-accent-red text-xl font-bold">✗</span>
           </div>
-        ) : showWorkedExample && workedExample ? (
           <div>
-            <div className="mb-6 flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center">
-                <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">Worked example</h3>
-                <p className="text-sm text-gray-600">Follow along step by step</p>
-              </div>
-              <div className="ml-auto text-sm text-gray-600">Step 3 of 4</div>
-            </div>
-
-            <div className="p-8 bg-blue-50 border border-blue-200 rounded-2xl">
-              {workedExample.title && (
-                <h4 className="text-xl font-semibold text-blue-900 mb-6">{workedExample.title}</h4>
-              )}
-
-              {Array.isArray(workedExample.steps) && workedExample.steps.length > 0 && (
-                <div className="space-y-4 mb-6">
-                  {workedExample.steps.map((step: any, idx: number) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-600 text-white text-sm flex items-center justify-center font-semibold">
-                        {idx + 1}
-                      </div>
-                      <p className="text-gray-800 pt-1 leading-relaxed">{getStepContent(step)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {workedExample.final_answer && (
-                <div className="mt-6 pt-6 border-t border-blue-300">
-                  <p className="text-sm font-semibold text-blue-900 mb-2">Final Answer:</p>
-                  <p className="text-lg text-gray-900">{workedExample.final_answer}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={async () => await onNext()}
-                disabled={saving}
-                className="w-full px-8 py-4 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold text-lg disabled:opacity-50 transition-colors shadow-lg"
-              >
-                {saving ? "Saving..." : "Continue to Practice"}
-              </button>
-            </div>
+            <h3 className="text-xl font-bold text-neutral-900 mb-3">The Misconception</h3>
+            <p className="text-lg text-neutral-700">{slide.misconceptionWrong}</p>
           </div>
-        ) : (
-          <div className="p-8 bg-gray-50 border border-gray-200 rounded-2xl">
-            <p className="text-gray-600">No reinforcement content available for this session.</p>
-            <button
-              type="button"
-              onClick={async () => await onNext()}
-              disabled={saving}
-              className="mt-4 px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold disabled:opacity-50 transition-colors"
-            >
-              {saving ? "Saving..." : "Continue"}
-            </button>
+        </div>
+        {slide.imageUrl && (
+          <div className="flex items-center justify-center my-6">
+            <img
+              src={slide.imageUrl}
+              alt={slide.imageAlt || "Misconception illustration"}
+              className="w-full max-w-sm h-auto object-contain"
+            />
           </div>
         )}
       </div>
+
+      {/* The Correct Way */}
+      <div className="bg-accent-green/5 border-2 border-accent-green/30 rounded-2xl p-8 mb-8">
+        <div className="flex items-start space-x-4 mb-6">
+          <div className="w-12 h-12 bg-accent-green/20 rounded-full flex items-center justify-center flex-shrink-0">
+            <FontAwesomeIcon icon={faCheck} className="text-accent-green text-xl" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-neutral-900 mb-3">The Reality</h3>
+            <p className="text-lg text-neutral-700" dangerouslySetInnerHTML={{ __html: slide.misconceptionCorrect || "" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Why it matters */}
+      {slide.keyPoint && (
+        <div className="bg-white border-2 border-neutral-200 rounded-2xl p-8">
+          <h3 className="text-xl font-bold text-primary-900 mb-4">{slide.keyPoint.title}</h3>
+          <div className="space-y-4" dangerouslySetInnerHTML={{ __html: slide.keyPoint.text }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandardSlide({ slide }: { slide: LearningSlide }) {
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Section header */}
+      <div className="flex items-center space-x-2 mb-6">
+        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+          <span className="text-primary-700 font-bold text-sm">{slide.slideNumber}</span>
+        </div>
+        <span className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">
+          {slide.sectionTitle}
+        </span>
+      </div>
+
+      {/* Main heading */}
+      <h2 className="text-4xl font-bold text-primary-900 mb-6 leading-tight">{slide.heading}</h2>
+
+      {/* Body content */}
+      <div className="bg-neutral-50 rounded-2xl p-8 mb-8">
+        <p
+          className="text-xl text-neutral-700 leading-relaxed mb-6"
+          dangerouslySetInnerHTML={{ __html: slide.bodyText }}
+        />
+        {slide.imageUrl && (
+          <div className="flex items-center justify-center my-8">
+            <img
+              src={slide.imageUrl}
+              alt={slide.imageAlt || "Educational illustration"}
+              className="w-full max-w-md h-auto object-contain"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Key Point */}
+      {slide.keyPoint && <KeyPointCard keyPoint={slide.keyPoint} />}
+
+      {/* Grid Items (e.g., Protons, Neutrons, Electrons) */}
+      {slide.gridItems && slide.gridItems.length > 0 && (
+        <div className={`grid grid-cols-${Math.min(slide.gridItems.length, 3)} gap-4 mb-8`}>
+          {slide.gridItems.map((item, idx) => (
+            <GridItemCard key={idx} item={item} />
+          ))}
+        </div>
+      )}
+
+      {/* Example */}
+      {slide.example && <ExampleCard example={slide.example} />}
+    </div>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
+export default function ReinforceStep({
+  overview,
+  payload,
+  saving,
+  onPatch,
+  onNext,
+  onExit,
+}: ReinforceStepProps) {
+  // Extract slides from payload
+  const slides: LearningSlide[] = payload?.reinforce?.slides ?? [];
+  const totalSlides = payload?.reinforce?.total_slides ?? slides.length;
+
+  // State
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [viewedSlides, setViewedSlides] = useState<Set<number>>(new Set([0]));
+
+  // Derived
+  const currentSlide = slides[currentSlideIndex] ?? null;
+  const isFirstSlide = currentSlideIndex === 0;
+  const isLastSlide = currentSlideIndex >= slides.length - 1;
+  const progressPercent = ((overview.step_index) / overview.total_steps) * 100;
+
+  // Handlers
+  function handlePrevious() {
+    if (!isFirstSlide) {
+      setCurrentSlideIndex((prev) => prev - 1);
+    }
+  }
+
+  function handleNext() {
+    if (!isLastSlide) {
+      const nextIndex = currentSlideIndex + 1;
+      setCurrentSlideIndex(nextIndex);
+      setViewedSlides((prev) => new Set([...prev, nextIndex]));
+    }
+  }
+
+  async function handleFinishSlides() {
+    // Save completion data
+    await onPatch({
+      reinforce: {
+        slides_viewed: viewedSlides.size,
+        total_slides: totalSlides,
+        completed_at: new Date().toISOString(),
+      },
+    });
+    await onNext();
+  }
+
+  // Empty state
+  if (slides.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-card p-8 text-center">
+        <p className="text-neutral-600 mb-4">No learning content available for this topic.</p>
+        <button
+          type="button"
+          onClick={onNext}
+          className="px-8 py-3 rounded-xl bg-primary-600 text-white font-semibold hover:bg-primary-700 transition"
+        >
+          Continue to Practice
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ================================================================== */}
+      {/* Session Progress Section */}
+      {/* ================================================================== */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium text-neutral-600">Session Progress</span>
+          <span className="text-sm font-bold text-primary-900">
+            {overview.step_index} / {overview.total_steps} steps
+          </span>
+        </div>
+        <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-primary-600 h-full rounded-full transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        {/* Step indicators */}
+        <div className="flex items-center justify-between mt-2">
+          {["Preview", "Recall", "Core Teaching", "Practice", "Summary", "Reflection", "Complete"].map(
+            (stepName, idx) => {
+              const stepNum = idx + 1;
+              let dotColor = "bg-neutral-300";
+              let textColor = "text-neutral-400";
+
+              if (stepNum < overview.step_index) {
+                dotColor = "bg-accent-green";
+                textColor = "text-neutral-500";
+              } else if (stepNum === overview.step_index) {
+                dotColor = "bg-primary-600";
+                textColor = "text-primary-900 font-semibold";
+              }
+
+              return (
+                <div key={stepName} className="flex items-center space-x-1">
+                  <div className={`w-2 h-2 ${dotColor} rounded-full`} />
+                  <span className={`text-xs ${textColor}`}>{stepName}</span>
+                </div>
+              );
+            }
+          )}
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* Learning Slide Container */}
+      {/* ================================================================== */}
+      <section className="mb-8">
+        <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+          <div className="p-12">
+            {currentSlide?.isMisconception ? (
+              <MisconceptionSlide slide={currentSlide} />
+            ) : currentSlide ? (
+              <StandardSlide slide={currentSlide} />
+            ) : null}
+          </div>
+        </div>
+
+        {/* Slide Navigation */}
+        <div className="flex items-center justify-between mt-6">
+          <button
+            type="button"
+            onClick={handlePrevious}
+            disabled={isFirstSlide}
+            className="flex items-center space-x-2 px-6 py-3 bg-white border-2 border-neutral-200 rounded-xl font-semibold text-neutral-700 hover:bg-neutral-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} />
+            <span>Previous</span>
+          </button>
+
+          {/* Dot indicators */}
+          <div className="flex items-center space-x-2">
+            {slides.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setCurrentSlideIndex(idx);
+                  setViewedSlides((prev) => new Set([...prev, idx]));
+                }}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  idx === currentSlideIndex ? "bg-primary-600" : "bg-neutral-300"
+                }`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={isLastSlide ? handleFinishSlides : handleNext}
+            disabled={saving}
+            className="flex items-center space-x-2 px-6 py-3 bg-primary-600 rounded-xl font-semibold text-white hover:bg-primary-700 transition disabled:opacity-50"
+          >
+            <span>{isLastSlide ? "Finish" : "Next"}</span>
+            <FontAwesomeIcon icon={isLastSlide ? faCheck : faArrowRight} />
+          </button>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* StudyBuddy Suggestion Section */}
+      {/* ================================================================== */}
+      <section className="mb-8">
+        <div className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-2xl p-6">
+          <div className="flex items-start space-x-4">
+            <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <FontAwesomeIcon icon={faRobot} className="text-white text-xl" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-primary-900 mb-2">Need help understanding?</h3>
+              <p className="text-neutral-700 mb-4">
+                StudyBuddy can explain this concept in a different way or answer any questions you have.
+              </p>
+              <button
+                type="button"
+                className="flex items-center space-x-2 px-4 py-2 bg-white border-2 border-primary-200 rounded-xl font-semibold text-primary-700 hover:bg-primary-50 transition"
+              >
+                <FontAwesomeIcon icon={faCommentDots} />
+                <span>Explain differently</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
