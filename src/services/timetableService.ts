@@ -770,68 +770,89 @@ export async function saveWeeklyTemplate(
 export async function saveTemplateAndRegenerate(
   childId: string,
   template: DayTemplate[]
-): Promise<{ success: boolean; sessionsCreated: number; error: string | null }> {
+): Promise<{ success: boolean; sessionsCreated: number; error: string | null; warning: string | null }> {
+  let warning: string | null = null;
+  
   try {
-    // 1. Save the template
+    // 1. Save the template - this is the critical part
     const saveResult = await saveWeeklyTemplate(childId, template);
     if (!saveResult.success) {
-      return { success: false, sessionsCreated: 0, error: saveResult.error };
+      return { success: false, sessionsCreated: 0, error: saveResult.error, warning: null };
     }
 
-    // 2. Sync to legacy revision_schedules
-    const { error: syncError } = await supabase.rpc(
-      "rpc_set_revision_schedules_from_weekly_template",
-      { p_child_id: childId }
-    );
-    if (syncError) {
-      console.error("Error syncing to revision_schedules:", syncError);
-      // Continue anyway - not critical
+    // 2. Sync to legacy revision_schedules (optional - don't fail if this errors)
+    try {
+      const { error: syncError } = await supabase.rpc(
+        "rpc_set_revision_schedules_from_weekly_template",
+        { p_child_id: childId }
+      );
+      if (syncError) {
+        console.warn("Warning: Could not sync to revision_schedules:", syncError);
+        warning = "Schedule saved but legacy sync failed";
+      }
+    } catch (syncErr) {
+      console.warn("Warning: Exception syncing to revision_schedules:", syncErr);
     }
 
     // 3. Delete future planned sessions (not started/completed)
     const today = new Date().toISOString().split("T")[0];
-    const { error: deleteError } = await supabase
-      .from("planned_sessions")
-      .delete()
-      .eq("child_id", childId)
-      .eq("status", "planned")
-      .gte("session_date", today);
+    try {
+      const { error: deleteError } = await supabase
+        .from("planned_sessions")
+        .delete()
+        .eq("child_id", childId)
+        .eq("status", "planned")
+        .gte("session_date", today);
 
-    if (deleteError) {
-      console.error("Error deleting future sessions:", deleteError);
-      throw deleteError;
+      if (deleteError) {
+        console.warn("Warning: Could not delete future sessions:", deleteError);
+        warning = "Schedule saved but could not clear future sessions";
+      }
+    } catch (delErr) {
+      console.warn("Warning: Exception deleting future sessions:", delErr);
     }
 
-    // 4. Regenerate sessions
-    const { data: regenData, error: regenError } = await supabase.rpc(
-      "generate_revision_plan_14_days",
-      { p_child_id: childId }
-    );
+    // 4. Regenerate sessions (optional - don't fail if this errors)
+    let sessionsCreated = 0;
+    try {
+      const { data: regenData, error: regenError } = await supabase.rpc(
+        "generate_revision_plan_14_days",
+        { p_child_id: childId }
+      );
 
-    if (regenError) {
-      console.error("Error regenerating sessions:", regenError);
-      throw regenError;
+      if (regenError) {
+        console.warn("Warning: Could not regenerate sessions:", regenError);
+        warning = "Schedule saved but session regeneration failed. Sessions may need manual refresh.";
+      } else {
+        // Count new sessions
+        const { count } = await supabase
+          .from("planned_sessions")
+          .select("*", { count: "exact", head: true })
+          .eq("child_id", childId)
+          .eq("status", "planned")
+          .gte("session_date", today);
+        
+        sessionsCreated = count || 0;
+      }
+    } catch (regenErr) {
+      console.warn("Warning: Exception regenerating sessions:", regenErr);
+      warning = "Schedule saved but session regeneration failed.";
     }
 
-    // Count new sessions
-    const { count } = await supabase
-      .from("planned_sessions")
-      .select("*", { count: "exact", head: true })
-      .eq("child_id", childId)
-      .eq("status", "planned")
-      .gte("session_date", today);
-
+    // Template was saved successfully - return success even if regeneration had issues
     return { 
       success: true, 
-      sessionsCreated: count || 0, 
-      error: null 
+      sessionsCreated, 
+      error: null,
+      warning 
     };
   } catch (err: any) {
     console.error("Error in saveTemplateAndRegenerate:", err);
     return { 
       success: false, 
       sessionsCreated: 0, 
-      error: err.message || "Failed to save and regenerate" 
+      error: err.message || "Failed to save schedule",
+      warning: null 
     };
   }
 }
