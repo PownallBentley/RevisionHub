@@ -32,18 +32,52 @@ export default function TimetableHeroCard({
 }: TimetableHeroCardProps) {
   const [activeTab, setActiveTab] = useState<ViewTab>("sessions");
 
-  // Traffic light status
+  // Use weekStats as primary data source, feasibility for overall plan status
+  const totalPlanned = weekStats.totalSessions;
+  const completed = weekStats.completedSessions;
+  const remaining = weekStats.plannedSessions; // Sessions not yet completed
+  const totalMinutes = weekStats.totalMinutes;
+
+  // For coverage, use feasibility if available, otherwise derive from weekStats
+  const recommended = feasibility?.recommendedSessions || 0;
+  const plannedOverall = feasibility?.plannedSessions || totalPlanned;
+  const shortfall = feasibility?.shortfall || Math.max(0, recommended - plannedOverall);
+  const surplus = feasibility?.surplus || Math.max(0, plannedOverall - recommended);
+
+  // Determine status based on actual data
   const getStatusConfig = () => {
-    if (!feasibility) {
+    // If we have no data at all, show unknown
+    if (!feasibility && totalPlanned === 0) {
       return {
         color: "bg-neutral-400",
         textColor: "text-neutral-600",
         icon: faExclamationTriangle,
-        label: "Unknown",
-        description: "Unable to calculate coverage",
+        label: "No Data",
+        description: "No sessions scheduled yet",
       };
     }
 
+    // If we have sessions but no feasibility data, show based on what we have
+    if (!feasibility) {
+      if (totalPlanned > 0) {
+        return {
+          color: "bg-accent-green",
+          textColor: "text-accent-green",
+          icon: faCheckCircle,
+          label: "Active",
+          description: `${totalPlanned} sessions this week`,
+        };
+      }
+      return {
+        color: "bg-accent-amber",
+        textColor: "text-accent-amber",
+        icon: faExclamationTriangle,
+        label: "Setup Needed",
+        description: "Create a revision plan to get started",
+      };
+    }
+
+    // Use feasibility status
     switch (feasibility.status) {
       case "good":
         return {
@@ -51,7 +85,7 @@ export default function TimetableHeroCard({
           textColor: "text-accent-green",
           icon: faCheckCircle,
           label: "Good Coverage",
-          description: `${feasibility.plannedSessions} sessions planned — you're on track!`,
+          description: `${plannedOverall} sessions planned — you're on track!`,
         };
       case "marginal":
         return {
@@ -59,7 +93,7 @@ export default function TimetableHeroCard({
           textColor: "text-accent-amber",
           icon: faExclamationTriangle,
           label: "Marginal",
-          description: `${feasibility.plannedSessions} of ${feasibility.withContingency} sessions — consider adding more`,
+          description: `${plannedOverall} of ${feasibility.withContingency} sessions — consider adding more`,
         };
       case "insufficient":
         return {
@@ -67,7 +101,9 @@ export default function TimetableHeroCard({
           textColor: "text-accent-red",
           icon: faTimesCircle,
           label: "Needs Attention",
-          description: `${feasibility.shortfall} more sessions needed to meet target`,
+          description: shortfall > 0 
+            ? `${shortfall} more sessions needed to meet target`
+            : "Review your revision plan",
         };
     }
   };
@@ -82,19 +118,19 @@ export default function TimetableHeroCard({
           <div className="grid grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-3xl font-bold text-primary-600">
-                {feasibility?.plannedSessions || weekStats.totalSessions}
+                {totalPlanned}
               </div>
-              <div className="text-sm text-neutral-500">Total Planned</div>
+              <div className="text-sm text-neutral-500">This Week</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-accent-green">
-                {weekStats.completedSessions}
+                {completed}
               </div>
               <div className="text-sm text-neutral-500">Completed</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-neutral-600">
-                {weekStats.plannedSessions}
+                {remaining}
               </div>
               <div className="text-sm text-neutral-500">Remaining</div>
             </div>
@@ -106,53 +142,61 @@ export default function TimetableHeroCard({
           <div className="grid grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-3xl font-bold text-primary-600">
-                {feasibility?.recommendedSessions || 0}
+                {recommended > 0 ? recommended : "—"}
               </div>
               <div className="text-sm text-neutral-500">Recommended</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-primary-600">
-                {feasibility?.plannedSessions || 0}
+                {plannedOverall}
               </div>
               <div className="text-sm text-neutral-500">Planned</div>
             </div>
             <div className="text-center">
               <div className={`text-3xl font-bold ${
-                (feasibility?.surplus || 0) > 0 ? "text-accent-green" : "text-accent-red"
+                surplus > 0 ? "text-accent-green" : shortfall > 0 ? "text-accent-red" : "text-neutral-400"
               }`}>
-                {(feasibility?.surplus || 0) > 0 
-                  ? `+${feasibility?.surplus}` 
-                  : `-${feasibility?.shortfall || 0}`}
+                {surplus > 0 
+                  ? `+${surplus}` 
+                  : shortfall > 0 
+                    ? `-${shortfall}` 
+                    : "—"}
               </div>
               <div className="text-sm text-neutral-500">
-                {(feasibility?.surplus || 0) > 0 ? "Surplus" : "Shortfall"}
+                {surplus > 0 ? "Surplus" : shortfall > 0 ? "Shortfall" : "Difference"}
               </div>
             </div>
           </div>
         );
 
       case "time":
-        const totalHours = Math.floor(weekStats.totalMinutes / 60);
-        const remainingMins = weekStats.totalMinutes % 60;
+        // Calculate time stats from actual data
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        const avgSessionMins = totalPlanned > 0 ? Math.round(totalMinutes / totalPlanned) : 0;
+        const avgPerDay = Math.round(totalMinutes / 7);
+        
         return (
           <div className="grid grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-3xl font-bold text-primary-600">
-                {totalHours > 0 ? `${totalHours}h ${remainingMins}m` : `${weekStats.totalMinutes}m`}
+                {totalMinutes === 0 
+                  ? "—" 
+                  : hours > 0 
+                    ? `${hours}h ${mins > 0 ? `${mins}m` : ""}` 
+                    : `${totalMinutes}m`}
               </div>
               <div className="text-sm text-neutral-500">This Week</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-neutral-600">
-                {weekStats.totalSessions > 0 
-                  ? Math.round(weekStats.totalMinutes / weekStats.totalSessions)
-                  : 0}m
+                {avgSessionMins > 0 ? `${avgSessionMins}m` : "—"}
               </div>
               <div className="text-sm text-neutral-500">Avg Session</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-neutral-600">
-                {Math.round(weekStats.totalMinutes / 7)}m
+                {avgPerDay > 0 ? `${avgPerDay}m` : "—"}
               </div>
               <div className="text-sm text-neutral-500">Per Day</div>
             </div>
