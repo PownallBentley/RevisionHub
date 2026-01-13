@@ -851,6 +851,23 @@ export async function saveTemplateAndRegenerate(
       
       console.log("[saveTemplateAndRegenerate] Exam timeline:", examTimeline, "periodData:", periodData);
 
+      // IMPORTANT: Supersede any existing active plans first
+      // The generate_revision_plan_14_days RPC creates a new 'active' plan,
+      // which violates uq_one_active_plan_per_child if one already exists
+      console.log("[saveTemplateAndRegenerate] Superseding existing active plans...");
+      const { data: supersededData, error: supersedError } = await supabase
+        .from("revision_plans")
+        .update({ status: "superseded" })
+        .eq("child_id", childId)
+        .eq("status", "active")
+        .select("id");
+      
+      if (supersedError) {
+        console.warn("[saveTemplateAndRegenerate] Supersede warning:", supersedError);
+      } else {
+        console.log("[saveTemplateAndRegenerate] Superseded plans:", supersededData?.length || 0);
+      }
+
       const { data: regenData, error: regenError } = await supabase.rpc(
         "generate_revision_plan_14_days",
         { 
