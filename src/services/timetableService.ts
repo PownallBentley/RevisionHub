@@ -56,6 +56,48 @@ export interface FeasibilityStatus {
   surplus: number;
 }
 
+export interface SubjectCoverage {
+  subject_id: string;
+  subject_name: string;
+  color: string;
+  icon: string;
+  topic_count: number;
+  planned_sessions: number;
+  completed_sessions: number;
+  recommended_sessions: number;
+  coverage_percent: number;
+  shortfall: number;
+  surplus: number;
+  status: "on_track" | "marginal" | "behind";
+}
+
+export interface PlanCoverageOverview {
+  child_id: string;
+  revision_period: {
+    start_date: string;
+    end_date: string;
+    days_remaining: number;
+    weeks_remaining: number;
+    contingency_percent: number;
+  } | null;
+  totals: {
+    planned_sessions: number;
+    completed_sessions: number;
+    remaining_sessions: number;
+    total_minutes: number;
+    total_hours: number;
+    recommended_sessions: number;
+    with_contingency: number;
+  };
+  subjects: SubjectCoverage[];
+  status: "good" | "marginal" | "insufficient";
+  recommendations: {
+    total_shortfall: number;
+    priority_subjects: Array<{ subject: string; sessions_needed: number }>;
+    sessions_per_week_needed: number;
+  };
+}
+
 export interface ChildSubjectOption {
   subject_id: string;
   subject_name: string;
@@ -282,6 +324,23 @@ export async function fetchTodaySessions(
 // ============================================================================
 // Feasibility & Recommendations
 // ============================================================================
+
+export async function fetchPlanCoverageOverview(
+  childId: string
+): Promise<{ data: PlanCoverageOverview | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc("rpc_get_plan_coverage_overview", {
+      p_child_id: childId,
+    });
+
+    if (error) throw error;
+
+    return { data: data as PlanCoverageOverview, error: null };
+  } catch (err: any) {
+    console.error("Error fetching plan coverage:", err);
+    return { data: null, error: err.message || "Failed to fetch plan coverage" };
+  }
+}
 
 export async function fetchFeasibilityStatus(
   childId: string
