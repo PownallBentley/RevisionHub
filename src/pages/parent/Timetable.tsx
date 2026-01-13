@@ -20,7 +20,7 @@ import {
   fetchWeekPlan,
   fetchMonthSessions,
   fetchTodaySessions,
-  fetchFeasibilityStatus,
+  fetchPlanCoverageOverview,
   fetchDateOverrides,
   extractSubjectLegend,
   getWeekStart,
@@ -32,7 +32,7 @@ import {
   type TimetableSession,
   type ChildOption,
   type SubjectLegend,
-  type FeasibilityStatus,
+  type PlanCoverageOverview,
   type DateOverride,
 } from "../../services/timetableService";
 
@@ -56,7 +56,8 @@ export default function Timetable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subjectLegend, setSubjectLegend] = useState<SubjectLegend[]>([]);
-  const [feasibility, setFeasibility] = useState<FeasibilityStatus | null>(null);
+  const [planOverview, setPlanOverview] = useState<PlanCoverageOverview | null>(null);
+  const [planOverviewLoading, setPlanOverviewLoading] = useState(true);
   const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
 
   // Modal state
@@ -106,13 +107,15 @@ export default function Timetable() {
     loadChildren();
   }, [user, searchParams]);
 
-  // Load feasibility when child changes
+  // Load plan overview when child changes
   useEffect(() => {
     if (!selectedChildId) return;
 
-    async function loadFeasibility() {
-      const { data } = await fetchFeasibilityStatus(selectedChildId!);
-      setFeasibility(data);
+    async function loadPlanOverview() {
+      setPlanOverviewLoading(true);
+      const { data } = await fetchPlanCoverageOverview(selectedChildId!);
+      setPlanOverview(data);
+      setPlanOverviewLoading(false);
     }
 
     async function loadOverrides() {
@@ -120,7 +123,7 @@ export default function Timetable() {
       setDateOverrides(data || []);
     }
 
-    loadFeasibility();
+    loadPlanOverview();
     loadOverrides();
   }, [selectedChildId]);
 
@@ -251,18 +254,24 @@ export default function Timetable() {
 
   // Handlers
   const handleSessionAdded = () => {
-    // Refresh data
+    // Refresh calendar data
     setReferenceDate(new Date(referenceDate)); // Trigger reload
+    // Refresh plan overview
+    if (selectedChildId) {
+      fetchPlanCoverageOverview(selectedChildId).then(({ data }) => {
+        setPlanOverview(data);
+      });
+    }
   };
 
   const handleDatesChanged = () => {
-    // Refresh overrides and sessions
+    // Refresh overrides and plan overview
     if (selectedChildId) {
       fetchDateOverrides(selectedChildId).then(({ data }) => {
         setDateOverrides(data || []);
       });
-      fetchFeasibilityStatus(selectedChildId).then(({ data }) => {
-        setFeasibility(data);
+      fetchPlanCoverageOverview(selectedChildId).then(({ data }) => {
+        setPlanOverview(data);
       });
     }
   };
@@ -322,11 +331,10 @@ export default function Timetable() {
           </div>
         </div>
 
-        {/* Hero Card - Coverage Status */}
+        {/* Hero Card - Plan Overview */}
         <TimetableHeroCard
-          feasibility={feasibility}
-          weekStats={stats}
-          loading={loading}
+          planOverview={planOverview}
+          loading={planOverviewLoading}
         />
 
         {/* Action Cards */}
