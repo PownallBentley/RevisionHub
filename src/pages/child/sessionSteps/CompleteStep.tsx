@@ -31,7 +31,6 @@ import {
   faDna,
   faBook,
   faNoteSticky,
-  faStar,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -293,6 +292,7 @@ function AudioRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
   const [audioData, setAudioData] = useState<AudioNoteData>({
     blob: null,
     url: existingUrl,
@@ -311,6 +311,29 @@ function AudioRecorder({
       if (audioData.url && !existingUrl) URL.revokeObjectURL(audioData.url);
     };
   }, []);
+
+  // Track playback progress
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentPlaybackTime(Math.floor(audio.currentTime));
+    };
+
+    const handleEnded = () => {
+      setIsPreviewing(false);
+      setCurrentPlaybackTime(0);
+    };
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [audioData.url]);
 
   async function startRecording() {
     try {
@@ -379,9 +402,23 @@ function AudioRecorder({
       audioRef.current.pause();
       setIsPreviewing(false);
     } else {
+      audioRef.current.currentTime = 0;
+      setCurrentPlaybackTime(0);
       audioRef.current.play();
       setIsPreviewing(true);
     }
+  }
+
+  function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!audioRef.current || !audioData.durationSeconds) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newTime = percentage * audioData.durationSeconds;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentPlaybackTime(Math.floor(newTime));
   }
 
   function handleDelete() {
@@ -390,16 +427,27 @@ function AudioRecorder({
     }
     setAudioData({ blob: null, url: null, durationSeconds: 0 });
     setRecordingTime(0);
+    setCurrentPlaybackTime(0);
     onDelete();
   }
 
   function formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${String(secs).padStart(2, "0")}`;
   }
 
+  function formatFileSize(bytes: number | undefined): string {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   const hasRecording = audioData.url !== null;
+  const progressPercentage = audioData.durationSeconds > 0 
+    ? (currentPlaybackTime / audioData.durationSeconds) * 100 
+    : 0;
 
   return (
     <div className="p-6 bg-neutral-50 rounded-xl">
@@ -408,7 +456,6 @@ function AudioRecorder({
         <audio
           ref={audioRef}
           src={audioData.url}
-          onEnded={() => setIsPreviewing(false)}
         />
       )}
 
@@ -437,6 +484,15 @@ function AudioRecorder({
                 Recording... {formatTime(recordingTime)}
               </p>
               <p className="text-neutral-500 text-sm">Tap to stop (max 60s)</p>
+              {/* Recording progress bar */}
+              <div className="mt-4 w-full max-w-xs mx-auto">
+                <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-accent-red transition-all duration-1000 ease-linear"
+                    style={{ width: `${(recordingTime / 60) * 100}%` }}
+                  />
+                </div>
+              </div>
             </>
           ) : (
             <>
@@ -450,34 +506,59 @@ function AudioRecorder({
           )}
         </div>
       ) : (
-        // Playback UI
-        <div className="flex items-center space-x-4">
-          <button
-            type="button"
-            onClick={togglePreview}
-            className="w-14 h-14 rounded-full bg-primary-600 flex items-center justify-center hover:bg-primary-700 transition flex-shrink-0"
-          >
-            <FontAwesomeIcon
-              icon={isPreviewing ? faPause : faPlay}
-              className="text-white text-xl"
-            />
-          </button>
+        // Playback UI with progress bar
+        <div className="space-y-4">
+          <div className="flex items-center space-x-4">
+            <button
+              type="button"
+              onClick={togglePreview}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition flex-shrink-0 ${
+                isPreviewing 
+                  ? "bg-primary-700" 
+                  : "bg-primary-600 hover:bg-primary-700"
+              }`}
+            >
+              <FontAwesomeIcon
+                icon={isPreviewing ? faPause : faPlay}
+                className="text-white text-xl"
+              />
+            </button>
 
-          <div className="flex-1">
-            <p className="font-semibold text-neutral-700 mb-1">Voice note recorded</p>
-            <p className="text-neutral-500 text-sm">
-              Duration: {formatTime(audioData.durationSeconds)}
-            </p>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-neutral-700 mb-1">Voice note recorded</p>
+              <div className="flex items-center gap-2 text-sm text-neutral-500">
+                <span>{formatTime(currentPlaybackTime)} / {formatTime(audioData.durationSeconds)}</span>
+                {audioData.blob && (
+                  <>
+                    <span className="text-neutral-300">•</span>
+                    <span>{formatFileSize(audioData.blob.size)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={disabled}
+              className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center hover:bg-accent-red/10 hover:text-accent-red transition flex-shrink-0"
+            >
+              <FontAwesomeIcon icon={faTrash} className="text-neutral-600" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={disabled}
-            className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center hover:bg-accent-red/10 hover:text-accent-red transition"
+          {/* Progress bar */}
+          <div 
+            className="h-2 bg-neutral-200 rounded-full overflow-hidden cursor-pointer"
+            onClick={handleProgressClick}
           >
-            <FontAwesomeIcon icon={faTrash} className="text-neutral-600" />
-          </button>
+            <div 
+              className={`h-full bg-primary-600 transition-all ${
+                isPreviewing ? "duration-100" : "duration-0"
+              }`}
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
         </div>
       )}
     </div>
