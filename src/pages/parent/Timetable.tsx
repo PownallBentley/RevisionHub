@@ -15,6 +15,7 @@ import TimetableActionCards from "../../components/timetable/TimetableActionCard
 import TodayView from "../../components/timetable/TodayView";
 import AddSessionModal from "../../components/timetable/AddSessionModal";
 import BlockDatesModal from "../../components/timetable/BlockDatesModal";
+import EditScheduleModal from "../../components/timetable/EditScheduleModal";
 import {
   fetchChildrenForParent,
   fetchWeekPlan,
@@ -63,6 +64,7 @@ export default function Timetable() {
   // Modal state
   const [showAddSessionModal, setShowAddSessionModal] = useState(false);
   const [showBlockDatesModal, setShowBlockDatesModal] = useState(false);
+  const [showEditScheduleModal, setShowEditScheduleModal] = useState(false);
 
   // Get selected child name
   const selectedChildName =
@@ -277,8 +279,18 @@ export default function Timetable() {
   };
 
   const handleEditSchedule = () => {
-    // Navigate to onboarding availability step or dedicated page
-    navigate(`/parent/child/${selectedChildId}/schedule`);
+    setShowEditScheduleModal(true);
+  };
+
+  const handleScheduleUpdated = () => {
+    // Refresh calendar data
+    setReferenceDate(new Date(referenceDate));
+    // Refresh plan overview
+    if (selectedChildId) {
+      fetchPlanCoverageOverview(selectedChildId).then(({ data }) => {
+        setPlanOverview(data);
+      });
+    }
   };
 
   // Loading state
@@ -579,6 +591,14 @@ export default function Timetable() {
         childId={selectedChildId || ""}
         childName={selectedChildName}
         onDatesChanged={handleDatesChanged}
+      />
+
+      <EditScheduleModal
+        isOpen={showEditScheduleModal}
+        onClose={() => setShowEditScheduleModal(false)}
+        childId={selectedChildId || ""}
+        childName={selectedChildName}
+        onScheduleUpdated={handleScheduleUpdated}
       />
     </PageLayout>
   );
