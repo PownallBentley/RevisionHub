@@ -388,7 +388,7 @@ export default function SessionOverview() {
 
   // Start the session
   async function handleStartSession() {
-    if (!overview || !preConfidence) return;
+    if (!overview) return;
 
     setStarting(true);
 
@@ -413,22 +413,10 @@ export default function SessionOverview() {
         throw new Error("Couldn't start the session (no valid revision session id returned).");
       }
 
-      // 2) Save pre-confidence level
-      // Try the new RPC first, fall back to direct update
-      try {
-        await supabase.rpc("rpc_save_pre_confidence", {
-          p_revision_session_id: rIdStr,
-          p_pre_confidence: preConfidence,
-        });
-      } catch {
-        // Fallback: direct update if RPC doesn't exist yet
-        await supabase
-          .from("revision_sessions")
-          .update({ pre_confidence_level: preConfidence })
-          .eq("id", rIdStr);
-      }
+      // Pre-confidence is now captured in PreviewStep (step 1 of 6-step model)
+      // No need to save it here anymore
 
-      // 3) Navigate to session runner
+      // Navigate to session runner
       navigate(`/child/session/${overview.planned_session_id}/run`);
     } catch (e: any) {
       console.error("[SessionOverview] handleStartSession error:", e);
@@ -754,18 +742,12 @@ export default function SessionOverview() {
 
               <button
                 type="button"
-                disabled={!preConfidence || starting}
+                disabled={starting}
                 onClick={handleStartSession}
                 className="bg-primary-600 text-white font-bold px-12 py-4 rounded-xl hover:bg-primary-700 transition shadow-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {starting ? "Starting..." : preConfidence ? "Begin Session" : "Select your confidence level first"}
+                {starting ? "Starting..." : "Begin Session"}
               </button>
-
-              {!preConfidence && (
-                <p className="text-sm text-neutral-500 mt-3">
-                  Please select how confident you feel above to continue
-                </p>
-              )}
             </div>
           </div>
         </section>
