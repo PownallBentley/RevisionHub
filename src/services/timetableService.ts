@@ -600,3 +600,230 @@ export async function addSingleSession(params: {
     return { success: false, sessionId: null, error: err.message || "Failed to add session" };
   }
 }
+
+// ============================================================================
+// Weekly Schedule Template
+// ============================================================================
+
+export type TimeOfDay = "early_morning" | "morning" | "afternoon" | "evening";
+export type SessionPattern = "p20" | "p45" | "p70";
+
+export interface AvailabilitySlot {
+  time_of_day: TimeOfDay;
+  session_pattern: SessionPattern;
+}
+
+export interface DayTemplate {
+  day_of_week: number;
+  day_name: string;
+  is_enabled: boolean;
+  slots: AvailabilitySlot[];
+  session_count: number;
+}
+
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/**
+ * Fetch the weekly availability template for a child
+ */
+export async function fetchWeeklyTemplate(
+  childId: string
+): Promise<{ data: DayTemplate[] | null; error: string | null }> {
+  try {
+    // Fetch template rows
+    const { data: templateData, error: templateError } = await supabase
+      .from("weekly_availability_template")
+      .select("id, day_of_week, is_enabled")
+      .eq("child_id", childId)
+      .order("day_of_week");
+
+    if (templateError) throw templateError;
+
+    // If no template exists, return default empty template
+    if (!templateData || templateData.length === 0) {
+      const emptyTemplate: DayTemplate[] = DAY_NAMES.map((name, i) => ({
+        day_of_week: i,
+        day_name: name,
+        is_enabled: i < 5, // Weekdays enabled by default
+        slots: [],
+        session_count: 0,
+      }));
+      return { data: emptyTemplate, error: null };
+    }
+
+    // Fetch slots for all templates
+    const templateIds = templateData.map((t) => t.id);
+    const { data: slotsData, error: slotsError } = await supabase
+      .from("weekly_availability_slots")
+      .select("template_id, time_of_day, session_pattern")
+      .in("template_id", templateIds);
+
+    if (slotsError) throw slotsError;
+
+    // Build template structure
+    const template: DayTemplate[] = DAY_NAMES.map((name, dayIndex) => {
+      const dayData = templateData.find((t) => t.day_of_week === dayIndex);
+      const daySlots = dayData
+        ? (slotsData || [])
+            .filter((s) => s.template_id === dayData.id)
+            .map((s) => ({
+              time_of_day: s.time_of_day as TimeOfDay,
+              session_pattern: s.session_pattern as SessionPattern,
+            }))
+        : [];
+
+      return {
+        day_of_week: dayIndex,
+        day_name: name,
+        is_enabled: dayData?.is_enabled ?? (dayIndex < 5),
+        slots: daySlots,
+        session_count: daySlots.length,
+      };
+    });
+
+    return { data: template, error: null };
+  } catch (err: any) {
+    console.error("Error fetching weekly template:", err);
+    return { data: null, error: err.message || "Failed to fetch weekly template" };
+  }
+}
+
+/**
+ * Save the weekly availability template for a child
+ */
+export async function saveWeeklyTemplate(
+  childId: string,
+  template: DayTemplate[]
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    // Delete existing template and slots for this child
+    const { data: existingTemplates } = await supabase
+      .from("weekly_availability_template")
+      .select("id")
+      .eq("child_id", childId);
+
+    if (existingTemplates && existingTemplates.length > 0) {
+      const templateIds = existingTemplates.map((t) => t.id);
+      
+      // Delete slots first (foreign key constraint)
+      await supabase
+        .from("weekly_availability_slots")
+        .delete()
+        .in("template_id", templateIds);
+
+      // Delete templates
+      await supabase
+        .from("weekly_availability_template")
+        .delete()
+        .eq("child_id", childId);
+    }
+
+    // Insert new template rows
+    for (const day of template) {
+      const { data: newTemplate, error: insertError } = await supabase
+        .from("weekly_availability_template")
+        .insert({
+          child_id: childId,
+          day_of_week: day.day_of_week,
+          is_enabled: day.is_enabled,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Insert slots for this day
+      if (day.is_enabled && day.slots.length > 0) {
+        const slotsToInsert = day.slots.map((slot) => ({
+          template_id: newTemplate.id,
+          time_of_day: slot.time_of_day,
+          session_pattern: slot.session_pattern,
+        }));
+
+        const { error: slotsError } = await supabase
+          .from("weekly_availability_slots")
+          .insert(slotsToInsert);
+
+        if (slotsError) throw slotsError;
+      }
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("Error saving weekly template:", err);
+    return { success: false, error: err.message || "Failed to save weekly template" };
+  }
+}
+
+/**
+ * Save template and regenerate future sessions
+ * This deletes future 'planned' sessions and calls the plan generator
+ */
+export async function saveTemplateAndRegenerate(
+  childId: string,
+  template: DayTemplate[]
+): Promise<{ success: boolean; sessionsCreated: number; error: string | null }> {
+  try {
+    // 1. Save the template
+    const saveResult = await saveWeeklyTemplate(childId, template);
+    if (!saveResult.success) {
+      return { success: false, sessionsCreated: 0, error: saveResult.error };
+    }
+
+    // 2. Sync to legacy revision_schedules
+    const { error: syncError } = await supabase.rpc(
+      "rpc_set_revision_schedules_from_weekly_template",
+      { p_child_id: childId }
+    );
+    if (syncError) {
+      console.error("Error syncing to revision_schedules:", syncError);
+      // Continue anyway - not critical
+    }
+
+    // 3. Delete future planned sessions (not started/completed)
+    const today = new Date().toISOString().split("T")[0];
+    const { error: deleteError } = await supabase
+      .from("planned_sessions")
+      .delete()
+      .eq("child_id", childId)
+      .eq("status", "planned")
+      .gte("session_date", today);
+
+    if (deleteError) {
+      console.error("Error deleting future sessions:", deleteError);
+      throw deleteError;
+    }
+
+    // 4. Regenerate sessions
+    const { data: regenData, error: regenError } = await supabase.rpc(
+      "generate_revision_plan_14_days",
+      { p_child_id: childId }
+    );
+
+    if (regenError) {
+      console.error("Error regenerating sessions:", regenError);
+      throw regenError;
+    }
+
+    // Count new sessions
+    const { count } = await supabase
+      .from("planned_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("child_id", childId)
+      .eq("status", "planned")
+      .gte("session_date", today);
+
+    return { 
+      success: true, 
+      sessionsCreated: count || 0, 
+      error: null 
+    };
+  } catch (err: any) {
+    console.error("Error in saveTemplateAndRegenerate:", err);
+    return { 
+      success: false, 
+      sessionsCreated: 0, 
+      error: err.message || "Failed to save and regenerate" 
+    };
+  }
+}
