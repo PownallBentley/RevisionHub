@@ -357,16 +357,16 @@ export default function Timetable() {
               </button>
             </div>
             <div className="flex items-center space-x-2">
-              <button
-                onClick={goToToday}
-                className="px-4 py-2 text-white rounded-full text-sm hover:opacity-90 transition-colors bg-primary-600"
-              >
-                Today
-              </button>
               {(["today", "week", "month"] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setViewMode(mode)}
+                  onClick={() => {
+                    setViewMode(mode);
+                    // If clicking Today, also go to today's date
+                    if (mode === "today") {
+                      setReferenceDate(new Date());
+                    }
+                  }}
                   className={`px-4 py-2 border rounded-full text-sm transition-colors ${
                     viewMode === mode
                       ? "bg-primary-50 border-primary-600 text-primary-600"
