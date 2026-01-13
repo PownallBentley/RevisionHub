@@ -60,6 +60,7 @@ export default function Timetable() {
   const [planOverview, setPlanOverview] = useState<PlanCoverageOverview | null>(null);
   const [planOverviewLoading, setPlanOverviewLoading] = useState(true);
   const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0); // For forcing refresh
 
   // Modal state
   const [showAddSessionModal, setShowAddSessionModal] = useState(false);
@@ -136,6 +137,7 @@ export default function Timetable() {
     async function loadSessions() {
       setLoading(true);
       setError(null);
+      console.log("[Timetable] Loading sessions for child:", selectedChildId, "viewMode:", viewMode, "refreshKey:", refreshKey);
 
       if (viewMode === "today") {
         // Fetch today/single day sessions
@@ -212,7 +214,7 @@ export default function Timetable() {
     }
 
     loadSessions();
-  }, [selectedChildId, viewMode, referenceDate]);
+  }, [selectedChildId, viewMode, referenceDate, refreshKey]);
 
   // Navigation
   const goToPrevious = () => {
@@ -256,8 +258,9 @@ export default function Timetable() {
 
   // Handlers
   const handleSessionAdded = () => {
+    console.log("[Timetable] Session added, triggering refresh");
     // Refresh calendar data
-    setReferenceDate(new Date(referenceDate)); // Trigger reload
+    setRefreshKey((k) => k + 1);
     // Refresh plan overview
     if (selectedChildId) {
       fetchPlanCoverageOverview(selectedChildId).then(({ data }) => {
@@ -267,6 +270,7 @@ export default function Timetable() {
   };
 
   const handleDatesChanged = () => {
+    console.log("[Timetable] Dates changed, triggering refresh");
     // Refresh overrides and plan overview
     if (selectedChildId) {
       fetchDateOverrides(selectedChildId).then(({ data }) => {
@@ -276,6 +280,8 @@ export default function Timetable() {
         setPlanOverview(data);
       });
     }
+    // Also refresh calendar
+    setRefreshKey((k) => k + 1);
   };
 
   const handleEditSchedule = () => {
@@ -283,8 +289,9 @@ export default function Timetable() {
   };
 
   const handleScheduleUpdated = () => {
+    console.log("[Timetable] Schedule updated, triggering refresh");
     // Refresh calendar data
-    setReferenceDate(new Date(referenceDate));
+    setRefreshKey((k) => k + 1);
     // Refresh plan overview
     if (selectedChildId) {
       fetchPlanCoverageOverview(selectedChildId).then(({ data }) => {
