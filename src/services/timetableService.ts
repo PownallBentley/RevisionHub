@@ -90,7 +90,7 @@ export interface PlanCoverageOverview {
     with_contingency: number;
   };
   subjects: SubjectCoverage[];
-  status: "good" | "marginal" | "insufficient";
+  status: "good" | "marginal" | "insufficient" | "no_plan";
   recommendations: {
     total_shortfall: number;
     priority_subjects: Array<{ subject: string; sessions_needed: number }>;
@@ -333,7 +333,16 @@ export async function fetchPlanCoverageOverview(
       p_child_id: childId,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error("RPC error fetching plan coverage:", error);
+      throw error;
+    }
+
+    // Handle null response gracefully
+    if (!data) {
+      console.warn("No plan coverage data returned for child:", childId);
+      return { data: null, error: null };
+    }
 
     return { data: data as PlanCoverageOverview, error: null };
   } catch (err: any) {
