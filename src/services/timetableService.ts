@@ -825,72 +825,24 @@ export async function saveTemplateAndRegenerate(
       console.warn("[saveTemplateAndRegenerate] Delete exception:", delErr);
     }
 
-    // 4. Regenerate sessions (optional - don't fail if this errors)
+    // 4. Regenerate sessions using new RPC that handles full revision period
     let sessionsCreated = 0;
-    console.log("[saveTemplateAndRegenerate] Step 4: Regenerating sessions...");
+    console.log("[saveTemplateAndRegenerate] Step 4: Calling rpc_regenerate_child_plan...");
     try {
-      // Get exam timeline from revision_periods
-      const { data: periodData } = await supabase
-        .from("revision_periods")
-        .select("start_date, end_date")
-        .eq("child_id", childId)
-        .eq("is_active", true)
-        .single();
-
-      // Calculate exam timeline based on days remaining
-      let examTimeline = "3_months"; // default
-      if (periodData?.end_date) {
-        const daysRemaining = Math.ceil(
-          (new Date(periodData.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (daysRemaining <= 14) examTimeline = "2_weeks";
-        else if (daysRemaining <= 42) examTimeline = "6_weeks";
-        else if (daysRemaining <= 90) examTimeline = "3_months";
-        else examTimeline = "6_months";
-      }
-      
-      console.log("[saveTemplateAndRegenerate] Exam timeline:", examTimeline, "periodData:", periodData);
-
-      // IMPORTANT: Mark any existing active plans as completed first
-      // The generate_revision_plan_14_days RPC creates a new 'active' plan,
-      // which violates uq_one_active_plan_per_child if one already exists
-      console.log("[saveTemplateAndRegenerate] Marking existing active plans as completed...");
-      const { data: completedData, error: completeError } = await supabase
-        .from("revision_plans")
-        .update({ status: "completed" })
-        .eq("child_id", childId)
-        .eq("status", "active")
-        .select("id");
-      
-      if (completeError) {
-        console.warn("[saveTemplateAndRegenerate] Complete plan warning:", completeError);
-      } else {
-        console.log("[saveTemplateAndRegenerate] Completed plans:", completedData?.length || 0);
-      }
-
-      const { data: regenData, error: regenError } = await supabase.rpc(
-        "generate_revision_plan_14_days",
-        { 
-          p_child_id: childId,
-          p_exam_timeline: examTimeline
-        }
+      const { data: regenResult, error: regenError } = await supabase.rpc(
+        "rpc_regenerate_child_plan",
+        { p_child_id: childId }
       );
 
       if (regenError) {
-        console.warn("[saveTemplateAndRegenerate] Regeneration warning:", regenError);
+        console.warn("[saveTemplateAndRegenerate] Regeneration RPC error:", regenError);
         warning = "Schedule saved but session regeneration failed. Sessions may need manual refresh.";
+      } else if (!regenResult?.success) {
+        console.warn("[saveTemplateAndRegenerate] Regeneration failed:", regenResult?.error);
+        warning = regenResult?.error || "Schedule saved but session regeneration failed.";
       } else {
-        console.log("[saveTemplateAndRegenerate] Regeneration result:", regenData);
-        // Count new sessions
-        const { count } = await supabase
-          .from("planned_sessions")
-          .select("*", { count: "exact", head: true })
-          .eq("child_id", childId)
-          .eq("status", "planned")
-          .gte("session_date", today);
-        
-        sessionsCreated = count || 0;
-        console.log("[saveTemplateAndRegenerate] Sessions created:", sessionsCreated);
+        console.log("[saveTemplateAndRegenerate] Regeneration success:", regenResult);
+        sessionsCreated = regenResult.sessions_created || 0;
       }
     } catch (regenErr) {
       console.warn("[saveTemplateAndRegenerate] Regeneration exception:", regenErr);
