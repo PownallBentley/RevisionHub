@@ -637,10 +637,14 @@ export async function fetchWeeklyTemplate(
       .eq("child_id", childId)
       .order("day_of_week");
 
-    if (templateError) throw templateError;
+    if (templateError) {
+      console.error("Error fetching template:", templateError);
+      throw templateError;
+    }
 
     // If no template exists, return default empty template
     if (!templateData || templateData.length === 0) {
+      console.log("No template found for child, returning default");
       const emptyTemplate: DayTemplate[] = DAY_NAMES.map((name, i) => ({
         day_of_week: i,
         day_name: name,
@@ -658,9 +662,12 @@ export async function fetchWeeklyTemplate(
       .select("template_id, time_of_day, session_pattern")
       .in("template_id", templateIds);
 
-    if (slotsError) throw slotsError;
+    if (slotsError) {
+      console.error("Error fetching slots:", slotsError);
+      // Don't throw - just continue with empty slots
+    }
 
-    // Build template structure
+    // Build template structure - ensure all 7 days are present
     const template: DayTemplate[] = DAY_NAMES.map((name, dayIndex) => {
       const dayData = templateData.find((t) => t.day_of_week === dayIndex);
       const daySlots = dayData
@@ -681,6 +688,7 @@ export async function fetchWeeklyTemplate(
       };
     });
 
+    console.log("Loaded template:", template);
     return { data: template, error: null };
   } catch (err: any) {
     console.error("Error fetching weekly template:", err);
