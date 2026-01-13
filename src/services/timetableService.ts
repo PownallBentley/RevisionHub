@@ -773,57 +773,97 @@ export async function saveTemplateAndRegenerate(
 ): Promise<{ success: boolean; sessionsCreated: number; error: string | null; warning: string | null }> {
   let warning: string | null = null;
   
+  console.log("[saveTemplateAndRegenerate] Starting for child:", childId);
+  console.log("[saveTemplateAndRegenerate] Template:", JSON.stringify(template, null, 2));
+  
   try {
     // 1. Save the template - this is the critical part
+    console.log("[saveTemplateAndRegenerate] Step 1: Saving template...");
     const saveResult = await saveWeeklyTemplate(childId, template);
     if (!saveResult.success) {
+      console.error("[saveTemplateAndRegenerate] Template save failed:", saveResult.error);
       return { success: false, sessionsCreated: 0, error: saveResult.error, warning: null };
     }
+    console.log("[saveTemplateAndRegenerate] Template saved successfully");
 
     // 2. Sync to legacy revision_schedules (optional - don't fail if this errors)
+    console.log("[saveTemplateAndRegenerate] Step 2: Syncing to revision_schedules...");
     try {
       const { error: syncError } = await supabase.rpc(
         "rpc_set_revision_schedules_from_weekly_template",
         { p_child_id: childId }
       );
       if (syncError) {
-        console.warn("Warning: Could not sync to revision_schedules:", syncError);
+        console.warn("[saveTemplateAndRegenerate] Sync warning:", syncError);
         warning = "Schedule saved but legacy sync failed";
+      } else {
+        console.log("[saveTemplateAndRegenerate] Sync completed");
       }
     } catch (syncErr) {
-      console.warn("Warning: Exception syncing to revision_schedules:", syncErr);
+      console.warn("[saveTemplateAndRegenerate] Sync exception:", syncErr);
     }
 
     // 3. Delete future planned sessions (not started/completed)
     const today = new Date().toISOString().split("T")[0];
+    console.log("[saveTemplateAndRegenerate] Step 3: Deleting future sessions from:", today);
     try {
-      const { error: deleteError } = await supabase
+      const { data: deleteData, error: deleteError, count: deleteCount } = await supabase
         .from("planned_sessions")
         .delete()
         .eq("child_id", childId)
         .eq("status", "planned")
-        .gte("session_date", today);
+        .gte("session_date", today)
+        .select();
 
       if (deleteError) {
-        console.warn("Warning: Could not delete future sessions:", deleteError);
+        console.warn("[saveTemplateAndRegenerate] Delete warning:", deleteError);
         warning = "Schedule saved but could not clear future sessions";
+      } else {
+        console.log("[saveTemplateAndRegenerate] Deleted sessions:", deleteData?.length || 0);
       }
     } catch (delErr) {
-      console.warn("Warning: Exception deleting future sessions:", delErr);
+      console.warn("[saveTemplateAndRegenerate] Delete exception:", delErr);
     }
 
     // 4. Regenerate sessions (optional - don't fail if this errors)
     let sessionsCreated = 0;
+    console.log("[saveTemplateAndRegenerate] Step 4: Regenerating sessions...");
     try {
+      // Get exam timeline from revision_periods
+      const { data: periodData } = await supabase
+        .from("revision_periods")
+        .select("start_date, end_date")
+        .eq("child_id", childId)
+        .eq("is_active", true)
+        .single();
+
+      // Calculate exam timeline based on days remaining
+      let examTimeline = "3_months"; // default
+      if (periodData?.end_date) {
+        const daysRemaining = Math.ceil(
+          (new Date(periodData.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysRemaining <= 14) examTimeline = "2_weeks";
+        else if (daysRemaining <= 42) examTimeline = "6_weeks";
+        else if (daysRemaining <= 90) examTimeline = "3_months";
+        else examTimeline = "6_months";
+      }
+      
+      console.log("[saveTemplateAndRegenerate] Exam timeline:", examTimeline, "periodData:", periodData);
+
       const { data: regenData, error: regenError } = await supabase.rpc(
         "generate_revision_plan_14_days",
-        { p_child_id: childId }
+        { 
+          p_child_id: childId,
+          p_exam_timeline: examTimeline
+        }
       );
 
       if (regenError) {
-        console.warn("Warning: Could not regenerate sessions:", regenError);
+        console.warn("[saveTemplateAndRegenerate] Regeneration warning:", regenError);
         warning = "Schedule saved but session regeneration failed. Sessions may need manual refresh.";
       } else {
+        console.log("[saveTemplateAndRegenerate] Regeneration result:", regenData);
         // Count new sessions
         const { count } = await supabase
           .from("planned_sessions")
@@ -833,13 +873,15 @@ export async function saveTemplateAndRegenerate(
           .gte("session_date", today);
         
         sessionsCreated = count || 0;
+        console.log("[saveTemplateAndRegenerate] Sessions created:", sessionsCreated);
       }
     } catch (regenErr) {
-      console.warn("Warning: Exception regenerating sessions:", regenErr);
+      console.warn("[saveTemplateAndRegenerate] Regeneration exception:", regenErr);
       warning = "Schedule saved but session regeneration failed.";
     }
 
     // Template was saved successfully - return success even if regeneration had issues
+    console.log("[saveTemplateAndRegenerate] Complete. Success:", true, "Sessions:", sessionsCreated, "Warning:", warning);
     return { 
       success: true, 
       sessionsCreated, 
@@ -847,7 +889,7 @@ export async function saveTemplateAndRegenerate(
       warning 
     };
   } catch (err: any) {
-    console.error("Error in saveTemplateAndRegenerate:", err);
+    console.error("[saveTemplateAndRegenerate] Fatal error:", err);
     return { 
       success: false, 
       sessionsCreated: 0, 
