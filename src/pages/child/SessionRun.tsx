@@ -499,11 +499,7 @@ export default function SessionRun() {
         return (
           <PracticeStep
             {...commonProps}
-            onRequestAIFeedback={async (answers) => {
-              // In production: call AI feedback endpoint
-              // For now, let PracticeStep use its internal mock
-              throw new Error("Use mock feedback");
-            }}
+            // Don't pass onRequestAIFeedback - let PracticeStep use its internal mock
           />
         );
 
@@ -511,10 +507,7 @@ export default function SessionRun() {
         return (
           <SummaryStep
             {...commonProps}
-            onRequestMnemonic={async (style) => {
-              // In production: call n8n webhook for mnemonic generation
-              throw new Error("Use mock mnemonic");
-            }}
+            // Don't pass onRequestMnemonic - let SummaryStep use its internal mock
           />
         );
 
