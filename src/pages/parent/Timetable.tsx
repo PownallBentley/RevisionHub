@@ -7,15 +7,21 @@ import {
   faChevronLeft,
   faChevronRight,
   faChevronDown,
-  faPlus,
-  faLightbulb,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
+import TimetableHeroCard from "../../components/timetable/TimetableHeroCard";
+import TimetableActionCards from "../../components/timetable/TimetableActionCards";
+import TodayView from "../../components/timetable/TodayView";
+import AddSessionModal from "../../components/timetable/AddSessionModal";
+import BlockDatesModal from "../../components/timetable/BlockDatesModal";
 import {
   fetchChildrenForParent,
   fetchWeekPlan,
   fetchMonthSessions,
+  fetchTodaySessions,
+  fetchFeasibilityStatus,
+  fetchDateOverrides,
   extractSubjectLegend,
   getWeekStart,
   formatDateISO,
@@ -26,6 +32,8 @@ import {
   type TimetableSession,
   type ChildOption,
   type SubjectLegend,
+  type FeasibilityStatus,
+  type DateOverride,
 } from "../../services/timetableService";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -39,6 +47,7 @@ export default function Timetable() {
 
   // State
   const [weekData, setWeekData] = useState<WeekDayData[]>([]);
+  const [todaySessions, setTodaySessions] = useState<TimetableSession[]>([]);
   const [monthSessions, setMonthSessions] = useState<TimetableSession[]>([]);
   const [children, setChildren] = useState<ChildOption[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
@@ -47,6 +56,16 @@ export default function Timetable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subjectLegend, setSubjectLegend] = useState<SubjectLegend[]>([]);
+  const [feasibility, setFeasibility] = useState<FeasibilityStatus | null>(null);
+  const [dateOverrides, setDateOverrides] = useState<DateOverride[]>([]);
+
+  // Modal state
+  const [showAddSessionModal, setShowAddSessionModal] = useState(false);
+  const [showBlockDatesModal, setShowBlockDatesModal] = useState(false);
+
+  // Get selected child name
+  const selectedChildName =
+    children.find((c) => c.child_id === selectedChildId)?.child_name || "Child";
 
   // Redirect if not logged in or is a child
   useEffect(() => {
@@ -72,7 +91,6 @@ export default function Timetable() {
       if (data && data.length > 0) {
         setChildren(data);
 
-        // Check URL for child param
         const childFromUrl = searchParams.get("child");
         if (childFromUrl && data.some((c) => c.child_id === childFromUrl)) {
           setSelectedChildId(childFromUrl);
@@ -88,6 +106,24 @@ export default function Timetable() {
     loadChildren();
   }, [user, searchParams]);
 
+  // Load feasibility when child changes
+  useEffect(() => {
+    if (!selectedChildId) return;
+
+    async function loadFeasibility() {
+      const { data } = await fetchFeasibilityStatus(selectedChildId!);
+      setFeasibility(data);
+    }
+
+    async function loadOverrides() {
+      const { data } = await fetchDateOverrides(selectedChildId!);
+      setDateOverrides(data || []);
+    }
+
+    loadFeasibility();
+    loadOverrides();
+  }, [selectedChildId]);
+
   // Load sessions when child or date changes
   useEffect(() => {
     if (!selectedChildId) return;
@@ -96,7 +132,34 @@ export default function Timetable() {
       setLoading(true);
       setError(null);
 
-      if (viewMode === "month") {
+      if (viewMode === "today") {
+        // Fetch today/single day sessions
+        const { data, error } = await fetchTodaySessions(
+          selectedChildId!,
+          formatDateISO(referenceDate)
+        );
+
+        if (error) {
+          setError(error);
+          setTodaySessions([]);
+        } else {
+          setTodaySessions(data || []);
+          // Build legend from today sessions
+          const legend: SubjectLegend[] = [];
+          const seen = new Set<string>();
+          (data || []).forEach((s) => {
+            if (!seen.has(s.subject_id)) {
+              seen.add(s.subject_id);
+              legend.push({
+                subject_id: s.subject_id,
+                subject_name: s.subject_name,
+                subject_color: s.color,
+              });
+            }
+          });
+          setSubjectLegend(legend);
+        }
+      } else if (viewMode === "month") {
         // Fetch month sessions
         const { data, error } = await fetchMonthSessions(
           selectedChildId!,
@@ -109,7 +172,6 @@ export default function Timetable() {
           setMonthSessions([]);
         } else {
           setMonthSessions(data || []);
-          // Build legend from month sessions
           const legend: SubjectLegend[] = [];
           const seen = new Set<string>();
           (data || []).forEach((s) => {
@@ -125,7 +187,7 @@ export default function Timetable() {
           setSubjectLegend(legend);
         }
       } else {
-        // Fetch week plan (works for both "today" and "week" views)
+        // Fetch week plan
         const weekStart = getWeekStart(referenceDate);
         const { data, error } = await fetchWeekPlan(
           selectedChildId!,
@@ -174,12 +236,41 @@ export default function Timetable() {
 
   const goToToday = () => {
     setReferenceDate(new Date());
-    setViewMode("week");
   };
 
   // Calculate stats
   const stats = calculateWeekStats(weekData);
   const weekStart = getWeekStart(referenceDate);
+
+  // Check if a date is blocked
+  const isDateBlocked = (dateStr: string): boolean => {
+    return dateOverrides.some(
+      (o) => o.override_date === dateStr && o.override_type === "blocked"
+    );
+  };
+
+  // Handlers
+  const handleSessionAdded = () => {
+    // Refresh data
+    setReferenceDate(new Date(referenceDate)); // Trigger reload
+  };
+
+  const handleDatesChanged = () => {
+    // Refresh overrides and sessions
+    if (selectedChildId) {
+      fetchDateOverrides(selectedChildId).then(({ data }) => {
+        setDateOverrides(data || []);
+      });
+      fetchFeasibilityStatus(selectedChildId).then(({ data }) => {
+        setFeasibility(data);
+      });
+    }
+  };
+
+  const handleEditSchedule = () => {
+    // Navigate to onboarding availability step or dedicated page
+    navigate(`/parent/child/${selectedChildId}/schedule`);
+  };
 
   // Loading state
   if (authLoading || loading) {
@@ -201,90 +292,49 @@ export default function Timetable() {
     <PageLayout>
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Page Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold mb-2 text-primary-900">
-                Revision Timetable
-              </h1>
-              <p className="text-neutral-600">Weekly schedule and session planning</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              {/* Child Selector */}
-              <div className="relative flex items-center px-4 py-2 rounded-full border cursor-pointer bg-primary-50 border-primary-100">
-                <select
-                  value={selectedChildId || ""}
-                  onChange={(e) => setSelectedChildId(e.target.value)}
-                  className="appearance-none bg-transparent border-none font-medium focus:outline-none cursor-pointer pr-6 text-primary-600"
-                >
-                  {children.map((child) => (
-                    <option key={child.child_id} value={child.child_id}>
-                      {child.child_name}
-                    </option>
-                  ))}
-                </select>
-                <FontAwesomeIcon
-                  icon={faChevronDown}
-                  className="absolute right-4 text-xs pointer-events-none text-primary-600"
-                />
-              </div>
-              <button className="px-6 py-2 text-white rounded-full hover:opacity-90 transition-colors flex items-center gap-2 bg-primary-600">
-                <FontAwesomeIcon icon={faPlus} />
-                Add Session
-              </button>
-            </div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-primary-900">
+              Revision Timetable
+            </h1>
+            <p className="text-neutral-600">
+              Weekly schedule and session planning
+            </p>
+          </div>
+
+          {/* Child Selector */}
+          <div className="relative flex items-center px-4 py-2 rounded-full border cursor-pointer bg-primary-50 border-primary-100">
+            <select
+              value={selectedChildId || ""}
+              onChange={(e) => setSelectedChildId(e.target.value)}
+              className="appearance-none bg-transparent border-none font-medium focus:outline-none cursor-pointer pr-6 text-primary-600"
+            >
+              {children.map((child) => (
+                <option key={child.child_id} value={child.child_id}>
+                  {child.child_name}
+                </option>
+              ))}
+            </select>
+            <FontAwesomeIcon
+              icon={faChevronDown}
+              className="absolute right-4 text-xs pointer-events-none text-primary-600"
+            />
           </div>
         </div>
 
-        {/* Status Hero Card */}
-        <div className="bg-white rounded-2xl shadow-card p-6 mb-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center space-x-3 mb-3">
-                <span
-                  className={`px-4 py-1.5 text-white text-sm font-medium rounded-full ${
-                    stats.plannedSessions > 0 ? "bg-accent-green" : "bg-accent-amber"
-                  }`}
-                >
-                  {stats.plannedSessions > 0 ? "Sessions Scheduled" : "No Sessions"}
-                </span>
-                <h2 className="text-xl font-semibold text-neutral-700">
-                  {stats.plannedSessions > 0
-                    ? `${stats.plannedSessions} session${stats.plannedSessions !== 1 ? "s" : ""} scheduled`
-                    : "No sessions scheduled for this period"}
-                </h2>
-              </div>
-              <p className="mb-4 text-neutral-600">
-                {stats.completedSessions > 0
-                  ? `${stats.completedSessions} of ${stats.totalSessions} sessions completed.`
-                  : stats.plannedSessions > 0
-                  ? `${stats.totalMinutes} minutes of revision planned.`
-                  : "Add sessions to build a revision plan."}
-              </p>
-              {stats.plannedSessions === 0 && (
-                <div className="border rounded-xl p-4 bg-primary-50 border-primary-200">
-                  <div className="flex items-start space-x-3">
-                    <FontAwesomeIcon icon={faLightbulb} className="mt-1 text-primary-600" />
-                    <div>
-                      <p className="text-sm font-medium mb-1 text-primary-900">
-                        Recommendation
-                      </p>
-                      <p className="text-sm text-neutral-600">
-                        Generate a revision plan to automatically schedule sessions based on your child's subjects and availability.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="ml-6 text-right">
-              <div className="text-4xl font-bold mb-1 text-primary-600">
-                {stats.totalSessions}
-              </div>
-              <div className="text-sm text-neutral-500">Total sessions</div>
-            </div>
-          </div>
-        </div>
+        {/* Hero Card - Coverage Status */}
+        <TimetableHeroCard
+          feasibility={feasibility}
+          weekStats={stats}
+          loading={loading}
+        />
+
+        {/* Action Cards */}
+        <TimetableActionCards
+          onAddSession={() => setShowAddSessionModal(true)}
+          onEditSchedule={handleEditSchedule}
+          onBlockDates={() => setShowBlockDatesModal(true)}
+        />
 
         {/* Timetable Controls */}
         <div className="bg-white rounded-2xl shadow-soft p-4 mb-6">
@@ -313,7 +363,7 @@ export default function Timetable() {
               >
                 Today
               </button>
-              {(["week", "month"] as ViewMode[]).map((mode) => (
+              {(["today", "week", "month"] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -330,6 +380,16 @@ export default function Timetable() {
           </div>
         </div>
 
+        {/* Today View */}
+        {viewMode === "today" && (
+          <TodayView
+            sessions={todaySessions}
+            date={referenceDate}
+            onAddSession={() => setShowAddSessionModal(true)}
+            loading={loading}
+          />
+        )}
+
         {/* Week View Grid */}
         {viewMode === "week" && (
           <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-6">
@@ -341,21 +401,46 @@ export default function Timetable() {
               {DAYS.map((day, index) => {
                 const date = new Date(weekStart);
                 date.setDate(weekStart.getDate() + index);
+                const dateStr = formatDateISO(date);
                 const isToday = new Date().toDateString() === date.toDateString();
+                const isBlocked = isDateBlocked(dateStr);
 
                 return (
                   <div
                     key={day}
                     className={`p-4 text-center border-r last:border-r-0 border-neutral-200 ${
-                      isToday ? "bg-primary-50" : "bg-white"
+                      isBlocked
+                        ? "bg-neutral-200"
+                        : isToday
+                        ? "bg-primary-50"
+                        : "bg-white"
                     }`}
                   >
-                    <div className={`text-sm font-medium ${isToday ? "text-primary-600" : "text-neutral-700"}`}>
+                    <div
+                      className={`text-sm font-medium ${
+                        isBlocked
+                          ? "text-neutral-500"
+                          : isToday
+                          ? "text-primary-600"
+                          : "text-neutral-700"
+                      }`}
+                    >
                       {day}
                     </div>
-                    <div className={`text-xs ${isToday ? "text-primary-600" : "text-neutral-500"}`}>
+                    <div
+                      className={`text-xs ${
+                        isBlocked
+                          ? "text-neutral-400"
+                          : isToday
+                          ? "text-primary-600"
+                          : "text-neutral-500"
+                      }`}
+                    >
                       {date.getDate()}
                     </div>
+                    {isBlocked && (
+                      <div className="text-xs text-neutral-400 mt-1">Blocked</div>
+                    )}
                   </div>
                 );
               })}
@@ -373,14 +458,25 @@ export default function Timetable() {
                 const date = new Date(weekStart);
                 date.setDate(weekStart.getDate() + dayIndex);
                 const dateStr = formatDateISO(date);
-                
-                // Find sessions for this day from weekData
+                const isBlocked = isDateBlocked(dateStr);
+
                 const dayData = weekData.find((d) => d.day_date === dateStr);
                 const daySessions = dayData?.sessions || [];
 
                 return (
-                  <div key={dayIndex} className="p-3 border-r last:border-r-0 border-neutral-200">
-                    {daySessions.length === 0 ? (
+                  <div
+                    key={dayIndex}
+                    className={`p-3 border-r last:border-r-0 border-neutral-200 ${
+                      isBlocked ? "bg-neutral-100" : ""
+                    }`}
+                  >
+                    {isBlocked ? (
+                      <div className="h-full flex items-center justify-center">
+                        <span className="text-xs text-neutral-400 italic">
+                          No revision
+                        </span>
+                      </div>
+                    ) : daySessions.length === 0 ? (
                       <div className="h-full flex items-center justify-center">
                         <span className="text-xs text-neutral-400">No sessions</span>
                       </div>
@@ -394,7 +490,10 @@ export default function Timetable() {
                             borderLeft: `4px solid ${session.color}`,
                           }}
                         >
-                          <div className="text-sm font-semibold mb-1" style={{ color: session.color }}>
+                          <div
+                            className="text-sm font-semibold mb-1"
+                            style={{ color: session.color }}
+                          >
                             {session.subject_name}
                           </div>
                           <div className="text-xs text-neutral-600">
@@ -425,6 +524,9 @@ export default function Timetable() {
               <MonthCalendar
                 referenceDate={referenceDate}
                 sessions={monthSessions}
+                blockedDates={dateOverrides
+                  .filter((o) => o.override_type === "blocked")
+                  .map((o) => o.override_date)}
               />
             </div>
           </div>
@@ -439,32 +541,37 @@ export default function Timetable() {
             <div className="flex flex-wrap gap-6">
               {subjectLegend.map((subject) => (
                 <div key={subject.subject_id} className="flex items-center space-x-2">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: subject.subject_color }} />
-                  <span className="text-sm text-neutral-600">{subject.subject_name}</span>
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: subject.subject_color }}
+                  />
+                  <span className="text-sm text-neutral-600">
+                    {subject.subject_name}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        {/* Empty state */}
-        {stats.totalSessions === 0 && !loading && viewMode === "week" && (
-          <div className="bg-white rounded-2xl shadow-card p-8 text-center">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-primary-100">
-              <FontAwesomeIcon icon={faPlus} className="text-2xl text-primary-600" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2 text-primary-900">
-              No sessions scheduled
-            </h3>
-            <p className="mb-6 max-w-md mx-auto text-neutral-600">
-              There are no revision sessions scheduled for this week. Generate a plan or add sessions manually.
-            </p>
-            <button className="px-6 py-3 text-white rounded-full font-medium hover:opacity-90 transition-colors bg-primary-600">
-              Generate Revision Plan
-            </button>
-          </div>
-        )}
       </main>
+
+      {/* Modals */}
+      <AddSessionModal
+        isOpen={showAddSessionModal}
+        onClose={() => setShowAddSessionModal(false)}
+        childId={selectedChildId || ""}
+        selectedDate={viewMode === "today" ? referenceDate : undefined}
+        onSessionAdded={handleSessionAdded}
+        onEditSchedule={handleEditSchedule}
+      />
+
+      <BlockDatesModal
+        isOpen={showBlockDatesModal}
+        onClose={() => setShowBlockDatesModal(false)}
+        childId={selectedChildId || ""}
+        childName={selectedChildName}
+        onDatesChanged={handleDatesChanged}
+      />
     </PageLayout>
   );
 }
@@ -475,21 +582,19 @@ export default function Timetable() {
 function MonthCalendar({
   referenceDate,
   sessions,
+  blockedDates = [],
 }: {
   referenceDate: Date;
   sessions: TimetableSession[];
+  blockedDates?: string[];
 }) {
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
 
-  // First day of month
   const firstDay = new Date(year, month, 1);
-  const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Monday = 0
-
-  // Days in month
+  const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Build calendar grid
   const calendarDays: (number | null)[] = [];
   for (let i = 0; i < startDayOfWeek; i++) {
     calendarDays.push(null);
@@ -498,10 +603,14 @@ function MonthCalendar({
     calendarDays.push(i);
   }
 
-  // Get sessions for a day
   const getSessionsForDay = (day: number): TimetableSession[] => {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return sessions.filter((s) => s.session_date === dateStr);
+  };
+
+  const isBlocked = (day: number): boolean => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return blockedDates.includes(dateStr);
   };
 
   const today = new Date();
@@ -509,7 +618,6 @@ function MonthCalendar({
 
   return (
     <div>
-      {/* Day headers */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {DAYS.map((day) => (
           <div key={day} className="text-center text-sm font-medium py-2 text-neutral-600">
@@ -518,7 +626,6 @@ function MonthCalendar({
         ))}
       </div>
 
-      {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-1">
         {calendarDays.map((day, index) => {
           if (day === null) {
@@ -527,36 +634,53 @@ function MonthCalendar({
 
           const daySessions = getSessionsForDay(day);
           const isToday = isCurrentMonth && today.getDate() === day;
+          const dayBlocked = isBlocked(day);
 
           return (
             <div
               key={day}
               className={`h-24 border rounded-lg p-2 overflow-hidden ${
-                isToday ? "border-primary-600 bg-primary-50" : "border-neutral-200 bg-white"
+                dayBlocked
+                  ? "border-neutral-300 bg-neutral-100"
+                  : isToday
+                  ? "border-primary-600 bg-primary-50"
+                  : "border-neutral-200 bg-white"
               }`}
             >
-              <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary-600" : "text-neutral-700"}`}>
+              <div
+                className={`text-sm font-medium mb-1 ${
+                  dayBlocked
+                    ? "text-neutral-400"
+                    : isToday
+                    ? "text-primary-600"
+                    : "text-neutral-700"
+                }`}
+              >
                 {day}
               </div>
-              <div className="space-y-1">
-                {daySessions.slice(0, 2).map((session) => (
-                  <div
-                    key={session.planned_session_id}
-                    className="text-xs px-1.5 py-0.5 rounded truncate"
-                    style={{
-                      backgroundColor: `${session.color}20`,
-                      color: session.color,
-                    }}
-                  >
-                    {session.subject_name}
-                  </div>
-                ))}
-                {daySessions.length > 2 && (
-                  <div className="text-xs text-neutral-500">
-                    +{daySessions.length - 2} more
-                  </div>
-                )}
-              </div>
+              {dayBlocked ? (
+                <div className="text-xs text-neutral-400 italic">Blocked</div>
+              ) : (
+                <div className="space-y-1">
+                  {daySessions.slice(0, 2).map((session) => (
+                    <div
+                      key={session.planned_session_id}
+                      className="text-xs px-1.5 py-0.5 rounded truncate"
+                      style={{
+                        backgroundColor: `${session.color}20`,
+                        color: session.color,
+                      }}
+                    >
+                      {session.subject_name}
+                    </div>
+                  ))}
+                  {daySessions.length > 2 && (
+                    <div className="text-xs text-neutral-500">
+                      +{daySessions.length - 2} more
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
