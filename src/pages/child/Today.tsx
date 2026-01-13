@@ -1,4 +1,5 @@
 // src/pages/child/Today.tsx
+// UPDATED: New design implementation - January 2026
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,8 +13,6 @@ import {
   faLandmark,
   faLightbulb,
   faFire,
-  faStar,
-  faTrophy,
   faDna,
   faLanguage,
   faPalette,
@@ -24,6 +23,8 @@ import {
   faCross,
   faBalanceScale,
   faChartLine,
+  faArrowRight,
+  faCheck,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
@@ -65,18 +66,6 @@ function getIconFromName(iconName: string): IconDefinition {
 }
 
 /**
- * Generate a lighter shade of a hex color for backgrounds
- */
-function hexToLightBg(hex: string, opacity: number = 0.15): string {
-  // Remove # if present
-  const cleanHex = hex.replace("#", "");
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
-/**
  * Format date string to friendly label like "Tomorrow", "Wednesday", etc.
  */
 function formatDayLabel(dateStr: string): string {
@@ -94,8 +83,30 @@ function formatDayLabel(dateStr: string): string {
     return "Tomorrow";
   }
 
-  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const diffDays = Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 2) return "In 2 days";
+  if (diffDays === 3) return "In 3 days";
+
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return days[date.getDay()];
+}
+
+/**
+ * Get short day name from date
+ */
+function getShortDayName(dateStr: string): string {
+  const date = new Date(dateStr);
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return days[date.getDay()];
+}
+
+/**
+ * Check if date is today
+ */
+function isToday(dateStr: string): boolean {
+  const date = new Date(dateStr);
+  const today = new Date();
+  return date.toDateString() === today.toDateString();
 }
 
 export default function Today() {
@@ -181,10 +192,12 @@ export default function Today() {
   // Calculate progress
   const completedCount = todaySessions.filter((s) => s.status === "completed").length;
   const totalCount = todaySessions.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   // Find next ready session (not_started or started)
   const nextSession = todaySessions.find((s) => s.status === "not_started" || s.status === "started");
+
+  // Current streak
+  const currentStreak = gamification?.streak?.current ?? 0;
 
   // Loading state
   if (authLoading || loading) {
@@ -204,7 +217,7 @@ export default function Today() {
   if (error) {
     return (
       <PageLayout bgColor="bg-neutral-100">
-        <div className="max-w-[1120px] mx-auto px-6 py-8">
+        <div className="max-w-[1120px] mx-auto px-4 py-8">
           <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center">
             <p className="text-accent-red font-medium">{error}</p>
             <button
@@ -221,206 +234,201 @@ export default function Today() {
 
   return (
     <PageLayout bgColor="bg-neutral-100">
-      <main className="max-w-[1120px] mx-auto px-6 py-8">
-        {/* Greeting Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-primary-900 mb-2">
-            Hi {childName}! 👋
-          </h1>
-          <p className="text-lg text-neutral-600">
-            Ready to tackle your revision today?
-          </p>
-        </div>
-
-        {/* Gamification Bar - only show if has meaningful data */}
-        {gamification && (gamification.streak.current > 0 || gamification.points.balance > 0) && (
-          <div className="flex items-center gap-4 mb-6 p-4 bg-white rounded-2xl shadow-soft">
-            {gamification.streak.current > 0 && (
-              <div className="flex items-center gap-2">
-                <FontAwesomeIcon icon={faFire} className="text-orange-500" />
-                <span className="font-semibold text-neutral-700">{gamification.streak.current}</span>
-                <span className="text-sm text-neutral-500">day streak</span>
+      <main className="max-w-[1120px] mx-auto px-4 py-6">
+        
+        {/* Greeting Section with Streak */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-primary-900">Hi {childName} 👋</h1>
+            {currentStreak > 0 && (
+              <div className="flex items-center space-x-2 bg-accent-green/10 px-4 py-2 rounded-full">
+                <FontAwesomeIcon icon={faFire} className="text-accent-green" />
+                <span className="text-accent-green font-semibold text-sm">{currentStreak}-day streak</span>
               </div>
             )}
-            {gamification.points.balance > 0 && (
-              <>
-                {gamification.streak.current > 0 && <div className="w-px h-6 bg-neutral-200" />}
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={faStar} className="text-accent-amber" />
-                  <span className="font-semibold text-neutral-700">{gamification.points.balance}</span>
-                  <span className="text-sm text-neutral-500">points</span>
-                </div>
-              </>
-            )}
-            {gamification.recentAchievement && (
-              <>
-                <div className="w-px h-6 bg-neutral-200" />
-                <div className="flex items-center gap-2">
-                  <FontAwesomeIcon icon={faTrophy} className="text-accent-amber" />
-                  <span className="text-sm text-neutral-600">{gamification.recentAchievement.name}</span>
-                </div>
-              </>
-            )}
           </div>
-        )}
+          <p className="text-neutral-500 text-lg">
+            {currentStreak > 0 
+              ? "Ready to keep the momentum going?" 
+              : "Ready to tackle your revision today?"}
+          </p>
+        </section>
 
         {/* Today's Sessions Card */}
-        <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-neutral-700">Today's sessions</h2>
-            <div className="flex items-center space-x-2">
-              <span className="text-2xl font-bold text-primary-600">{totalCount}</span>
-              <span className="text-neutral-500">session{totalCount !== 1 ? "s" : ""}</span>
-            </div>
-          </div>
-
-          {todaySessions.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FontAwesomeIcon icon={faBook} className="text-2xl text-primary-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-primary-900 mb-2">No sessions today</h3>
-              <p className="text-neutral-600">Enjoy your break! Check back tomorrow for your next sessions.</p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-4 mb-6">
-                {todaySessions.map((session) => (
-                  <SessionItem
-                    key={session.planned_session_id}
-                    session={session}
-                    isNext={nextSession?.planned_session_id === session.planned_session_id}
-                    onStart={() => handleStartSession(session.planned_session_id)}
-                  />
-                ))}
-              </div>
-
-              {nextSession && (
-                <button
-                  onClick={() => handleStartSession(nextSession.planned_session_id)}
-                  className="w-full py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-medium"
-                >
-                  Start next session
-                </button>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Two Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Coming Up */}
+        <section className="mb-8">
           <div className="bg-white rounded-2xl shadow-card p-6">
-            <h3 className="text-lg font-semibold text-neutral-700 mb-4">Coming up</h3>
-            {upcomingDays.length === 0 ? (
-              <p className="text-sm text-neutral-500 text-center py-4">No upcoming sessions scheduled</p>
-            ) : (
-              <div className="space-y-3">
-                {upcomingDays.slice(0, 4).flatMap((day) =>
-                  day.sessions.slice(0, 2).map((session) => (
-                    <div
-                      key={session.planned_session_id}
-                      className="flex items-center justify-between py-2"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: hexToLightBg(session.color || "#6B7280", 0.15) }}
-                        >
-                          <FontAwesomeIcon
-                            icon={getIconFromName(session.icon || "book")}
-                            className="text-sm"
-                            style={{ color: session.color || "#6B7280" }}
-                          />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-neutral-700">
-                            {session.subject_name}
-                          </div>
-                          <div className="text-xs text-neutral-500">
-                            {session.topic_names?.[0] || session.topics_preview?.[0]?.topic_name || "Topic TBD"}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-neutral-400">{formatDayLabel(day.date)}</div>
-                    </div>
-                  ))
-                )}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-primary-900">Today's Sessions</h2>
+              <div className="bg-primary-100 px-3 py-1 rounded-full">
+                <span className="text-primary-700 font-semibold text-sm">
+                  {totalCount} session{totalCount !== 1 ? "s" : ""}
+                </span>
               </div>
+            </div>
+
+            {todaySessions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FontAwesomeIcon icon={faBook} className="text-2xl text-primary-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-primary-900 mb-2">No sessions today</h3>
+                <p className="text-neutral-600">Enjoy your break! Check back tomorrow for your next sessions.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 mb-6">
+                  {todaySessions.map((session) => (
+                    <SessionItem
+                      key={session.planned_session_id}
+                      session={session}
+                      isNext={nextSession?.planned_session_id === session.planned_session_id}
+                      onStart={() => handleStartSession(session.planned_session_id)}
+                    />
+                  ))}
+                </div>
+
+                {nextSession && (
+                  <button
+                    onClick={() => handleStartSession(nextSession.planned_session_id)}
+                    className="w-full bg-primary-600 text-white font-semibold py-4 rounded-xl hover:bg-primary-700 transition flex items-center justify-center space-x-2"
+                  >
+                    <span className="text-lg">Start next session</span>
+                    <FontAwesomeIcon icon={faArrowRight} />
+                  </button>
+                )}
+              </>
             )}
           </div>
+        </section>
 
-          {/* This Week's Progress */}
+        {/* Coming Up Next - Timeline Style */}
+        {upcomingDays.length > 0 && (
+          <section className="mb-8">
+            <div className="bg-white rounded-2xl shadow-card p-6">
+              <h2 className="text-xl font-bold text-primary-900 mb-4">Coming Up Next</h2>
+              
+              <div className="space-y-4">
+                {upcomingDays.slice(0, 3).map((day, dayIndex) => {
+                  const isLast = dayIndex === Math.min(upcomingDays.length - 1, 2);
+                  const dayLabel = formatDayLabel(day.date);
+                  const shortDay = getShortDayName(day.date);
+                  const isFirstDay = dayIndex === 0;
+
+                  return (
+                    <div key={day.date} className="flex items-start space-x-4">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          isFirstDay ? "bg-primary-100" : "bg-neutral-100"
+                        }`}>
+                          <span className={`font-bold text-sm ${
+                            isFirstDay ? "text-primary-700" : "text-neutral-600"
+                          }`}>{shortDay}</span>
+                        </div>
+                        {!isLast && (
+                          <div className="w-0.5 h-16 bg-neutral-200 my-2" />
+                        )}
+                      </div>
+                      <div className="flex-1 pt-2">
+                        <p className="text-neutral-500 text-sm mb-2">{dayLabel}</p>
+                        <div className="space-y-2">
+                          {day.sessions.slice(0, 2).map((session) => (
+                            <div key={session.planned_session_id} className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                isFirstDay ? "bg-primary-600" : "bg-neutral-400"
+                              }`} />
+                              <span className="text-neutral-700 font-medium">
+                                {session.subject_name} - {session.topic_names?.[0] || "Topic TBD"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* This Week's Progress - Grid Style */}
+        <section className="mb-8">
           <div className="bg-white rounded-2xl shadow-card p-6">
-            <h3 className="text-lg font-semibold text-neutral-700 mb-4">This week's progress</h3>
-            <div className="flex items-center justify-center mb-4">
-              <div className="relative w-24 h-24">
-                <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#E1E4EE"
-                    strokeWidth="8"
-                    fill="none"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="#5B2CFF"
-                    strokeWidth="8"
-                    fill="none"
-                    strokeDasharray="251.2"
-                    strokeDashoffset={251.2 - (251.2 * progressPercent) / 100}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xl font-bold text-primary-600">{progressPercent}%</span>
+            <h2 className="text-xl font-bold text-primary-900 mb-4">This Week's Progress</h2>
+            
+            {/* Progress bar */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-neutral-600 font-medium">Sessions completed</span>
+                <span className="text-primary-900 font-bold text-lg">{completedCount} / {totalCount}</span>
+              </div>
+              <div className="w-full bg-neutral-200 rounded-full h-3 overflow-hidden">
+                <div 
+                  className="bg-accent-green h-full rounded-full transition-all duration-500" 
+                  style={{ width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : "0%" }}
+                />
+              </div>
+            </div>
+
+            {/* Week grid */}
+            <WeekProgressGrid 
+              completedToday={completedCount} 
+              totalToday={totalCount}
+              streak={currentStreak}
+            />
+          </div>
+        </section>
+
+        {/* Streak Motivation Section */}
+        {currentStreak > 0 && (
+          <section className="mb-8">
+            <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0">
+                  <FontAwesomeIcon icon={faFire} className="text-white text-xl" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-primary-900 mb-2">
+                    {currentStreak}-day streak — {currentStreak >= 7 ? "incredible!" : "great momentum!"}
+                  </h3>
+                  <p className="text-neutral-600 mb-3">
+                    {completedCount < totalCount 
+                      ? `You're building an amazing habit. Complete today's sessions to reach a ${currentStreak + 1}-day streak!`
+                      : `Amazing work! You've completed all your sessions today. Keep it up tomorrow!`
+                    }
+                  </p>
+                  <StreakVisualizer current={currentStreak} showNext={completedCount < totalCount} />
                 </div>
               </div>
             </div>
-            <div className="text-center mb-4">
-              <div className="text-sm text-neutral-600">
-                {completedCount} of {totalCount} sessions completed
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-neutral-600">Sessions completed</span>
-                <span className="font-medium text-accent-green">{completedCount}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-neutral-600">Remaining today</span>
-                <span className="font-medium text-primary-600">{totalCount - completedCount}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          </section>
+        )}
 
-        {/* Study Tip Card */}
-        <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-6 mt-6">
-          <div className="flex items-start space-x-4">
-            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <FontAwesomeIcon icon={faLightbulb} className="text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-primary-900 mb-2">💡 Study Tip</h3>
-              <p className="text-neutral-700">
-                Try the Pomodoro Technique for your next session! Study for 25 minutes, then take a
-                5-minute break. It helps you stay focused and remember more.
-              </p>
+        {/* Today's Tip Section */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow-card p-6">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <FontAwesomeIcon icon={faLightbulb} className="text-primary-600 text-xl" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-primary-900 mb-2">Today's Tip</h3>
+                <p className="text-neutral-600">
+                  Try the Feynman Technique: explain what you've learned in simple terms. 
+                  If you struggle, you know where to focus your revision!
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
+
       </main>
     </PageLayout>
   );
 }
 
 /**
- * Session Item Component - uses database color and icon
+ * Session Item Component - redesigned to match new styling
  */
 function SessionItem({
   session,
@@ -435,81 +443,155 @@ function SessionItem({
   const isStarted = session.status === "started";
   const isNotStarted = session.status === "not_started";
   const isReady = isNext && (isNotStarted || isStarted);
-  const isScheduled = !isCompleted && !isReady;
 
-  // Get subject color from database (fallback to gray)
-  const subjectColor = session.color || "#6B7280";
+  // Get subject icon from database
   const subjectIcon = getIconFromName(session.icon || "book");
-
-  // Container styles based on state
-  const containerClass = isReady
-    ? "bg-primary-50 border-2 border-primary-200"
-    : "bg-neutral-50";
+  
+  // Get subject color - use for icon background
+  const subjectColor = session.color || "#5B2CFF";
 
   // Topic display
   const topicDisplay = session.topic_names?.[0] || session.topics_preview?.[0]?.topic_name || "Topic TBD";
 
-  // Icon styling based on state
-  const getIconStyles = () => {
-    if (isReady) {
-      // Ready: solid subject color background, white icon
-      return {
-        backgroundColor: subjectColor,
-        iconColor: "#FFFFFF",
-      };
-    }
+  // Status badge
+  const getStatusBadge = () => {
     if (isCompleted) {
-      // Completed: light subject color background, subject color icon
-      return {
-        backgroundColor: hexToLightBg(subjectColor, 0.2),
-        iconColor: subjectColor,
-      };
+      return (
+        <div className="bg-accent-green/10 px-3 py-1 rounded-full">
+          <span className="text-accent-green text-xs font-medium">Completed</span>
+        </div>
+      );
     }
-    // Scheduled: gray background, gray icon
-    return {
-      backgroundColor: "#E1E4EE",
-      iconColor: "#6B7280",
-    };
+    if (isReady) {
+      return (
+        <div className="bg-accent-green/10 px-3 py-1 rounded-full">
+          <span className="text-accent-green text-xs font-medium">Ready</span>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-neutral-200 px-3 py-1 rounded-full">
+        <span className="text-neutral-600 text-xs font-medium">Pending</span>
+      </div>
+    );
   };
 
-  const iconStyles = getIconStyles();
-
   return (
-    <div className={`flex items-center justify-between p-4 rounded-xl ${containerClass}`}>
-      <div className="flex items-center space-x-4">
-        <div
-          className="w-10 h-10 rounded-lg flex items-center justify-center"
-          style={{ backgroundColor: iconStyles.backgroundColor }}
-        >
-          <FontAwesomeIcon
-            icon={subjectIcon}
-            style={{ color: iconStyles.iconColor }}
-          />
-        </div>
-        <div>
-          <div className="font-medium text-neutral-700">{session.subject_name}</div>
-          <div className="text-sm text-neutral-500">{topicDisplay}</div>
-          <div className="text-sm text-neutral-400">
-            {isReady ? "Any time today" : `${session.session_duration_minutes} mins`}
-          </div>
-        </div>
+    <div 
+      className="flex items-start space-x-3 p-4 bg-neutral-50 rounded-xl cursor-pointer hover:bg-neutral-100 transition"
+      onClick={onStart}
+    >
+      <div 
+        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: subjectColor }}
+      >
+        <FontAwesomeIcon icon={subjectIcon} className="text-white" />
       </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-neutral-700 mb-1">{session.subject_name}</h3>
+        <p className="text-neutral-500 text-sm truncate">{topicDisplay}</p>
+      </div>
+      {getStatusBadge()}
+    </div>
+  );
+}
 
-      {/* Status badges */}
-      {isCompleted && (
-        <span className="px-3 py-1 bg-accent-green text-white text-sm rounded-full">
-          Completed
-        </span>
-      )}
-      {isReady && (
-        <span className="px-3 py-1 bg-primary-600 text-white text-sm rounded-full">
-          {isStarted ? "Continue" : "Ready"}
-        </span>
-      )}
-      {isScheduled && (
-        <span className="px-3 py-1 bg-neutral-300 text-neutral-600 text-sm rounded-full">
-          Scheduled
-        </span>
+/**
+ * Week Progress Grid - shows 7 days with completion status
+ */
+function WeekProgressGrid({ 
+  completedToday, 
+  totalToday,
+  streak 
+}: { 
+  completedToday: number; 
+  totalToday: number;
+  streak: number;
+}) {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // Get start of week (Monday)
+  const startOfWeek = new Date(today);
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  startOfWeek.setDate(today.getDate() + diff);
+  
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  
+  // Calculate which days are completed based on streak (simplified)
+  const todayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Mon=0 index
+  
+  return (
+    <div className="grid grid-cols-7 gap-2">
+      {days.map((day, index) => {
+        const isPast = index < todayIndex;
+        const isCurrentDay = index === todayIndex;
+        const isFuture = index > todayIndex;
+        
+        // Determine completion status based on streak
+        const isCompletedDay = isPast && index >= todayIndex - streak && streak > 0;
+        
+        return (
+          <div key={day} className="flex flex-col items-center">
+            <span className={`text-xs mb-2 ${
+              isCurrentDay ? "text-primary-700 font-semibold" : "text-neutral-500"
+            }`}>
+              {isCurrentDay ? "Today" : day}
+            </span>
+            
+            <div className={`w-full h-16 rounded-lg flex items-center justify-center ${
+              isCompletedDay 
+                ? "bg-accent-green" 
+                : isCurrentDay 
+                  ? "bg-primary-100 border-2 border-primary-600"
+                  : isFuture
+                    ? "bg-neutral-100"
+                    : "bg-neutral-100"
+            }`}>
+              {isCompletedDay ? (
+                <FontAwesomeIcon icon={faCheck} className="text-white" />
+              ) : isCurrentDay ? (
+                <span className="text-primary-700 font-bold">{completedToday}/{totalToday}</span>
+              ) : isFuture ? (
+                <span className="text-neutral-400 font-bold">-</span>
+              ) : (
+                <span className="text-neutral-400 font-bold">-</span>
+              )}
+            </div>
+            
+            <span className={`text-xs mt-1 font-medium ${
+              isCompletedDay ? "text-neutral-600" : "text-neutral-400"
+            }`}>
+              {isCompletedDay ? "✓" : isCurrentDay ? `${completedToday}/${totalToday}` : isFuture ? "" : ""}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Streak Visualizer - shows streak progress circles
+ */
+function StreakVisualizer({ current, showNext }: { current: number; showNext: boolean }) {
+  // Show up to 5 circles (4 completed + 1 next if applicable)
+  const displayCount = Math.min(current, 4);
+  
+  return (
+    <div className="flex items-center space-x-1">
+      {Array.from({ length: displayCount }).map((_, i) => (
+        <div 
+          key={i} 
+          className="w-8 h-8 bg-accent-green rounded-full flex items-center justify-center"
+        >
+          <FontAwesomeIcon icon={faCheck} className="text-white text-xs" />
+        </div>
+      ))}
+      {showNext && (
+        <div className="w-8 h-8 bg-primary-300 rounded-full flex items-center justify-center border-2 border-primary-600">
+          <span className="text-primary-900 font-bold text-xs">{current + 1}</span>
+        </div>
       )}
     </div>
   );
