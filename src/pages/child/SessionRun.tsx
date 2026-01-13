@@ -1,815 +1,564 @@
 // src/pages/child/SessionRun.tsx
-// UPDATED: Integrated gamification support (v3.3)
+// UPDATED: 6-Step Session Model - January 2026
+// Main runner that orchestrates all session steps
 
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../../lib/supabase";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faArrowLeft,
+  faXmark,
+  faClock,
+  faSpinner,
+  faExclamationTriangle,
+  faCheckCircle,
+  faFlask,
+  faCalculator,
+  faAtom,
+  faGlobe,
+  faLandmark,
+  faDna,
+  faBook,
+  faCircle,
+  IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
+
+// Step Components
+import PreviewStep from "./sessionSteps/PreviewStep";
 import RecallStep from "./sessionSteps/RecallStep";
 import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
-import ReflectionStep from "./sessionSteps/ReflectionStep";
+import SummaryStep from "./sessionSteps/SummaryStep";
 import CompleteStep from "./sessionSteps/CompleteStep";
-import SessionHeader from "../../components/session/SessionHeader";
-import ProgressTracker from "../../components/session/ProgressTracker";
-import SessionCompleteWithGamification from "../../components/gamification/SessionCompleteWithGamification";
-import { markAchievementsNotified } from "../../services/gamificationService";
-import type { SessionGamificationResult, AdvanceTopicResult } from "../../types/gamification";
 
-type StartPlannedSessionRow = {
-  out_planned_session_id: string;
-  out_status: string;
-  out_started_at: string | null;
-  out_revision_session_id: string | null;
-};
+// Services
+import {
+  getRevisionSession,
+  patchRevisionSessionStep,
+  completeRevisionSession,
+} from "../../services/revisionSessionApi";
 
-type RevisionSessionRow = {
-  id: string;
-  child_id: string;
+// =============================================================================
+// Types
+// =============================================================================
+
+type StepKey = "preview" | "recall" | "reinforce" | "practice" | "summary" | "complete";
+
+type SessionData = {
+  revision_session_id: string;
   planned_session_id: string;
-  status: string;
-  current_step: string | null;
-  current_step_index: number | null;
-  current_item_index: number | null;
-  current_topic_index: number;
-  total_topics: number;
-  started_at: string | null;
-  completed_at: string | null;
-};
-
-type RevisionSessionStepRow = {
-  step_key: string;
-  status: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  total_items: number | null;
-  current_item_index: number | null;
-  payload: any | null;
-};
-
-type PlannedSessionPayloadRow = {
-  id: string;
-  generated_payload: any | null;
-};
-
-type TopicInfo = {
+  child_id: string;
+  child_name: string;
+  subject_id: string;
+  subject_name: string;
+  subject_icon: string | null;
+  subject_color: string | null;
   topic_id: string;
   topic_name: string;
+  session_duration_minutes: number;
+  status: "in_progress" | "completed" | "abandoned";
+  current_step_key: StepKey;
+  steps: Array<{
+    step_key: StepKey;
+    step_index: number;
+    status: "pending" | "in_progress" | "completed";
+    answer_summary: Record<string, any>;
+  }>;
+  generated_payload: Record<string, any>;
 };
 
-const STEP_ORDER = ["recall", "reinforce", "practice", "reflection"] as const;
+// =============================================================================
+// Constants
+// =============================================================================
 
-function normaliseStepKey(step: any) {
-  const s = String(step ?? "").toLowerCase().trim();
-  if (s === "complete") return "complete";
-  if (s === "topic_complete") return "topic_complete";
-  if ((STEP_ORDER as readonly string[]).includes(s)) return s;
-  return "recall";
+const STEP_ORDER: StepKey[] = [
+  "preview",
+  "recall",
+  "reinforce",
+  "practice",
+  "summary",
+  "complete",
+];
+
+const STEP_LABELS: Record<StepKey, string> = {
+  preview: "Preview",
+  recall: "Recall",
+  reinforce: "Core Teaching",
+  practice: "Practice",
+  summary: "Summary",
+  complete: "Complete",
+};
+
+const ICON_MAP: Record<string, IconDefinition> = {
+  calculator: faCalculator,
+  book: faBook,
+  flask: faFlask,
+  atom: faAtom,
+  globe: faGlobe,
+  landmark: faLandmark,
+  dna: faDna,
+};
+
+function getIconFromName(iconName?: string | null): IconDefinition {
+  if (!iconName) return faFlask;
+  return ICON_MAP[iconName.toLowerCase()] || faFlask;
 }
 
-function idxOf(step: string | null | undefined) {
-  const s = normaliseStepKey(step);
-  const i = STEP_ORDER.indexOf(s as any);
-  return i >= 0 ? i : 0;
-}
+// =============================================================================
+// Sub-components
+// =============================================================================
 
-function nextStepKey(step: string | null | undefined) {
-  const s = normaliseStepKey(step);
-  if (s === "reflection") return "topic_complete"; // Changed: go to topic_complete, not complete
-  if (s === "topic_complete") return "recall"; // After break, start next topic
-  const i = idxOf(s);
-  return STEP_ORDER[Math.min(i + 1, STEP_ORDER.length - 1)];
-}
-
-function prevStepKey(step: string | null | undefined) {
-  const s = normaliseStepKey(step);
-  if (s === "complete" || s === "topic_complete") return "reflection";
-  const i = idxOf(s);
-  return STEP_ORDER[Math.max(i - 1, 0)];
-}
-
-function computeProgress(stepKey: string, topicIndex: number, totalTopics: number) {
-  const s = normaliseStepKey(stepKey);
-  if (s === "complete") return 100;
-  
-  const stepsPerTopic = STEP_ORDER.length;
-  const stepIdx = s === "topic_complete" ? stepsPerTopic : idxOf(s);
-  
-  const totalSteps = stepsPerTopic * totalTopics;
-  const completedSteps = (topicIndex * stepsPerTopic) + stepIdx;
-  
-  return Math.max(5, Math.min(95, Math.round((completedSteps / totalSteps) * 100)));
-}
-
-function isValidMacroPayload(gp: any) {
-  if (!gp || typeof gp !== "object") return false;
-  if (!gp.plannedSessionId) return false;
-  if (!gp.recall || typeof gp.recall !== "object") return false;
-  if (!gp.reinforce || typeof gp.reinforce !== "object") return false;
-  if (!gp.practice || typeof gp.practice !== "object") return false;
-  return true;
-}
-
-export default function SessionRun() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [revisionSessionId, setRevisionSessionId] = useState<string | null>(
-    (location.state as any)?.revisionSessionId ?? null
-  );
-
-  const forceStepFromNav = useMemo(() => {
-    const fs = (location.state as any)?.forceStep;
-    return fs ? normaliseStepKey(fs) : null;
-  }, [location.state]);
-
-  const [revisionSession, setRevisionSession] = useState<RevisionSessionRow | null>(null);
-  const [stepRows, setStepRows] = useState<RevisionSessionStepRow[]>([]);
-  const [plannedPayload, setPlannedPayload] = useState<any | null>(null);
-  const [overview, setOverview] = useState<any | null>(null);
-  const [topicsList, setTopicsList] = useState<TopicInfo[]>([]);
-  
-  // Topic transition state
-  const [showTopicComplete, setShowTopicComplete] = useState(false);
-  const [, setNextTopicName] = useState<string | null>(null);
-
-  // GAMIFICATION STATE (NEW in v3.3)
-  const [gamificationResult, setGamificationResult] = useState<SessionGamificationResult | null>(null);
-  const [showSessionComplete, setShowSessionComplete] = useState(false);
-
-  const psid = useMemo(() => (plannedSessionId ?? "").trim(), [plannedSessionId]);
-
-  const currentStepKey = useMemo(() => {
-    if (showSessionComplete) return "complete";
-    if (showTopicComplete) return "topic_complete";
-    return normaliseStepKey(revisionSession?.current_step ?? "recall");
-  }, [revisionSession?.current_step, showTopicComplete, showSessionComplete]);
-
-  const currentTopicIndex = revisionSession?.current_topic_index ?? 0;
-  const totalTopics = revisionSession?.total_topics ?? 1;
-  const childId = revisionSession?.child_id;
-
-  const currentStepRow = useMemo(() => {
-    return stepRows.find((s) => s.step_key === currentStepKey) ?? null;
-  }, [stepRows, currentStepKey]);
-
-  const runtimePayload = currentStepRow?.payload ?? {};
-
-  // Load session data
-  useEffect(() => {
-    let cancelled = false;
-
-    async function ensureAndLoad() {
-      setError(null);
-      if (!psid) {
-        setLoading(false);
-        setError("Missing planned session ID.");
-        return;
-      }
-
-      setLoading(true);
-
-      try {
-        // 0) Load overview (subject/topic labels)
-        const { data: ovData, error: ovErr } = await supabase.rpc(
-          "rpc_get_planned_session_overview",
-          { p_planned_session_id: psid }
-        );
-        if (ovErr) throw ovErr;
-        const ovRow = Array.isArray(ovData) ? ovData[0] : ovData;
-
-        // Load all topics for this session
-        const { data: psData } = await supabase
-          .from("planned_sessions")
-          .select("topic_ids")
-          .eq("id", psid)
-          .maybeSingle();
-        
-        const topicIds = psData?.topic_ids || [];
-        const topicsInfo: TopicInfo[] = [];
-        
-        for (const tid of topicIds) {
-          const { data: tData } = await supabase
-            .from("topics")
-            .select("id, topic_name")
-            .eq("id", tid)
-            .maybeSingle();
-          if (tData) {
-            topicsInfo.push({ topic_id: tData.id, topic_name: tData.topic_name });
-          }
-        }
-
-        // 1) Ensure revision session exists (start/reuse)
-        let rsid = (revisionSessionId ?? "").trim();
-        if (!rsid) {
-          const { data, error: startErr } = await supabase.rpc(
-            "rpc_start_planned_session",
-            { p_planned_session_id: psid }
-          );
-          if (startErr) throw startErr;
-          const rows = (data ?? []) as StartPlannedSessionRow[];
-          const first = rows[0] ?? null;
-          rsid = (first?.out_revision_session_id ?? "").trim();
-          if (!rsid) {
-            console.error("[SessionRun] start RPC returned:", data);
-            throw new Error("Start failed: no revision session id returned.");
-          }
-          if (!cancelled) setRevisionSessionId(rsid);
-        }
-
-        // 2) Load revision_sessions (now includes topic tracking and child_id)
-        const { data: rsData, error: rsErr } = await supabase
-          .from("revision_sessions")
-          .select(
-            "id, child_id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at"
-          )
-          .eq("id", rsid)
-          .maybeSingle();
-        if (rsErr) throw rsErr;
-        if (!rsData) throw new Error("Revision session not found.");
-
-        // 3) Load revision_session_steps (include payload)
-        const { data: stepsData, error: stepsErr } = await supabase
-          .from("revision_session_steps")
-          .select(
-            "step_key, status, started_at, completed_at, total_items, current_item_index, payload"
-          )
-          .eq("revision_session_id", rsid);
-        if (stepsErr) throw stepsErr;
-
-        // 4) Load planned_sessions.generated_payload (macro payload)
-        const { data: plData, error: plErr } = await supabase
-          .from("planned_sessions")
-          .select("id, generated_payload")
-          .eq("id", psid)
-          .maybeSingle<PlannedSessionPayloadRow>();
-        if (plErr) throw plErr;
-
-        let gp = plData?.generated_payload ?? null;
-
-        // If payload missing/invalid, regenerate
-        if (!isValidMacroPayload(gp)) {
-          const { data: regen, error: regenErr } = await supabase.rpc(
-            "rpc_generate_planned_session_payload",
-            { p_planned_session_id: psid }
-          );
-          if (regenErr) throw regenErr;
-          gp = regen ?? null;
-        }
-
-        if (cancelled) return;
-
-        setOverview(ovRow ?? null);
-        setTopicsList(topicsInfo);
-        setRevisionSession(rsData as RevisionSessionRow);
-        setStepRows((stepsData ?? []) as RevisionSessionStepRow[]);
-        setPlannedPayload(gp);
-        setLoading(false);
-      } catch (e: any) {
-        if (cancelled) return;
-        console.error("[SessionRun] failed:", e);
-        setError(e?.message ?? "Failed to load session.");
-        setLoading(false);
-      }
-    }
-
-    void ensureAndLoad();
-    return () => {
-      cancelled = true;
-    };
-  }, [psid, revisionSessionId]);
-
-  const handleExit = () => navigate("/child/today");
-
-  async function patchCurrentStep(patch: Record<string, any>) {
-    if (!revisionSessionId) return;
-    if (!currentStepRow) return;
-
-    setSaving(true);
-    try {
-      const merged = { ...(currentStepRow.payload ?? {}), ...patch };
-      const { error: updErr } = await supabase
-        .from("revision_session_steps")
-        .update({ payload: merged })
-        .eq("revision_session_id", revisionSessionId)
-        .eq("step_key", currentStepRow.step_key);
-      if (updErr) throw updErr;
-
-      setStepRows((prev) =>
-        prev.map((s) =>
-          s.step_key === currentStepRow.step_key ? { ...s, payload: merged } : s
-        )
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function moveTo(stepKey: string) {
-    if (!revisionSessionId) return;
-    const key = normaliseStepKey(stepKey);
-
-    setSaving(true);
-    try {
-      const { error: rsErr } = await supabase
-        .from("revision_sessions")
-        .update({ current_step: key })
-        .eq("id", revisionSessionId);
-      if (rsErr) throw rsErr;
-
-      // Mark target step in_progress (unless completed)
-      const target = stepRows.find((s) => s.step_key === key);
-      if (target && target.status !== "completed") {
-        const { error: stErr } = await supabase
-          .from("revision_session_steps")
-          .update({
-            status: "in_progress",
-            started_at: target.started_at ?? new Date().toISOString(),
-          })
-          .eq("revision_session_id", revisionSessionId)
-          .eq("step_key", key);
-        if (stErr) throw stErr;
-      }
-
-      setRevisionSession((prev) =>
-        prev ? { ...prev, current_step: key } : prev
-      );
-      setStepRows((prev) =>
-        prev.map((s) =>
-          s.step_key === key && s.status !== "completed"
-            ? {
-                ...s,
-                status: "in_progress",
-                started_at: s.started_at ?? new Date().toISOString(),
-              }
-            : s
-        )
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function completeStepAndNext() {
-    if (!revisionSessionId) return;
-    const current = normaliseStepKey(currentStepKey);
-    const next = nextStepKey(current);
-
-    setSaving(true);
-    try {
-      // Mark current step completed
-      if (current !== "complete" && current !== "topic_complete") {
-        const { error: stErr } = await supabase
-          .from("revision_session_steps")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-          })
-          .eq("revision_session_id", revisionSessionId)
-          .eq("step_key", current);
-        if (stErr) throw stErr;
-
-        setStepRows((prev) =>
-          prev.map((s) =>
-            s.step_key === current
-              ? { ...s, status: "completed", completed_at: new Date().toISOString() }
-              : s
-          )
-        );
-      }
-
-      // If we just completed reflection, show topic complete screen
-      if (current === "reflection") {
-        setShowTopicComplete(true);
-      } else {
-        await moveTo(next);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // Called when user clicks "Continue" on the topic complete screen
-  // UPDATED: Now handles gamification result from RPC
-  async function handleTopicComplete() {
-    if (!revisionSessionId) return;
-
-    setSaving(true);
-    try {
-      // Call RPC to advance to next topic or complete session
-      const { data, error: advErr } = await supabase.rpc(
-        "rpc_advance_to_next_topic",
-        { p_revision_session_id: revisionSessionId }
-      );
-      if (advErr) throw advErr;
-
-      const result = (Array.isArray(data) ? data[0] : data) as AdvanceTopicResult;
-      
-      if (result.out_is_session_complete) {
-        // All topics done - session complete with gamification!
-        setGamificationResult(result.out_gamification);
-        setShowTopicComplete(false);
-        setShowSessionComplete(true);
-        
-        // Update local state
-        setRevisionSession((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: "completed",
-                current_step: "complete",
-                completed_at: new Date().toISOString(),
-              }
-            : prev
-        );
-      } else {
-        // More topics to do
-        setNextTopicName(result.out_topic_name);
-        
-        // Reload session data to get fresh state
-        const { data: rsData } = await supabase
-          .from("revision_sessions")
-          .select("id, child_id, planned_session_id, status, current_step, current_step_index, current_item_index, current_topic_index, total_topics, started_at, completed_at")
-          .eq("id", revisionSessionId)
-          .maybeSingle();
-        
-        const { data: stepsData } = await supabase
-          .from("revision_session_steps")
-          .select("step_key, status, started_at, completed_at, total_items, current_item_index, payload")
-          .eq("revision_session_id", revisionSessionId);
-
-        // Regenerate payload for new topic
-        const { data: newPayload } = await supabase.rpc(
-          "rpc_generate_planned_session_payload",
-          { p_planned_session_id: psid }
-        );
-
-        if (rsData) setRevisionSession(rsData as RevisionSessionRow);
-        if (stepsData) setStepRows(stepsData as RevisionSessionStepRow[]);
-        if (newPayload) setPlannedPayload(newPayload);
-        
-        setShowTopicComplete(false);
-      }
-    } catch (e: any) {
-      console.error("[SessionRun] advance topic error:", e);
-      setError(e?.message ?? "Failed to advance to next topic");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function finishSession(params: { confidenceLevel: string; notes?: string }) {
-    if (!revisionSessionId) return;
-
-    setSaving(true);
-    try {
-      // Mark reflection step completed
-      const { error: stErr } = await supabase
-        .from("revision_session_steps")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("revision_session_id", revisionSessionId)
-        .eq("step_key", "reflection");
-      if (stErr) throw stErr;
-
-      // Persist reflection info
-      await patchCurrentStep({
-        reflection: {
-          confidence_level: params.confidenceLevel,
-          notes: params.notes ?? "",
-          completed_at: new Date().toISOString(),
-        },
-      });
-
-      // Show topic complete (which will check if there are more topics)
-      setShowTopicComplete(true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // Handle marking achievements as notified (NEW in v3.3)
-  async function handleMarkAchievementsNotified() {
-    if (!childId) return;
-    await markAchievementsNotified(childId);
-  }
-
-  // Force step from navigation (only when requested)
-  useEffect(() => {
-    if (!forceStepFromNav) return;
-    if (!revisionSessionId) return;
-    if (loading) return;
-    if (currentStepKey !== forceStepFromNav) {
-      void moveTo(forceStepFromNav);
-    }
-  }, [forceStepFromNav, revisionSessionId, loading]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading session…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 px-6 py-8">
-        <div className="max-w-5xl mx-auto rounded-2xl border border-red-100 bg-white p-6">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Something went wrong
-          </h1>
-          <p className="mt-3 text-red-700">{error}</p>
-          <button
-            type="button"
-            onClick={handleExit}
-            className="mt-6 px-5 py-3 rounded-xl bg-gray-900 text-white font-semibold"
+function SessionHeader({
+  subjectName,
+  subjectIcon,
+  subjectColor,
+  topicName,
+  onExit,
+}: {
+  subjectName: string;
+  subjectIcon: IconDefinition;
+  subjectColor: string;
+  topicName: string;
+  onExit: () => void;
+}) {
+  return (
+    <header className="bg-white border-b border-neutral-200 sticky top-0 z-40">
+      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        {/* Subject Info */}
+        <div className="flex items-center space-x-3">
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: subjectColor }}
           >
-            Back to Today
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // SESSION COMPLETE WITH GAMIFICATION (NEW in v3.3)
-  if (showSessionComplete) {
-    const currentTopicName = topicsList[currentTopicIndex]?.topic_name ?? "Topic";
-    
-    return (
-      <SessionCompleteWithGamification
-        subjectName={overview?.subject_name ?? "Revision"}
-        topicName={currentTopicName}
-        topicCount={totalTopics}
-        gamification={gamificationResult}
-        onExit={handleExit}
-        onMarkAchievementsNotified={handleMarkAchievementsNotified}
-      />
-    );
-  }
-
-  // Topic Complete Interstitial
-  if (showTopicComplete) {
-    const currentTopicName = topicsList[currentTopicIndex]?.topic_name ?? "Topic";
-    const isLastTopic = currentTopicIndex >= totalTopics - 1;
-    const nextTopic = !isLastTopic ? topicsList[currentTopicIndex + 1]?.topic_name : null;
-
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-        <SessionHeader
-          subjectName={overview?.subject_name ?? "Revision"}
-          subjectIcon="🧪"
-          sessionInfo={`Topic ${currentTopicIndex + 1} of ${totalTopics}`}
-          showBack={false}
-          showExit={true}
-          onExit={handleExit}
-        />
-        
-        <div className="max-w-2xl mx-auto px-6 py-16 text-center">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+            <FontAwesomeIcon icon={subjectIcon} className="text-white text-lg" />
           </div>
-          
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">
-            {isLastTopic ? "Session Complete! 🎉" : "Topic Complete!"}
-          </h1>
-          
-          <p className="text-lg text-gray-600 mb-2">
-            You've finished <span className="font-semibold text-gray-900">{currentTopicName}</span>
-          </p>
-          
-          {!isLastTopic && (
-            <>
-              <p className="text-gray-500 mb-8">
-                Topic {currentTopicIndex + 1} of {totalTopics} complete
-              </p>
-              
-              {/* Break suggestion for multi-topic sessions */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8">
-                <div className="flex items-center justify-center gap-2 text-amber-700 mb-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="font-medium">Quick break?</span>
-                </div>
-                <p className="text-sm text-amber-600">
-                  Take 5 minutes to stretch, grab a drink, or rest your eyes before continuing.
-                </p>
-              </div>
-              
-              <div className="bg-white rounded-xl border border-gray-200 p-4 mb-8">
-                <p className="text-sm text-gray-500 mb-1">Up next</p>
-                <p className="text-lg font-semibold text-gray-900">{nextTopic}</p>
-              </div>
-            </>
-          )}
-          
-          {isLastTopic ? (
-            <div className="space-y-4">
-              <p className="text-gray-600 mb-6">
-                Great work completing all {totalTopics} topics in this session!
-              </p>
-              <button
-                onClick={handleTopicComplete}
-                disabled={saving}
-                className="w-full py-4 rounded-xl bg-green-600 text-white font-semibold text-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                {saving ? "Finishing..." : "Finish Session"}
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleTopicComplete}
-              disabled={saving}
-              className="w-full py-4 rounded-xl bg-indigo-600 text-white font-semibold text-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            >
-              {saving ? "Loading next topic..." : "Continue to Next Topic"}
-            </button>
-          )}
+          <div>
+            <p className="font-semibold text-primary-900">{subjectName}</p>
+            <p className="text-neutral-500 text-sm truncate max-w-[200px]">{topicName}</p>
+          </div>
         </div>
+
+        {/* Exit Button */}
+        <button
+          type="button"
+          onClick={onExit}
+          className="flex items-center space-x-2 px-4 py-2 text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100 rounded-lg transition"
+        >
+          <FontAwesomeIcon icon={faXmark} />
+          <span className="font-medium">Exit session</span>
+        </button>
       </div>
-    );
-  }
+    </header>
+  );
+}
 
-  const gp = plannedPayload ?? {};
-
-  // Macro payload, plus any runtime patches for the current step
-  const currentTopicNameForDisplay = topicsList[currentTopicIndex]?.topic_name ?? overview?.topic_name ?? "this topic";
-
-  const effectivePayloadForStep = {
-    ...gp,
-    ...(runtimePayload ?? {}),
-    recall: {
-      promptText:
-        gp?.recall?.promptText ??
-        `What do you remember about ${currentTopicNameForDisplay}?`,
-      allowFreeText: gp?.recall?.allowFreeText ?? true,
-      revealAnswerText: gp?.recall?.revealAnswerText ?? "",
-      ...(runtimePayload?.recall ?? {}),
-    },
-    reinforce: {
-      cards: Array.isArray(gp?.reinforce?.cards) ? gp.reinforce.cards : [],
-      worked_example: gp?.reinforce?.worked_example ?? null,
-      ...(runtimePayload?.reinforce ?? {}),
-    },
-    practice: {
-      question: gp?.practice?.question ?? null,
-      ...(runtimePayload?.practice ?? {}),
-    },
-    reflection: {
-      ...(gp?.reflection ?? {}),
-      ...(runtimePayload?.reflection ?? {}),
-    },
-  };
-
-  const onBack = async () => {
-    const prev = prevStepKey(currentStepKey);
-    await moveTo(prev);
-  };
-
-  const onNext = async () => {
-    await completeStepAndNext();
-  };
-
-  const headerMeta = {
-    subject_name: overview?.subject_name ?? "Revision",
-    topic_name: currentTopicNameForDisplay,
-    session_duration_minutes: overview?.session_duration_minutes ?? null,
-    step_key: currentStepKey,
-    step_percent: computeProgress(currentStepKey, currentTopicIndex, totalTopics),
-  };
-
-  const stepPhaseName =
-    {
-      recall: "Activating memory",
-      reinforce: "Building understanding",
-      practice: "Applying knowledge",
-      reflection: "Reflecting on learning",
-      complete: "Session complete",
-    }[currentStepKey] || "Learning";
-
-  const stepLabels: Record<string, string> = {
-    recall: "Recall",
-    reinforce:
-      currentStepRow?.current_item_index !== null &&
-      currentStepRow?.current_item_index !== undefined &&
-      currentStepRow?.total_items
-        ? `Card ${currentStepRow.current_item_index + 1} of ${currentStepRow.total_items}`
-        : "Reinforcement",
-    practice:
-      currentStepRow?.current_item_index !== null &&
-      currentStepRow?.current_item_index !== undefined &&
-      currentStepRow?.total_items
-        ? `Question ${currentStepRow.current_item_index + 1} of ${currentStepRow.total_items}`
-        : "Practice question",
-    reflection: "Final reflection",
-  };
-
-  const currentStepNum = idxOf(currentStepKey) + 1;
-  const stepsPerTopic = STEP_ORDER.length;
-  const totalStepsOverall = stepsPerTopic * totalTopics;
-  const currentOverallStep = (currentTopicIndex * stepsPerTopic) + currentStepNum;
-
-  const timeRemaining = headerMeta.session_duration_minutes
-    ? `About ${headerMeta.session_duration_minutes} min left`
-    : undefined;
-
-  // Session info showing topic progress
-  const sessionInfoText = totalTopics > 1 
-    ? `Topic ${currentTopicIndex + 1} of ${totalTopics} • ${currentTopicNameForDisplay}`
-    : currentTopicNameForDisplay;
+function StepProgressBar({
+  currentStepIndex,
+  totalSteps,
+  steps,
+  timeRemainingMinutes,
+}: {
+  currentStepIndex: number;
+  totalSteps: number;
+  steps: SessionData["steps"];
+  timeRemainingMinutes: number | null;
+}) {
+  const progressPercent = ((currentStepIndex) / totalSteps) * 100;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-white border-b border-neutral-200 py-4">
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Top row: label + time */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-neutral-600 text-sm">
+            {STEP_LABELS[STEP_ORDER[currentStepIndex - 1] ?? "preview"]}
+          </p>
+          <div className="flex items-center space-x-4">
+            <span className="text-neutral-500 text-sm">
+              {currentStepIndex} of {totalSteps} steps
+            </span>
+            {timeRemainingMinutes !== null && (
+              <div className="flex items-center space-x-1 text-neutral-500 text-sm">
+                <FontAwesomeIcon icon={faClock} className="text-xs" />
+                <span>~{timeRemainingMinutes} min left</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full bg-neutral-200 rounded-full h-2 mb-4">
+          <div
+            className="bg-primary-600 h-full rounded-full transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+
+        {/* Step dots */}
+        <div className="flex items-center justify-between">
+          {STEP_ORDER.map((stepKey, idx) => {
+            const stepData = steps.find((s) => s.step_key === stepKey);
+            const isComplete = stepData?.status === "completed";
+            const isCurrent = idx + 1 === currentStepIndex;
+            const isPending = !isComplete && !isCurrent;
+
+            return (
+              <div key={stepKey} className="flex flex-col items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                    isComplete
+                      ? "bg-accent-green"
+                      : isCurrent
+                      ? "bg-primary-600"
+                      : "bg-neutral-200"
+                  }`}
+                >
+                  {isComplete ? (
+                    <FontAwesomeIcon icon={faCheckCircle} className="text-white text-sm" />
+                  ) : (
+                    <span
+                      className={`text-sm font-semibold ${
+                        isCurrent ? "text-white" : "text-neutral-500"
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-xs mt-1 hidden md:block ${
+                    isCurrent ? "text-primary-600 font-semibold" : "text-neutral-400"
+                  }`}
+                >
+                  {STEP_LABELS[stepKey]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
+      <div className="text-center">
+        <FontAwesomeIcon
+          icon={faSpinner}
+          className="text-primary-600 text-4xl animate-spin mb-4"
+        />
+        <p className="text-neutral-600 font-medium">Loading session...</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-card p-8 max-w-md text-center">
+        <FontAwesomeIcon
+          icon={faExclamationTriangle}
+          className="text-accent-red text-4xl mb-4"
+        />
+        <h2 className="text-xl font-bold text-neutral-900 mb-2">
+          Something went wrong
+        </h2>
+        <p className="text-neutral-600 mb-6">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
+export default function SessionRun() {
+  const { revisionSessionId } = useParams<{ revisionSessionId: string }>();
+  const navigate = useNavigate();
+
+  // State
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Load session data
+  const loadSession = useCallback(async () => {
+    if (!revisionSessionId) {
+      setError("No session ID provided");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getRevisionSession(revisionSessionId);
+      setSessionData(data);
+
+      // Find current step index
+      const currentStep = data.steps.find((s) => s.status === "in_progress");
+      if (currentStep) {
+        setCurrentStepIndex(currentStep.step_index);
+      } else {
+        // Find first non-completed step
+        const firstPending = data.steps.find((s) => s.status === "pending");
+        if (firstPending) {
+          setCurrentStepIndex(firstPending.step_index);
+        } else {
+          // All complete
+          setCurrentStepIndex(data.steps.length);
+        }
+      }
+    } catch (err) {
+      console.error("[SessionRun] Failed to load session:", err);
+      setError("Failed to load session. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [revisionSessionId]);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  // Handlers
+  async function handlePatchStep(stepKey: StepKey, patch: Record<string, any>) {
+    if (!sessionData || !revisionSessionId) return;
+
+    setSaving(true);
+    try {
+      await patchRevisionSessionStep(revisionSessionId, stepKey, patch);
+
+      // Update local state
+      setSessionData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.step_key === stepKey
+              ? { ...s, answer_summary: { ...s.answer_summary, ...patch } }
+              : s
+          ),
+        };
+      });
+    } catch (err) {
+      console.error("[SessionRun] Failed to patch step:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNextStep() {
+    if (!sessionData || !revisionSessionId) return;
+
+    const nextIndex = currentStepIndex + 1;
+
+    // Mark current step complete and move to next
+    setSaving(true);
+    try {
+      const currentStepKey = STEP_ORDER[currentStepIndex - 1];
+      await patchRevisionSessionStep(revisionSessionId, currentStepKey, {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      });
+
+      // Update local state
+      setSessionData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.step_key === currentStepKey ? { ...s, status: "completed" } : s
+          ),
+        };
+      });
+
+      if (nextIndex <= STEP_ORDER.length) {
+        setCurrentStepIndex(nextIndex);
+      }
+    } catch (err) {
+      console.error("[SessionRun] Failed to advance step:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleBack() {
+    if (currentStepIndex > 1) {
+      setCurrentStepIndex(currentStepIndex - 1);
+    }
+  }
+
+  function handleExit() {
+    // Could show confirmation modal
+    navigate("/child/today");
+  }
+
+  async function handleFinish() {
+    if (!revisionSessionId) return;
+
+    setSaving(true);
+    try {
+      await completeRevisionSession(revisionSessionId);
+      navigate("/child/today", { state: { sessionCompleted: true } });
+    } catch (err) {
+      console.error("[SessionRun] Failed to complete session:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Loading / Error states
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={loadSession} />;
+  if (!sessionData) return <ErrorState message="Session data not found" onRetry={loadSession} />;
+
+  // Derived values
+  const subjectIcon = getIconFromName(sessionData.subject_icon);
+  const subjectColor = sessionData.subject_color || "#5B2CFF";
+  const currentStepKey = STEP_ORDER[currentStepIndex - 1] ?? "preview";
+  const currentStepData = sessionData.steps.find((s) => s.step_key === currentStepKey);
+
+  // Build overview object passed to all steps
+  const stepOverview = {
+    subject_name: sessionData.subject_name,
+    subject_icon: sessionData.subject_icon,
+    subject_color: sessionData.subject_color,
+    topic_name: sessionData.topic_name,
+    topic_id: sessionData.topic_id,
+    session_duration_minutes: sessionData.session_duration_minutes,
+    step_key: currentStepKey,
+    step_index: currentStepIndex,
+    total_steps: STEP_ORDER.length,
+    child_name: sessionData.child_name,
+  };
+
+  // Build payload from generated_payload + step answer_summary
+  const stepPayload = {
+    ...sessionData.generated_payload,
+    [currentStepKey]: currentStepData?.answer_summary ?? {},
+  };
+
+  // Estimate time remaining (rough: assume equal time per step)
+  const stepsRemaining = STEP_ORDER.length - currentStepIndex + 1;
+  const timePerStep = Math.ceil(sessionData.session_duration_minutes / STEP_ORDER.length);
+  const timeRemainingMinutes = stepsRemaining * timePerStep;
+
+  // Render current step
+  function renderStep() {
+    const commonProps = {
+      overview: stepOverview,
+      payload: stepPayload,
+      saving,
+      onPatch: (patch: Record<string, any>) => handlePatchStep(currentStepKey, patch),
+      onNext: handleNextStep,
+      onBack: handleBack,
+      onExit: handleExit,
+    };
+
+    switch (currentStepKey) {
+      case "preview":
+        return <PreviewStep {...commonProps} />;
+
+      case "recall":
+        return (
+          <RecallStep
+            {...commonProps}
+            onUpdateFlashcardProgress={async (cardId, status) => {
+              // Could call RPC to update child_flashcard_progress
+              console.log("[SessionRun] Update flashcard:", cardId, status);
+            }}
+          />
+        );
+
+      case "reinforce":
+        return <ReinforceStep {...commonProps} />;
+
+      case "practice":
+        return (
+          <PracticeStep
+            {...commonProps}
+            onRequestAIFeedback={async (answers) => {
+              // In production: call AI feedback endpoint
+              // For now, let PracticeStep use its internal mock
+              throw new Error("Use mock feedback");
+            }}
+          />
+        );
+
+      case "summary":
+        return (
+          <SummaryStep
+            {...commonProps}
+            onRequestMnemonic={async (style) => {
+              // In production: call n8n webhook for mnemonic generation
+              throw new Error("Use mock mnemonic");
+            }}
+          />
+        );
+
+      case "complete":
+        return (
+          <CompleteStep
+            {...commonProps}
+            onFinish={handleFinish}
+            onStartNextSession={() => {
+              // Could navigate to next session if available
+              navigate("/child/today");
+            }}
+            onUploadAudio={async (blob) => {
+              // In production: upload to Supabase storage
+              console.log("[SessionRun] Would upload audio blob:", blob.size, "bytes");
+              return "https://placeholder-audio-url.com/note.webm";
+            }}
+          />
+        );
+
+      default:
+        return (
+          <div className="text-center py-12">
+            <p className="text-neutral-600">Unknown step: {currentStepKey}</p>
+          </div>
+        );
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-100">
+      {/* Header - NO duplicate avatar, just subject info + exit */}
       <SessionHeader
-        subjectName={headerMeta.subject_name}
-        subjectIcon="🧪"
-        sessionInfo={sessionInfoText}
-        showBack={false}
-        showExit={currentStepKey !== "complete"}
+        subjectName={sessionData.subject_name}
+        subjectIcon={subjectIcon}
+        subjectColor={subjectColor}
+        topicName={sessionData.topic_name}
         onExit={handleExit}
       />
 
-      {currentStepKey !== "complete" && (
-        <ProgressTracker
-          phaseName={stepPhaseName}
-          currentStep={currentOverallStep}
-          totalSteps={totalStepsOverall}
-          timeRemaining={timeRemaining}
-          stepLabel={stepLabels[currentStepKey]}
-        />
-      )}
+      {/* Progress Bar - 6 steps */}
+      <StepProgressBar
+        currentStepIndex={currentStepIndex}
+        totalSteps={STEP_ORDER.length}
+        steps={sessionData.steps}
+        timeRemainingMinutes={timeRemainingMinutes}
+      />
 
-      <div className="px-6 py-8">
-        <div className="max-w-5xl mx-auto">
-          {currentStepKey === "recall" && (
-            <RecallStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              saving={saving}
-              onPatch={patchCurrentStep}
-              onNext={onNext}
-              onBack={onBack}
-              onExit={handleExit}
-            />
-          )}
-
-          {currentStepKey === "reinforce" && (
-            <ReinforceStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              saving={saving}
-              onPatch={patchCurrentStep}
-              onNext={onNext}
-              onBack={onBack}
-              onExit={handleExit}
-            />
-          )}
-
-          {currentStepKey === "practice" && (
-            <PracticeStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              saving={saving}
-              onPatch={patchCurrentStep}
-              onNext={onNext}
-              onBack={onBack}
-              onExit={handleExit}
-            />
-          )}
-
-          {currentStepKey === "reflection" && (
-            <ReflectionStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              saving={saving}
-              onPatch={patchCurrentStep}
-              onNext={onNext}
-              onBack={onBack}
-              onExit={handleExit}
-              onFinish={finishSession}
-            />
-          )}
-
-          {currentStepKey === "complete" && (
-            <CompleteStep
-              overview={headerMeta}
-              payload={effectivePayloadForStep}
-              onExit={handleExit}
-            />
-          )}
-        </div>
-      </div>
+      {/* Step Content */}
+      <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
+        {renderStep()}
+      </main>
     </div>
   );
 }
