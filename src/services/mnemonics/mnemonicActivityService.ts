@@ -1,5 +1,5 @@
 // src/services/mnemonics/mnemonicActivityService.ts
-import { supabase } from "../../lib/supabaseClient"; // adjust if your path differs
+import { supabase } from "../../lib/supabase"; // adjust if your path differs
 
 export async function isMnemonicFavourite(args: { childId: string; mnemonicId: string }) {
   const { data, error } = await supabase
