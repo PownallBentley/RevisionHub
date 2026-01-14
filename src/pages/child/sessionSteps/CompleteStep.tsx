@@ -2,6 +2,7 @@
 // UPDATED: 6-Step Session Model - January 2026
 // Step 6: Combined Celebration + Reflection + Audio Notes
 // Merges previous Steps 6 (Reflection) and 7 (Complete)
+// NOW INCLUDES: Insert into child_voice_notes for transcription workflow
 
 import { useState, useRef, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -33,6 +34,7 @@ import {
   faNoteSticky,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
+import { supabase } from "../../../lib/supabase";
 
 // =============================================================================
 // Types
@@ -67,6 +69,9 @@ type CompleteStepProps = {
     step_index: number;
     total_steps: number;
     child_name?: string;
+    // Required for voice note tracking
+    child_id: string;
+    revision_session_id: string;
   };
   payload: {
     complete?: {
@@ -629,12 +634,36 @@ export default function CompleteStep({
     if (audioData.blob && onUploadAudio) {
       try {
         audioUrl = await onUploadAudio(audioData.blob);
+        
+        // =====================================================================
+        // INSERT INTO child_voice_notes FOR TRANSCRIPTION WORKFLOW
+        // This triggers the N8n webhook via Supabase database webhook
+        // =====================================================================
+        if (audioUrl) {
+          const { error: voiceNoteError } = await supabase
+            .from("child_voice_notes")
+            .insert({
+              child_id: overview.child_id,
+              revision_session_id: overview.revision_session_id,
+              audio_url: audioUrl,
+              audio_duration_seconds: audioData.durationSeconds,
+              context_type: "session_reflection",
+              transcription_status: "pending",
+            });
+
+          if (voiceNoteError) {
+            // Log but don't block session completion
+            console.error("[CompleteStep] Failed to create voice note record:", voiceNoteError);
+          } else {
+            console.log("[CompleteStep] Voice note record created for transcription");
+          }
+        }
       } catch (error) {
         console.error("[CompleteStep] Audio upload failed:", error);
       }
     }
 
-    // Save all data
+    // Save all data to step payload
     await onPatch({
       complete: {
         gamification: initialGamification,
