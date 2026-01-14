@@ -9,12 +9,10 @@ import {
   faClock,
   faChartSimple,
   faFire,
-  faLightbulb,
   faRocket,
   faVolumeXmark,
   faPencil,
   faHeart,
-  faCheckDouble,
   faChartLine,
   faBullseye,
   faCircleCheck,
@@ -176,55 +174,6 @@ const PRE_CONFIDENCE_OPTIONS: Array<{
     icon: faSeedling,
     colorClass: "text-neutral-600",
     bgClass: "bg-neutral-200",
-  },
-];
-
-// =============================================================================
-// 7-Step Definitions
-// =============================================================================
-
-const SESSION_STEPS = [
-  {
-    number: 1,
-    title: "Preview",
-    description: "Overview of today's topic and your starting confidence",
-    duration: "1 min",
-  },
-  {
-    number: 2,
-    title: "Recall",
-    description: "Quick flashcards to activate what you already know",
-    duration: "3 min",
-  },
-  {
-    number: 3,
-    title: "Reinforce",
-    description: "Key concepts explained with examples and worked solutions",
-    duration: "8 min",
-  },
-  {
-    number: 4,
-    title: "Practice",
-    description: "Apply your understanding with exam-style questions",
-    duration: "5 min",
-  },
-  {
-    number: 5,
-    title: "Summary",
-    description: "Key takeaways and optional memory aids",
-    duration: "2 min",
-  },
-  {
-    number: 6,
-    title: "Reflection",
-    description: "Think about what you've learned and how you feel",
-    duration: "1 min",
-  },
-  {
-    number: 7,
-    title: "Complete",
-    description: "Celebrate your progress and see what's next",
-    duration: "30 sec",
   },
 ];
 
@@ -416,7 +365,6 @@ export default function SessionOverview() {
       // Pre-confidence is now captured in PreviewStep (step 1 of 6-step model)
       // No need to save it here anymore
 
-      // Navigate to session runner
       navigate(`/child/session/${overview.planned_session_id}/run`);
     } catch (e: any) {
       console.error("[SessionOverview] handleStartSession error:", e);
@@ -561,85 +509,6 @@ export default function SessionOverview() {
           </div>
         </section>
 
-        {/* How This Session Works - 7 Steps */}
-        <section className="mb-8">
-          <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl shadow-soft p-6 border border-primary-200">
-            <div className="flex items-start space-x-4 mb-6">
-              <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <FontAwesomeIcon icon={faLightbulb} className="text-white text-xl" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-primary-900 mb-2">How This Session Works</h2>
-                <p className="text-neutral-600">
-                  Each topic follows a proven 7-step structure designed to help you learn effectively.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {SESSION_STEPS.slice(0, 4).map((step) => (
-                <StepCard key={step.number} {...step} />
-              ))}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-              {SESSION_STEPS.slice(4).map((step) => (
-                <StepCard key={step.number} {...step} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Your Progress So Far (if stats available) */}
-        {stats && stats.total_sessions_completed > 0 && (
-          <section className="mb-8">
-            <div className="bg-white rounded-2xl shadow-card p-6">
-              <h2 className="text-xl font-bold text-primary-900 mb-4">Your Progress So Far</h2>
-
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-neutral-50 rounded-xl p-4 text-center">
-                  <div className="w-12 h-12 bg-accent-green/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <FontAwesomeIcon icon={faCheckDouble} className="text-accent-green text-xl" />
-                  </div>
-                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.total_sessions_completed}</p>
-                  <p className="text-neutral-600 text-sm">Sessions completed</p>
-                </div>
-
-                <div className="bg-neutral-50 rounded-xl p-4 text-center">
-                  <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <FontAwesomeIcon icon={faChartLine} className="text-primary-600 text-xl" />
-                  </div>
-                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.points_balance}</p>
-                  <p className="text-neutral-600 text-sm">Points earned</p>
-                </div>
-
-                <div className="bg-neutral-50 rounded-xl p-4 text-center">
-                  <div className="w-12 h-12 bg-accent-green/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <FontAwesomeIcon icon={faFire} className="text-accent-green text-xl" />
-                  </div>
-                  <p className="text-2xl font-bold text-primary-900 mb-1">{stats.current_streak}</p>
-                  <p className="text-neutral-600 text-sm">Day streak</p>
-                </div>
-              </div>
-
-              {stats.subject_history && (
-                <div className="bg-primary-50 rounded-xl p-4">
-                  <div className="flex items-start space-x-3">
-                    <FontAwesomeIcon icon={faLightbulb} className="text-primary-600 text-lg mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-primary-900 mb-1">Last time you studied {subjectName}:</p>
-                      <p className="text-neutral-700 text-sm">
-                        You completed "{stats.subject_history.last_topic_name}" and felt{" "}
-                        <span className="font-medium">{stats.subject_history.last_confidence?.replace("_", " ")}</span>.
-                        Great foundation to build on!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
         {/* Pre-Confidence Check */}
         <section className="mb-8">
           <div className="bg-white rounded-2xl shadow-card p-6">
@@ -775,31 +644,6 @@ export default function SessionOverview() {
 // =============================================================================
 // Sub-Components
 // =============================================================================
-
-function StepCard({
-  number,
-  title,
-  description,
-  duration,
-}: {
-  number: number;
-  title: string;
-  description: string;
-  duration: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl p-4">
-      <div className="flex items-center space-x-3 mb-2">
-        <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-          <span className="text-primary-700 font-bold text-sm">{number}</span>
-        </div>
-        <h3 className="font-semibold text-neutral-700">{title}</h3>
-        <span className="text-neutral-500 text-sm ml-auto">{duration}</span>
-      </div>
-      <p className="text-neutral-600 text-sm ml-11">{description}</p>
-    </div>
-  );
-}
 
 function TipItem({
   icon,
