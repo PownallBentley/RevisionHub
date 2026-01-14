@@ -408,36 +408,40 @@ export default function SessionRun() {
   // Audio Upload Handler
   // ===========================================================================
   async function handleUploadAudio(blob: Blob): Promise<string> {
-    if (!sessionData || !revisionSessionId) {
-      throw new Error("Session data not available for audio upload");
-    }
-
-    const timestamp = Date.now();
-    const fileName = `${sessionData.child_id}/${revisionSessionId}_${timestamp}.webm`;
-
-    console.log("[SessionRun] Uploading audio:", fileName, blob.size, "bytes");
-
-    // Upload to Supabase Storage
-    const { data, error: uploadError } = await supabase.storage
-      .from("voice-notes")
-      .upload(fileName, blob, {
-        contentType: "audio/webm",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error("[SessionRun] Audio upload failed:", uploadError);
-      throw uploadError;
-    }
-
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from("voice-notes")
-      .getPublicUrl(data.path);
-
-    console.log("[SessionRun] Audio uploaded successfully:", urlData.publicUrl);
-    return urlData.publicUrl;
+  if (!sessionData || !revisionSessionId) {
+    throw new Error("Session data not available for audio upload");
   }
+
+  // Get the authenticated user's ID for folder path (matches RLS policy)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("User not authenticated");
+  }
+
+  const timestamp = Date.now();
+  const fileName = `${user.id}/${revisionSessionId}_${timestamp}.webm`;
+
+  console.log("[SessionRun] Uploading audio:", fileName, blob.size, "bytes");
+
+  const { data, error: uploadError } = await supabase.storage
+    .from("voice-notes")
+    .upload(fileName, blob, {
+      contentType: "audio/webm",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error("[SessionRun] Audio upload failed:", uploadError);
+    throw uploadError;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("voice-notes")
+    .getPublicUrl(data.path);
+
+  console.log("[SessionRun] Audio uploaded successfully:", urlData.publicUrl);
+  return urlData.publicUrl;
+}
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadSession} />;
