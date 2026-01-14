@@ -145,9 +145,12 @@ function SessionHeader({
           >
             <FontAwesomeIcon icon={subjectIcon} className="text-white text-lg" />
           </div>
+
           <div>
             <p className="font-semibold text-primary-900">{subjectName}</p>
-            <p className="text-neutral-500 text-sm truncate max-w-[200px]">{topicName}</p>
+            <p className="text-neutral-500 text-sm truncate max-w-[200px]">
+              {topicName}
+            </p>
           </div>
         </div>
 
@@ -184,10 +187,12 @@ function StepProgressBar({
           <p className="text-neutral-600 text-sm">
             {STEP_LABELS[STEP_ORDER[currentStepIndex - 1] ?? "preview"]}
           </p>
+
           <div className="flex items-center space-x-4">
             <span className="text-neutral-500 text-sm">
               {currentStepIndex} of {totalSteps} steps
             </span>
+
             {timeRemainingMinutes !== null && (
               <div className="flex items-center space-x-1 text-neutral-500 text-sm">
                 <FontAwesomeIcon icon={faClock} className="text-xs" />
@@ -222,7 +227,10 @@ function StepProgressBar({
                   }`}
                 >
                   {isComplete ? (
-                    <FontAwesomeIcon icon={faCheckCircle} className="text-white text-sm" />
+                    <FontAwesomeIcon
+                      icon={faCheckCircle}
+                      className="text-white text-sm"
+                    />
                   ) : (
                     <span
                       className={`text-sm font-semibold ${
@@ -233,6 +241,7 @@ function StepProgressBar({
                     </span>
                   )}
                 </div>
+
                 <span
                   className={`text-xs mt-1 hidden md:block ${
                     isCurrent ? "text-primary-600 font-semibold" : "text-neutral-400"
@@ -253,7 +262,10 @@ function LoadingState() {
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
       <div className="text-center">
-        <FontAwesomeIcon icon={faSpinner} className="text-primary-600 text-4xl animate-spin mb-4" />
+        <FontAwesomeIcon
+          icon={faSpinner}
+          className="text-primary-600 text-4xl animate-spin mb-4"
+        />
         <p className="text-neutral-600 font-medium">Loading session...</p>
       </div>
     </div>
@@ -264,9 +276,15 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-card p-8 max-w-md text-center">
-        <FontAwesomeIcon icon={faExclamationTriangle} className="text-accent-red text-4xl mb-4" />
-        <h2 className="text-xl font-bold text-neutral-900 mb-2">Something went wrong</h2>
+        <FontAwesomeIcon
+          icon={faExclamationTriangle}
+          className="text-accent-red text-4xl mb-4"
+        />
+        <h2 className="text-xl font-bold text-neutral-900 mb-2">
+          Something went wrong
+        </h2>
         <p className="text-neutral-600 mb-6">{message}</p>
+
         <button
           type="button"
           onClick={onRetry}
@@ -408,44 +426,45 @@ export default function SessionRun() {
   // Audio Upload Handler
   // ===========================================================================
   async function handleUploadAudio(blob: Blob): Promise<string> {
-  if (!sessionData || !revisionSessionId) {
-    throw new Error("Session data not available for audio upload");
+    if (!sessionData || !revisionSessionId) {
+      throw new Error("Session data not available for audio upload");
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) throw new Error("User not authenticated");
+
+    const timestamp = Date.now();
+    const fileName = `${user.id}/${revisionSessionId}_${timestamp}.webm`;
+
+    console.log("[SessionRun] Uploading audio:", fileName, blob.size, "bytes");
+
+    const { data, error: uploadError } = await supabase.storage
+      .from("voice-notes")
+      .upload(fileName, blob, {
+        contentType: "audio/webm",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("[SessionRun] Audio upload failed:", uploadError);
+      throw uploadError;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("voice-notes")
+      .getPublicUrl(data.path);
+
+    console.log("[SessionRun] Audio uploaded successfully:", urlData.publicUrl);
+    return urlData.publicUrl;
   }
-
-  // Get the authenticated user's ID for folder path (matches RLS policy)
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error("User not authenticated");
-  }
-
-  const timestamp = Date.now();
-  const fileName = `${user.id}/${revisionSessionId}_${timestamp}.webm`;
-
-  console.log("[SessionRun] Uploading audio:", fileName, blob.size, "bytes");
-
-  const { data, error: uploadError } = await supabase.storage
-    .from("voice-notes")
-    .upload(fileName, blob, {
-      contentType: "audio/webm",
-      upsert: false,
-    });
-
-  if (uploadError) {
-    console.error("[SessionRun] Audio upload failed:", uploadError);
-    throw uploadError;
-  }
-
-  const { data: urlData } = supabase.storage
-    .from("voice-notes")
-    .getPublicUrl(data.path);
-
-  console.log("[SessionRun] Audio uploaded successfully:", urlData.publicUrl);
-  return urlData.publicUrl;
-}
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadSession} />;
-  if (!sessionData) return <ErrorState message="Session data not found" onRetry={loadSession} />;
+  if (!sessionData)
+    return <ErrorState message="Session data not found" onRetry={loadSession} />;
 
   const subjectIcon = getIconFromName(sessionData.subject_icon);
   const subjectColor = sessionData.subject_color || "#5B2CFF";
@@ -475,7 +494,9 @@ export default function SessionRun() {
   };
 
   const stepsRemaining = STEP_ORDER.length - currentStepIndex + 1;
-  const timePerStep = Math.ceil(sessionData.session_duration_minutes / STEP_ORDER.length);
+  const timePerStep = Math.ceil(
+    sessionData.session_duration_minutes / STEP_ORDER.length
+  );
   const timeRemainingMinutes = stepsRemaining * timePerStep;
 
   function renderStep() {
@@ -517,13 +538,13 @@ export default function SessionRun() {
               const originalPrompt = `${sessionData.subject_name} | ${sessionData.topic_name} | style=${style} | step=summary`;
 
               const { response } = await requestMnemonicTracked({
-                childId: sessionData.child_id,
+                topicId: sessionData.topic_id,
+                topicName: sessionData.topic_name,
                 originalPrompt,
                 subjectName: sessionData.subject_name || "unknown",
-                topicId: sessionData.topic_id
-                topicName: sessionData.topic_name || "unknown topic",
                 topicText: sessionData.topic_name || "unknown topic",
                 style,
+                examBoard: null,
               });
 
               return transformToMnemonicData(response, style);
