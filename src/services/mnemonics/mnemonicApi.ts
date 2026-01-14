@@ -2,11 +2,8 @@
 // =============================================================================
 // Mnemonic Generation API Service
 // =============================================================================
-// Handles requests to the n8n mnemonic generation webhook
-// Production: https://pownallpublishing.app.n8n.cloud/webhook/generate-mnemonic
-// Test: https://pownallpublishing.app.n8n.cloud/webhook-test/generate-mnemonic
 
-import { supabase } from "../../lib/supabaseClient"; // <-- adjust path if needed
+import { supabase } from "../../lib/supabaseClient"; // adjust if needed
 
 export type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
@@ -38,98 +35,23 @@ export type MnemonicResponse = {
   error?: string;
 };
 
-// =============================================================================
-// Tracking types (mnemonic_requests)
-// =============================================================================
-
-type MnemonicRequestStatus = "pending" | "processing" | "completed" | "failed";
-
-export type MnemonicRequestTrackingInput = {
-  childId: string;
-  originalPrompt: string;
-
-  // Optional enrichment fields
-  parsedTopic?: string | null;
-  parsedStyle?: string | null;
-  parsedType?: string | null;
-
-  subject?: string | null;
-  level?: string | null;
-  examBoard?: string | null;
-};
-
-async function createMnemonicRequestRow(input: MnemonicRequestTrackingInput): Promise<string> {
-  const { data, error } = await supabase
-    .from("mnemonic_requests")
-    .insert({
-      child_id: input.childId,
-      original_prompt: input.originalPrompt,
-      parsed_topic: input.parsedTopic ?? null,
-      parsed_style: input.parsedStyle ?? null,
-      parsed_type: input.parsedType ?? null,
-      subject: input.subject ?? null,
-      level: input.level ?? null,
-      exam_board: input.examBoard ?? null,
-      status: "processing",
-      requested_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-
-  if (error) throw error;
-  return data.id as string;
-}
-
-async function updateMnemonicRequestRow(args: {
-  requestId: string;
-  status: MnemonicRequestStatus;
-  mnemonicId?: string | null;
-  wasCached?: boolean | null;
-  errorMessage?: string | null;
-}) {
-  const patch: Record<string, any> = {
-    status: args.status,
-  };
-
-  if (typeof args.mnemonicId !== "undefined") patch.mnemonic_id = args.mnemonicId;
-  if (typeof args.wasCached !== "undefined") patch.was_cached = args.wasCached;
-  if (typeof args.errorMessage !== "undefined") patch.error_message = args.errorMessage;
-
-  if (args.status === "completed" || args.status === "failed") {
-    patch.completed_at = new Date().toISOString();
-  }
-
-  const { error } = await supabase.from("mnemonic_requests").update(patch).eq("id", args.requestId);
-  if (error) throw error;
-}
-
-// =============================================================================
 // Style reference mappings for Udio
-// =============================================================================
-
 const STYLE_REFERENCES: Record<MnemonicStyle, string> = {
   "hip-hop": "street-anthem, trap beats, confident flow",
   pop: "upbeat pop, catchy hooks, radio-friendly",
   rock: "indie rock, guitar-driven, energetic",
 };
 
-// =============================================================================
 // N8n webhook URLs
-// =============================================================================
-
 const WEBHOOK_URLS = {
   test: "https://pownallpublishing.app.n8n.cloud/webhook-test/generate-mnemonic",
   production: "https://pownallpublishing.app.n8n.cloud/webhook/generate-mnemonic",
 };
 
-// Set this to 'production' when the n8n workflow is published
 export const WEBHOOK_MODE: "test" | "production" = "production";
 
 /**
- * Request a mnemonic for a topic
- * Returns immediately with either cached result or "processing" status
- *
- * NOTE: this version is "transport only" (no DB writes) and kept for backwards compatibility.
+ * Transport-only generation call (no DB writes)
  */
 export async function requestMnemonic(
   subjectName: string,
@@ -141,7 +63,7 @@ export async function requestMnemonic(
 
   const request: MnemonicRequest = {
     subject: subjectName.toLowerCase().replace(/\s+/g, "-"),
-    level: "gcse", // Default to GCSE for now
+    level: "gcse",
     topic: topicName,
     mnemonic_type: "educational",
     style,
@@ -178,78 +100,122 @@ export async function requestMnemonic(
 }
 
 /**
- * Request a mnemonic AND write to mnemonic_requests.
- * This is the one you should call from SummaryStep.
- *
- * Returns: { response, requestId }
+ * Create + update mnemonic_requests around the n8n call.
  */
 export async function requestMnemonicTracked(args: {
-  tracking: MnemonicRequestTrackingInput;
+  childId: string;
+  originalPrompt: string;
   subjectName: string;
   topicName: string;
   style: MnemonicStyle;
   callbackUrl?: string;
+
+  // Optional enrichment (keep null unless you have it)
+  parsedTopic?: string | null;
+  parsedStyle?: string | null;
+  parsedType?: string | null;
+  subject?: string | null;
+  level?: string | null;
+  examBoard?: string | null;
 }): Promise<{ response: MnemonicResponse; requestId: string }> {
-  // 1) Create request record first
-  const requestId = await createMnemonicRequestRow(args.tracking);
+  const { data: created, error: createErr } = await supabase
+    .from("mnemonic_requests")
+    .insert({
+      child_id: args.childId,
+      original_prompt: args.originalPrompt,
+      parsed_topic: args.parsedTopic ?? null,
+      parsed_style: args.parsedStyle ?? null,
+      parsed_type: args.parsedType ?? null,
+      subject: args.subject ?? args.subjectName ?? null,
+      level: args.level ?? "gcse",
+      exam_board: args.examBoard ?? null,
+      status: "processing",
+      requested_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (createErr) throw createErr;
+
+  const requestId = created.id as string;
 
   try {
-    // 2) Call n8n
-    const response = await requestMnemonic(args.subjectName, args.topicName, args.style, args.callbackUrl);
+    const response = await requestMnemonic(
+      args.subjectName,
+      args.topicName,
+      args.style,
+      args.callbackUrl
+    );
 
-    // 3) Update request record based on response
+    const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
+
     if (!response.success || response.status === "failed") {
-      await updateMnemonicRequestRow({
-        requestId,
-        status: "failed",
-        mnemonicId: response.mnemonic_id ?? response.mnemonic?.id ?? null,
-        wasCached: response.cached ?? null,
-        errorMessage: response.error ?? "Mnemonic generation failed",
-      });
-    } else if (response.status === "processing") {
-      await updateMnemonicRequestRow({
-        requestId,
-        status: "processing",
-        mnemonicId: response.mnemonic_id ?? response.mnemonic?.id ?? null,
-        wasCached: response.cached ?? null,
-      });
-    } else {
-      // ready
-      await updateMnemonicRequestRow({
-        requestId,
-        status: "completed",
-        mnemonicId: response.mnemonic?.id ?? response.mnemonic_id ?? null,
-        wasCached: response.cached ?? null,
-      });
+      const { error } = await supabase
+        .from("mnemonic_requests")
+        .update({
+          status: "failed",
+          mnemonic_id: mnemonicId,
+          was_cached: response.cached ?? null,
+          error_message: response.error ?? "Mnemonic generation failed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", requestId);
+
+      if (error) throw error;
+      return { response, requestId };
     }
 
+    if (response.status === "processing") {
+      const { error } = await supabase
+        .from("mnemonic_requests")
+        .update({
+          status: "processing",
+          mnemonic_id: mnemonicId,
+          was_cached: response.cached ?? null,
+        })
+        .eq("id", requestId);
+
+      if (error) throw error;
+      return { response, requestId };
+    }
+
+    // ready
+    const { error } = await supabase
+      .from("mnemonic_requests")
+      .update({
+        status: "completed",
+        mnemonic_id: mnemonicId,
+        was_cached: response.cached ?? null,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", requestId);
+
+    if (error) throw error;
     return { response, requestId };
   } catch (e: any) {
-    // 4) Failure path
-    await updateMnemonicRequestRow({
-      requestId,
-      status: "failed",
-      errorMessage: e?.message ? String(e.message) : "Request failed",
-    });
+    const { error } = await supabase
+      .from("mnemonic_requests")
+      .update({
+        status: "failed",
+        error_message: e?.message ? String(e.message) : "Request failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", requestId);
+
+    if (error) throw error;
 
     return {
-      response: {
-        success: false,
-        status: "failed",
-        error: e?.message ? String(e.message) : "Request failed",
-      },
+      response: { success: false, status: "failed", error: e?.message ? String(e.message) : "Request failed" },
       requestId,
     };
   }
 }
 
-/**
- * Transform webhook response to the format expected by SummaryStep
- */
 export function transformToMnemonicData(
   response: MnemonicResponse,
   style: MnemonicStyle
 ): {
+  mnemonicId: string | null;
   style: MnemonicStyle;
   styleReference: string;
   lyrics: string;
@@ -259,6 +225,7 @@ export function transformToMnemonicData(
 } {
   if (!response.success || response.status === "failed") {
     return {
+      mnemonicId: response.mnemonic_id ?? response.mnemonic?.id ?? null,
       style,
       styleReference: STYLE_REFERENCES[style],
       lyrics: "",
@@ -270,6 +237,7 @@ export function transformToMnemonicData(
 
   if (response.status === "processing") {
     return {
+      mnemonicId: response.mnemonic_id ?? response.mnemonic?.id ?? null,
       style,
       styleReference: STYLE_REFERENCES[style],
       lyrics: "",
@@ -280,6 +248,7 @@ export function transformToMnemonicData(
   }
 
   return {
+    mnemonicId: response.mnemonic?.id ?? response.mnemonic_id ?? null,
     style,
     styleReference: response.mnemonic?.style || STYLE_REFERENCES[style],
     lyrics: response.mnemonic?.lyrics || "",
@@ -289,15 +258,7 @@ export function transformToMnemonicData(
   };
 }
 
-/**
- * Poll for mnemonic completion (if using polling instead of callbacks)
- * This would check a database table for status updates
- */
-export async function pollMnemonicStatus(
-  mnemonicId: string,
-  maxAttempts: number = 30,
-  intervalMs: number = 5000
-): Promise<MnemonicResponse> {
+export async function pollMnemonicStatus(): Promise<MnemonicResponse> {
   console.log("[mnemonicApi] Polling not implemented - use callbacks instead");
   return {
     success: false,
