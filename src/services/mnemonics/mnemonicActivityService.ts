@@ -1,5 +1,5 @@
 // src/services/mnemonics/mnemonicActivityService.ts
-import { supabase } from "../../lib/supabaseClient"; // <-- adjust path if needed
+import { supabase } from "../../lib/supabaseClient"; // adjust if your path differs
 
 export async function isMnemonicFavourite(args: { childId: string; mnemonicId: string }) {
   const { data, error } = await supabase
@@ -25,8 +25,8 @@ export async function setMnemonicFavourite(args: {
       created_at: new Date().toISOString(),
     });
 
-    // Unique constraint (child_id, mnemonic_id) means duplicates can happen on double-click.
-    // Treat duplicate as success.
+    // Unique constraint prevents duplicates; double-clicks can throw.
+    // Treat that case as success.
     if (error && !String(error.message || "").toLowerCase().includes("duplicate")) {
       throw error;
     }
