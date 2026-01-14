@@ -13,7 +13,7 @@ import { supabase } from "../../lib/supabase";
 
 interface AvatarUploadProps {
   currentAvatarUrl: string | null;
-  userId: string; // parent: profile id (auth uid), child: children.id
+  userId: string; // child: children.id  | parent: profiles.id (auth uid)
   userType: "parent" | "child";
   userName: string;
   onAvatarChange: (newUrl: string | null) => void;
@@ -37,16 +37,23 @@ function getStoragePathFromPublicUrl(publicUrl: string): string | null {
 }
 
 /**
- * Build a path that matches your CURRENT policies:
- * - folder must be 'children'
- * - filename must match: <childId>-%
+ * IMPORTANT: Must match Supabase storage policy.
+ * Your policy checks:
+ * - bucket_id = 'avatars'
+ * - foldername(name)[1] = 'children'
+ * - filename(objects.name) ~~ (children.id || '-%')
  *
- * So we use: children/<childId>-<timestamp>.jpg
+ * So we MUST upload to:
+ *   children/<childId>-<something>.jpg
  *
- * (And similarly for parents if you have equivalent policies.)
+ * Do NOT pluralise `child` → `childs`.
  */
+function folderForUserType(userType: "parent" | "child"): "parents" | "children" {
+  return userType === "child" ? "children" : "parents";
+}
+
 function buildAvatarPath(userType: "parent" | "child", userId: string) {
-  const folder = userType === "child" ? "children" : "parents";
+  const folder = folderForUserType(userType);
   const fileName = `${userId}-${Date.now()}.jpg`;
   return `${folder}/${fileName}`;
 }
@@ -80,15 +87,13 @@ export default function AvatarUpload({
   // Generate initials for fallback avatar
   const initials = userName
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
 
   // Convert slider (0-100) to actual zoom
-  // 0% = minZoom (see whole image)
-  // 50% = fitZoom (smallest dimension fills circle)
-  // 100% = fitZoom * 2 (zoomed in 2x)
   const sliderToZoom = useCallback(
     (slider: number): number => {
       if (slider <= 50) {
@@ -178,22 +183,21 @@ export default function AvatarUpload({
   }, []);
 
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener("mousemove", handleDragMove);
-      window.addEventListener("mouseup", handleDragEnd);
-      window.addEventListener("touchmove", handleDragMove);
-      window.addEventListener("touchend", handleDragEnd);
+    if (!isDragging) return;
 
-      return () => {
-        window.removeEventListener("mousemove", handleDragMove);
-        window.removeEventListener("mouseup", handleDragEnd);
-        window.removeEventListener("touchmove", handleDragMove);
-        window.removeEventListener("touchend", handleDragEnd);
-      };
-    }
+    window.addEventListener("mousemove", handleDragMove);
+    window.addEventListener("mouseup", handleDragEnd);
+    window.addEventListener("touchmove", handleDragMove);
+    window.addEventListener("touchend", handleDragEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", handleDragMove);
+      window.removeEventListener("mouseup", handleDragEnd);
+      window.removeEventListener("touchmove", handleDragMove);
+      window.removeEventListener("touchend", handleDragEnd);
+    };
   }, [isDragging, handleDragMove, handleDragEnd]);
 
-  // Generate cropped image at whatever zoom/position user has chosen
   const getCroppedImage = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const canvas = canvasRef.current;
@@ -267,9 +271,7 @@ export default function AvatarUpload({
     setImageSrc(null);
     setSliderValue(50);
     setPosition({ x: 0, y: 0 });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleUpload = async () => {
@@ -281,8 +283,12 @@ export default function AvatarUpload({
     try {
       const croppedBlob = await getCroppedImage();
 
-      // ✅ Path matches your policy: children/<childId>-<timestamp>.jpg
+      // ✅ Must be children/<childId>-<timestamp>.jpg
       const filePath = buildAvatarPath(userType, userId);
+
+      // Helpful sanity check in console:
+      // If you EVER see `childs/` in the console, something else is still wrong.
+      console.log("[avatar] upload path:", filePath);
 
       // Delete old avatar (best effort)
       if (currentAvatarUrl) {
@@ -292,7 +298,6 @@ export default function AvatarUpload({
         }
       }
 
-      // Upload new avatar
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, croppedBlob, {
@@ -303,11 +308,9 @@ export default function AvatarUpload({
 
       if (uploadError) throw uploadError;
 
-      // Public URL
       const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
       const publicUrl = data.publicUrl;
 
-      // Update profile/children table
       if (userType === "parent") {
         const { error: updateError } = await supabase
           .from("profiles")
@@ -391,7 +394,7 @@ export default function AvatarUpload({
             style={{ backgroundColor: "#EAE3FF" }}
           >
             <span className="text-3xl font-semibold" style={{ color: "#5B2CFF" }}>
-              {initials}
+              {initials || "?"}
             </span>
           </div>
         )}
