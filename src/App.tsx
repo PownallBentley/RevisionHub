@@ -11,7 +11,6 @@ import SubjectProgress from "./pages/parent/SubjectProgress";
 import Timetable from "./pages/parent/Timetable";
 import Account from "./pages/Account";
 import Today from "./pages/child/Today";
-import SessionOverview from "./pages/child/SessionOverview";
 import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
@@ -19,7 +18,6 @@ import { useAuth } from "./contexts/AuthContext";
 function HomeGate() {
   const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
 
-  // Still checking auth - show loading
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
@@ -28,33 +26,17 @@ function HomeGate() {
     );
   }
 
-  // Not logged in - show Landing
-  if (!user) {
-    return <Landing />;
-  }
+  if (!user) return <Landing />;
 
-  // User exists but role not determined yet (profile didn't load)
-  // Show landing page with login/signup options
-  if (isUnresolved) {
-    return <Landing />;
-  }
+  if (isUnresolved) return <Landing />;
 
-  // Child user - go to Today
-  if (isChild) {
-    return <Navigate to="/child/today" replace />;
-  }
+  if (isChild) return <Navigate to="/child/today" replace />;
 
-  // Parent user
   if (isParent) {
-    // Only redirect to onboarding if we KNOW they have 0 children (not null)
-    if (parentChildCount === 0) {
-      return <Navigate to="/parent/onboarding" replace />;
-    }
-    // Either has children or still loading count - go to dashboard
+    if (parentChildCount === 0) return <Navigate to="/parent/onboarding" replace />;
     return <Navigate to="/parent" replace />;
   }
 
-  // Fallback - should not reach here, but show landing
   return <Landing />;
 }
 
@@ -63,29 +45,33 @@ export default function App() {
     <BrowserRouter>
       <AppLayout>
         <Routes>
-          {/* Home gate - handles routing based on auth state */}
+          {/* Home gate */}
           <Route path="/" element={<HomeGate />} />
 
-          {/* Public auth pages */}
+          {/* Public auth */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
           {/* Child invite signup */}
           <Route path="/child/signup" element={<ChildSignUp />} />
 
-          {/* Parent routes */}
+          {/* Parent */}
           <Route path="/parent/onboarding" element={<ParentOnboardingPage />} />
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
 
-          {/* Shared routes (parent & child) */}
+          {/* Shared */}
           <Route path="/account" element={<Account />} />
 
-          {/* Child routes */}
+          {/* Child */}
           <Route path="/child/today" element={<Today />} />
-          <Route path="/child/session/:plannedSessionId" element={<SessionOverview />} />
-          <Route path="/child/session/:plannedSessionId/run" element={<SessionRun />} />
+
+          {/* Canonical: planned session opens the runner directly (Preview is step 1) */}
+          <Route path="/child/session/:plannedSessionId" element={<SessionRun />} />
+
+          {/* Legacy route kept for backwards compatibility */}
+          <Route path="/child/session/:plannedSessionId/run" element={<Navigate to=".." replace />} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
