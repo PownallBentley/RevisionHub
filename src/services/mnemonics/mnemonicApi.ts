@@ -1,31 +1,33 @@
 // src/services/mnemonics/mnemonicApi.ts
 // =============================================================================
-// Mnemonic Generation API Service
+// Mnemonic Generation API Service (Webhook transport + RPC-first request tracking)
 // =============================================================================
 
 import { supabase } from "../../lib/supabase";
 
 export type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
+// Payload we send to n8n
 type MnemonicRequest = {
-  // NEW: end-to-end traceability
+  // End-to-end traceability (must be echoed back in n8n completion RPC)
   request_id: string;
 
-  // NEW: topic linkage (production requirement)
+  // Topic linkage (production requirement)
   topic_id: string;
   topic_name: string;
 
-  // Existing fields (n8n / generator)
+  // Generator inputs
   subject: string;
   level: string;
   exam_board: string | null;
-  topic: string;
+  topic: string; // human prompt text used by generator (often same as topic_name)
   mnemonic_type: string;
   style: MnemonicStyle;
   style_reference: string;
   callback_url?: string;
 };
 
+// What we expect back from n8n
 export type MnemonicResponse = {
   success: boolean;
   status: "ready" | "processing" | "failed";
@@ -37,7 +39,7 @@ export type MnemonicResponse = {
     lyrics: string;
     audio_url: string | null;
     style: string;
-    duration_seconds?: number;
+    duration_seconds?: number | null;
   };
   mnemonic_id?: string;
   message?: string;
@@ -59,7 +61,7 @@ export const WEBHOOK_MODE: "test" | "production" = "production";
 
 /**
  * Transport call to n8n.
- * IMPORTANT: payload now includes request_id + topic_id + topic_name
+ * IMPORTANT: payload includes request_id + topic_id + topic_name
  */
 export async function requestMnemonic(args: {
   requestId: string;
@@ -67,7 +69,7 @@ export async function requestMnemonic(args: {
   topicName: string;
 
   subjectName: string;
-  topicText: string; // the human prompt topic (e.g. "Energy Transfers in Appliances")
+  topicText: string; // prompt text for generator (can be same as topicName)
   style: MnemonicStyle;
   examBoard?: string | null;
   callbackUrl?: string;
@@ -118,8 +120,13 @@ export async function requestMnemonic(args: {
 }
 
 /**
- * Create mnemonic_requests row via RPC (so child auth is handled server-side),
- * then call n8n with request_id + topic_id + topic_name.
+ * RPC-first: create mnemonic_requests row on the server (child resolved from auth),
+ * then call n8n with request_id + topic linkage.
+ *
+ * NOTE:
+ * - This function does NOT do direct table writes for tracking.
+ * - n8n will be responsible for calling rpc_mark_mnemonic_request_completed (stage 5).
+ * - We keep a minimal fallback update here ONLY if n8n isn't updated yet.
  */
 export async function requestMnemonicTracked(args: {
   // REQUIRED now
@@ -129,7 +136,7 @@ export async function requestMnemonicTracked(args: {
   // Existing caller inputs
   originalPrompt: string;
   subjectName: string;
-  topicText: string; // human topic text passed to generator
+  topicText: string;
   style: MnemonicStyle;
   callbackUrl?: string;
 
@@ -139,22 +146,25 @@ export async function requestMnemonicTracked(args: {
   parsedType?: string | null;
   level?: string | null;
   examBoard?: string | null;
+
+  /**
+   * If true, we do NOT perform any fallback updates in mnemonic_requests.
+   * Use this once n8n is definitely calling rpc_mark_mnemonic_request_completed.
+   */
+  disableClientFallbackTracking?: boolean;
 }): Promise<{ response: MnemonicResponse; requestId: string }> {
   // 1) Create request row via RPC (child authenticated session)
-  const { data: requestId, error: createErr } = await supabase.rpc(
-    "rpc_create_mnemonic_request",
-    {
-      p_original_prompt: args.originalPrompt,
-      p_subject: args.subjectName,
-      p_level: args.level ?? "gcse",
-      p_exam_board: args.examBoard ?? null,
-      p_parsed_topic: args.parsedTopic ?? null,
-      p_parsed_style: args.parsedStyle ?? null,
-      p_parsed_type: args.parsedType ?? null,
-      p_topic_id: args.topicId,
-      p_topic_name: args.topicName,
-    }
-  );
+  const { data: requestId, error: createErr } = await supabase.rpc("rpc_create_mnemonic_request", {
+    p_original_prompt: args.originalPrompt,
+    p_subject: args.subjectName,
+    p_level: args.level ?? "gcse",
+    p_exam_board: args.examBoard ?? null,
+    p_parsed_topic: args.parsedTopic ?? null,
+    p_parsed_style: args.parsedStyle ?? null,
+    p_parsed_type: args.parsedType ?? null,
+    p_topic_id: args.topicId,
+    p_topic_name: args.topicName,
+  });
 
   if (createErr) throw createErr;
   if (!requestId) throw new Error("rpc_create_mnemonic_request returned no id");
@@ -171,49 +181,49 @@ export async function requestMnemonicTracked(args: {
     callbackUrl: args.callbackUrl,
   });
 
-  // 3) Minimal tracking update for now:
-  // If you are already moving to rpc_mark_* inside n8n, you can remove this later.
-  // This keeps the UI stable while you finish n8n.
-  const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
+  // 3) TEMP fallback only (until n8n stage 5 is done)
+  if (!args.disableClientFallbackTracking) {
+    const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
 
-  if (!response.success || response.status === "failed") {
+    if (!response.success || response.status === "failed") {
+      await supabase
+        .from("mnemonic_requests")
+        .update({
+          status: "failed",
+          mnemonic_id: mnemonicId,
+          was_cached: response.cached ?? null,
+          error_message: response.error ?? "Mnemonic generation failed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", String(requestId));
+
+      return { response, requestId: String(requestId) };
+    }
+
+    if (response.status === "processing") {
+      await supabase
+        .from("mnemonic_requests")
+        .update({
+          status: "processing",
+          mnemonic_id: mnemonicId,
+          was_cached: response.cached ?? null,
+        })
+        .eq("id", String(requestId));
+
+      return { response, requestId: String(requestId) };
+    }
+
+    // ready
     await supabase
       .from("mnemonic_requests")
       .update({
-        status: "failed",
+        status: "completed",
         mnemonic_id: mnemonicId,
         was_cached: response.cached ?? null,
-        error_message: response.error ?? "Mnemonic generation failed",
         completed_at: new Date().toISOString(),
       })
       .eq("id", String(requestId));
-
-    return { response, requestId: String(requestId) };
   }
-
-  if (response.status === "processing") {
-    await supabase
-      .from("mnemonic_requests")
-      .update({
-        status: "processing",
-        mnemonic_id: mnemonicId,
-        was_cached: response.cached ?? null,
-      })
-      .eq("id", String(requestId));
-
-    return { response, requestId: String(requestId) };
-  }
-
-  // ready
-  await supabase
-    .from("mnemonic_requests")
-    .update({
-      status: "completed",
-      mnemonic_id: mnemonicId,
-      was_cached: response.cached ?? null,
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", String(requestId));
 
   return { response, requestId: String(requestId) };
 }
@@ -260,17 +270,11 @@ export function transformToMnemonicData(
     styleReference: response.mnemonic?.style || STYLE_REFERENCES[style],
     lyrics: response.mnemonic?.lyrics || "",
     audioUrl: response.mnemonic?.audio_url || null,
-    durationSeconds: response.mnemonic?.duration_seconds ?? null,
+    durationSeconds:
+      typeof response.mnemonic?.duration_seconds === "number"
+        ? response.mnemonic?.duration_seconds
+        : null,
     status: "ready",
-  };
-}
-
-export async function pollMnemonicStatus(): Promise<MnemonicResponse> {
-  console.log("[mnemonicApi] Polling not implemented - use callbacks instead");
-  return {
-    success: false,
-    status: "failed",
-    error: "Polling not implemented - configure callback URL",
   };
 }
 
@@ -278,6 +282,5 @@ export default {
   requestMnemonic,
   requestMnemonicTracked,
   transformToMnemonicData,
-  pollMnemonicStatus,
   WEBHOOK_MODE,
 };
