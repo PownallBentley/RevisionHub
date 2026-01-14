@@ -442,4 +442,92 @@ export default function AvatarUpload({
 
             <div className="flex justify-center mb-4">
               <div
-                className="rela
+                className="relative overflow-hidden rounded-full cursor-move"
+                style={{
+                  width: PREVIEW_SIZE,
+                  height: PREVIEW_SIZE,
+                  backgroundColor: "#F6F7FB",
+                  border: "3px solid #5B2CFF",
+                }}
+                onMouseDown={handleDragStart}
+                onTouchStart={handleDragStart}
+              >
+                <img
+                  src={imageSrc}
+                  alt="Crop preview"
+                  className="absolute select-none pointer-events-none"
+                  style={{
+                    width: displayWidth,
+                    height: displayHeight,
+                    left: `calc(50% + ${position.x}px)`,
+                    top: `calc(50% + ${position.y}px)`,
+                    transform: "translate(-50%, -50%)",
+                    maxWidth: "none",
+                  }}
+                  draggable={false}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-center mb-4" style={{ color: "#6C7280" }}>
+              Drag to reposition • Use slider to zoom
+            </p>
+
+            <div className="flex items-center gap-3 mb-2 px-4">
+              <FontAwesomeIcon icon={faSearchMinus} style={{ color: "#A8AEBD" }} />
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={sliderValue}
+                onChange={(e) => setSliderValue(parseInt(e.target.value))}
+                className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${sliderValue}%, #E1E4EE ${sliderValue}%, #E1E4EE 100%)`,
+                }}
+              />
+              <FontAwesomeIcon icon={faSearchPlus} style={{ color: "#A8AEBD" }} />
+            </div>
+
+            <p className="text-xs text-center mb-6" style={{ color: "#6C7280" }}>
+              {sliderValue}%
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={closeCropper}
+                disabled={uploading}
+                className="flex-1 py-2.5 rounded-xl font-medium transition-colors"
+                style={{
+                  border: "1px solid #E1E4EE",
+                  color: "#4B5161",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={uploading}
+                className="flex-1 py-2.5 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#5B2CFF" }}
+              >
+                {uploading ? (
+                  <>
+                    <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <FontAwesomeIcon icon={faUpload} />
+                    Save photo
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
