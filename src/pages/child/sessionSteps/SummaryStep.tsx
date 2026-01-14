@@ -235,7 +235,7 @@ function MnemonicPlayer({
           <div>
             <p className="font-semibold text-primary-900">Creating your mnemonic...</p>
             <p className="text-neutral-600 text-sm">
-              StudyBuddy is writing lyrics and generating audio
+              Our AI elves are busy writing lyrics and composing audio. This typically takes a couple of minutes
             </p>
           </div>
         </div>
