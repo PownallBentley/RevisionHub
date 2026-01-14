@@ -1,6 +1,6 @@
 // src/components/layout/AppHeader.tsx
-// Shows My Account for both Parent and Student
-// Shows Settings for Parent only
+// UPDATED: Shows avatar image when available (parent + child), otherwise initials.
+// Still handles loading states properly and never flashes "User".
 
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,9 +20,7 @@ function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (
-    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
-  ).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 function getDisplayName(profile: any, isChild: boolean): string | null {
@@ -35,7 +33,6 @@ function getDisplayName(profile: any, isChild: boolean): string | null {
   if (profile.full_name) {
     return profile.full_name.split(" ")[0];
   }
-
   if (profile.email) {
     return profile.email.split("@")[0];
   }
@@ -46,7 +43,6 @@ function getDisplayName(profile: any, isChild: boolean): string | null {
 export default function AppHeader() {
   const navigate = useNavigate();
   const { user, profile, loading, isChild, isParent, signOut } = useAuth();
-
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -54,14 +50,15 @@ export default function AppHeader() {
   const displayName = getDisplayName(profile, isChild);
   const initials = displayName ? getInitials(displayName) : "?";
 
+  // Profile is still loading if we have a user but no profile yet
   const isProfileLoading = isLoggedIn && !profile;
+
+  // Avatar URL (child profile comes from children table via AuthContext)
+  const avatarUrl: string | null = profile?.avatar_url ?? null;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
       }
     }
@@ -71,38 +68,51 @@ export default function AppHeader() {
 
   function handleSignOut() {
     setDropdownOpen(false);
+
+    // Navigate immediately - don't wait for signOut
     navigate("/", { replace: true });
     signOut();
   }
 
-  const headerBg = isChild
-    ? "bg-indigo-50 border-indigo-100"
-    : "bg-white border-gray-100";
+  const headerBg = isChild ? "bg-indigo-50 border-indigo-100" : "bg-white border-gray-100";
+  const avatarBg = isChild ? "bg-gradient-to-br from-indigo-400 to-purple-500" : "bg-brand-purple";
 
-  const avatarBg = isChild
-    ? "bg-gradient-to-br from-indigo-400 to-purple-500"
-    : "bg-brand-purple";
+  const AvatarCircle = ({ size = "w-9 h-9" }: { size?: string }) => {
+    if (avatarUrl) {
+      return (
+        <img
+          src={avatarUrl}
+          alt={displayName || "Avatar"}
+          className={`${size} rounded-full object-cover border border-white shadow-sm`}
+        />
+      );
+    }
+
+    return (
+      <div
+        className={`${size} ${avatarBg} rounded-full flex items-center justify-center text-white text-sm font-semibold`}
+      >
+        {initials}
+      </div>
+    );
+  };
 
   return (
     <header className={`${headerBg} border-b sticky top-0 z-50`}>
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Left side */}
+        {/* Left side: Logo + Parent Nav */}
         <div className="flex items-center gap-8">
           <Link
             to="/"
             className="flex items-center gap-3 text-gray-900 hover:opacity-80 transition-opacity"
           >
             <div
-              className={`w-10 h-10 ${
-                isChild ? "bg-indigo-500" : "bg-brand-purple"
-              } rounded-xl flex items-center justify-center shadow-sm`}
+              className={`w-10 h-10 ${isChild ? "bg-indigo-500" : "bg-brand-purple"} rounded-xl flex items-center justify-center shadow-sm`}
             >
               <FontAwesomeIcon icon={faBookOpen} className="text-white text-lg" />
             </div>
             <div>
-              <div className="text-base font-semibold leading-tight">
-                RevisionHub
-              </div>
+              <div className="text-base font-semibold leading-tight">RevisionHub</div>
               <div className="text-xs text-gray-500">
                 {isChild ? "Your revision" : "Parent-led revision"}
               </div>
@@ -115,10 +125,7 @@ export default function AppHeader() {
         {/* Right side */}
         {loading ? (
           <div className="w-9 h-9 flex items-center justify-center">
-            <FontAwesomeIcon
-              icon={faSpinner}
-              className="text-gray-400 animate-spin"
-            />
+            <FontAwesomeIcon icon={faSpinner} className="text-gray-400 animate-spin" />
           </div>
         ) : !isLoggedIn ? (
           <div className="flex items-center gap-2">
@@ -137,13 +144,8 @@ export default function AppHeader() {
           </div>
         ) : isProfileLoading ? (
           <div className="flex items-center gap-3 px-3 py-2">
-            <div
-              className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center`}
-            >
-              <FontAwesomeIcon
-                icon={faSpinner}
-                className="text-white text-sm animate-spin"
-              />
+            <div className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center`}>
+              <FontAwesomeIcon icon={faSpinner} className="text-white text-sm animate-spin" />
             </div>
           </div>
         ) : (
@@ -153,25 +155,19 @@ export default function AppHeader() {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/50 transition-colors"
             >
-              <div
-                className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center text-white text-sm font-semibold`}
-              >
-                {initials}
-              </div>
+              <AvatarCircle />
               <span className="text-sm font-medium text-gray-700 hidden sm:block">
                 {displayName}
               </span>
               <FontAwesomeIcon
                 icon={faChevronDown}
-                className={`text-gray-400 text-xs transition-transform ${
-                  dropdownOpen ? "rotate-180" : ""
-                }`}
+                className={`text-gray-400 text-xs transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
               />
             </button>
 
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                {/* My Account - parent & student */}
+                {/* Child should ALSO have My Account now */}
                 <button
                   type="button"
                   onClick={() => {
@@ -180,14 +176,11 @@ export default function AppHeader() {
                   }}
                   className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                 >
-                  <FontAwesomeIcon
-                    icon={faUser}
-                    className="text-gray-400 w-4"
-                  />
+                  <FontAwesomeIcon icon={faUser} className="text-gray-400 w-4" />
                   My Account
                 </button>
 
-                {/* Settings - parent only */}
+                {/* Parents keep Settings */}
                 {isParent && (
                   <button
                     type="button"
@@ -197,10 +190,7 @@ export default function AppHeader() {
                     }}
                     className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FontAwesomeIcon
-                      icon={faCog}
-                      className="text-gray-400 w-4"
-                    />
+                    <FontAwesomeIcon icon={faCog} className="text-gray-400 w-4" />
                     Settings
                   </button>
                 )}
