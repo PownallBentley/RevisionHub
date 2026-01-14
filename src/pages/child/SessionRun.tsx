@@ -520,7 +520,9 @@ export default function SessionRun() {
                 childId: sessionData.child_id,
                 originalPrompt,
                 subjectName: sessionData.subject_name || "unknown",
+                topicId: sessionData.topic_id
                 topicName: sessionData.topic_name || "unknown topic",
+                topicText: sessionData.topic_name || "unknown topic",
                 style,
               });
 
