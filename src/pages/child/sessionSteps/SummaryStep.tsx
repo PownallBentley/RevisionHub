@@ -1,6 +1,5 @@
 // src/pages/child/sessionSteps/SummaryStep.tsx
-// NEW: 7-Step Session Model - January 2026
-// Step 5: Key takeaways consolidation + mnemonic generation
+// Step 5: Key takeaways + mnemonic
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -33,6 +32,13 @@ import {
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
+import {
+  isMnemonicFavourite,
+  setMnemonicFavourite,
+  startMnemonicPlay,
+  endMnemonicPlay,
+} from "../../../services/mnemonics/mnemonicActivityService";
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -46,6 +52,7 @@ type KeyTakeaway = {
 type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
 type MnemonicData = {
+  mnemonicId: string | null;
   style: MnemonicStyle;
   styleReference: string;
   lyrics: string;
@@ -65,6 +72,10 @@ type SummaryStepProps = {
     step_key: string;
     step_index: number;
     total_steps: number;
+
+    // NEW (from SessionRun)
+    child_id: string;
+    revision_session_id: string;
   };
   payload: {
     summary?: {
@@ -149,25 +160,14 @@ function formatTime(seconds: number | null | undefined) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/**
- * If your n8n returns:
- *  - a full URL (https://...) => we use it directly
- *  - a storage path (e.g. "mnemonics/abc123.mp3" or "children/<id>-....mp3")
- *    => we try to build a public Supabase URL
- *
- * If your bucket is PRIVATE, you must return a SIGNED URL from n8n instead.
- */
 function resolveAudioUrl(raw: string | null): string | null {
   if (!raw) return null;
   if (/^https?:\/\//i.test(raw)) return raw;
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  if (!supabaseUrl) return raw; // best effort fallback
+  if (!supabaseUrl) return raw;
 
-  // 👇 CHANGE THIS if your audio is stored in a different bucket name
   const AUDIO_BUCKET = "mnemonics";
-
-  // If raw already includes a leading folder (e.g. "children/.."), keep it as-is.
   const path = raw.replace(/^\/+/, "");
   return `${supabaseUrl}/storage/v1/object/public/${AUDIO_BUCKET}/${path}`;
 }
@@ -176,13 +176,7 @@ function resolveAudioUrl(raw: string | null): string | null {
 // Sub-components
 // =============================================================================
 
-function KeyTakeawayCard({
-  takeaway,
-  index,
-}: {
-  takeaway: KeyTakeaway;
-  index: number;
-}) {
+function KeyTakeawayCard({ takeaway, index }: { takeaway: KeyTakeaway; index: number }) {
   return (
     <div className="flex items-start space-x-4 p-4 bg-neutral-50 rounded-xl">
       <div className="w-8 h-8 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0 mt-1">
@@ -242,10 +236,12 @@ function MnemonicStyleSelector({
 
 function MnemonicPlayer({
   mnemonic,
-  onFavourite,
+  childId,
+  sessionId,
 }: {
   mnemonic: MnemonicData;
-  onFavourite?: () => void;
+  childId: string;
+  sessionId: string;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -254,6 +250,14 @@ function MnemonicPlayer({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [isMetadataReady, setIsMetadataReady] = useState(false);
+
+  // favourites
+  const [isFav, setIsFav] = useState(false);
+  const [favBusy, setFavBusy] = useState(false);
+
+  // play tracking
+  const [playId, setPlayId] = useState<string | null>(null);
+  const playStartTimeRef = useRef<number | null>(null);
 
   const styleConfig = useMemo(
     () => MNEMONIC_STYLES.find((s) => s.id === mnemonic.style),
@@ -267,13 +271,37 @@ function MnemonicPlayer({
     return Math.min(100, Math.max(0, (currentTime / duration) * 100));
   }, [currentTime, duration]);
 
+  // Load favourite status once mnemonic is ready + has an id
   useEffect(() => {
-    // If mnemonic changes, reset player state
+    let cancelled = false;
+
+    async function loadFav() {
+      if (mnemonic.status !== "ready") return;
+      if (!mnemonic.mnemonicId) return;
+
+      try {
+        const fav = await isMnemonicFavourite({ childId, mnemonicId: mnemonic.mnemonicId });
+        if (!cancelled) setIsFav(fav);
+      } catch (e) {
+        console.error("[MnemonicPlayer] favourite lookup failed:", e);
+      }
+    }
+
+    loadFav();
+    return () => {
+      cancelled = true;
+    };
+  }, [mnemonic.status, mnemonic.mnemonicId, childId]);
+
+  useEffect(() => {
     setIsPlaying(false);
     setDuration(mnemonic.durationSeconds ?? null);
     setCurrentTime(0);
     setAudioError(null);
     setIsMetadataReady(false);
+
+    setPlayId(null);
+    playStartTimeRef.current = null;
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -282,12 +310,70 @@ function MnemonicPlayer({
     }
   }, [mnemonic.audioUrl, mnemonic.durationSeconds, mnemonic.style]);
 
+  async function toggleFavourite() {
+    if (!mnemonic.mnemonicId) return;
+    if (favBusy) return;
+
+    setFavBusy(true);
+    try {
+      const next = !isFav;
+      setIsFav(next); // optimistic
+      await setMnemonicFavourite({
+        childId,
+        mnemonicId: mnemonic.mnemonicId,
+        makeFavourite: next,
+      });
+    } catch (e) {
+      console.error("[MnemonicPlayer] favourite toggle failed:", e);
+      setIsFav((v) => !v); // revert
+    } finally {
+      setFavBusy(false);
+    }
+  }
+
+  async function startPlayTrackingIfNeeded() {
+    if (!mnemonic.mnemonicId) return;
+    if (playId) return;
+
+    try {
+      const id = await startMnemonicPlay({
+        childId,
+        mnemonicId: mnemonic.mnemonicId,
+        sessionId,
+        source: "summary",
+      });
+      setPlayId(id);
+      playStartTimeRef.current = Date.now();
+    } catch (e) {
+      console.error("[MnemonicPlayer] start play tracking failed:", e);
+    }
+  }
+
+  async function stopPlayTracking(completed: boolean) {
+    if (!playId) return;
+
+    const startMs = playStartTimeRef.current;
+    const elapsedSeconds = startMs ? (Date.now() - startMs) / 1000 : currentTime;
+
+    try {
+      await endMnemonicPlay({
+        playId,
+        playDurationSeconds: elapsedSeconds,
+        completed,
+      });
+    } catch (e) {
+      console.error("[MnemonicPlayer] end play tracking failed:", e);
+    } finally {
+      setPlayId(null);
+      playStartTimeRef.current = null;
+    }
+  }
+
   async function togglePlay() {
     if (!audioRef.current) return;
 
     setAudioError(null);
 
-    // If we have no URL, fail fast with a clear UI message
     if (!resolvedAudioUrl) {
       setAudioError("No audio URL was provided for this mnemonic.");
       return;
@@ -297,18 +383,21 @@ function MnemonicPlayer({
       if (isPlaying) {
         audioRef.current.pause();
         setIsPlaying(false);
+        await stopPlayTracking(false);
         return;
       }
 
+      await startPlayTrackingIfNeeded();
+
       const playPromise = audioRef.current.play();
       if (playPromise) await playPromise;
+
       setIsPlaying(true);
     } catch (err) {
       console.error("[MnemonicPlayer] play() failed:", err);
       setIsPlaying(false);
-      setAudioError(
-        "Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue."
-      );
+      await stopPlayTracking(false);
+      setAudioError("Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue.");
     }
   }
 
@@ -365,7 +454,6 @@ function MnemonicPlayer({
 
   return (
     <div className="p-6 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
-      {/* Hidden but real audio element */}
       <audio
         ref={audioRef}
         src={resolvedAudioUrl ?? undefined}
@@ -378,12 +466,14 @@ function MnemonicPlayer({
           }
         }}
         onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLAudioElement).currentTime)}
-        onEnded={() => {
+        onEnded={async () => {
           setIsPlaying(false);
           setCurrentTime(0);
+          await stopPlayTracking(true);
         }}
-        onError={() => {
+        onError={async () => {
           setIsPlaying(false);
+          await stopPlayTracking(false);
           setAudioError("Audio failed to load. Check that the URL is public or signed, and that CORS allows playback.");
         }}
       />
@@ -407,16 +497,15 @@ function MnemonicPlayer({
         </div>
 
         <div className="flex items-center space-x-2">
-          {onFavourite && (
-            <button
-              type="button"
-              onClick={onFavourite}
-              className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition"
-              title="Favourite"
-            >
-              <FontAwesomeIcon icon={faHeart} className="text-primary-600" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={toggleFavourite}
+            disabled={!mnemonic.mnemonicId || favBusy}
+            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition disabled:opacity-50"
+            title="Favourite"
+          >
+            <FontAwesomeIcon icon={faHeart} className={isFav ? "text-accent-red" : "text-primary-600"} />
+          </button>
 
           <button
             type="button"
@@ -460,9 +549,7 @@ function MnemonicPlayer({
         {!resolvedAudioUrl && (
           <div className="mt-3 text-xs text-neutral-600 flex items-start space-x-2">
             <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5" />
-            <span>
-              No audio URL found. Your n8n workflow needs to store/return a playable URL (public or signed).
-            </span>
+            <span>No audio URL found. Your n8n workflow needs to return a playable URL (public or signed).</span>
           </div>
         )}
 
@@ -500,17 +587,14 @@ export default function SummaryStep({
   onExit,
   onRequestMnemonic,
 }: SummaryStepProps) {
-  // Extract from payload
   const summary = payload?.summary ?? {};
   const keyTakeaways: KeyTakeaway[] = summary.keyTakeaways ?? [];
   const existingMnemonic = summary.mnemonic ?? null;
 
-  // State
   const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(summary.selectedStyle ?? null);
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(existingMnemonic);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Derived
   const progressPercent = (overview.step_index / overview.total_steps) * 100;
   const subjectIcon = getIconFromName(overview.subject_icon);
   const subjectColor = overview.subject_color || "#5B2CFF";
@@ -524,6 +608,7 @@ export default function SummaryStep({
 
     setIsGenerating(true);
     setMnemonic({
+      mnemonicId: null,
       style: selectedStyle,
       styleReference: MNEMONIC_STYLES.find((s) => s.id === selectedStyle)?.styleReference || "",
       lyrics: "",
@@ -545,9 +630,9 @@ export default function SummaryStep({
           },
         });
       } else {
-        // Mock for development
         await new Promise((resolve) => setTimeout(resolve, 1500));
         const mockMnemonic: MnemonicData = {
+          mnemonicId: "mock",
           style: selectedStyle,
           styleReference: MNEMONIC_STYLES.find((s) => s.id === selectedStyle)?.styleReference || "",
           lyrics: generateMockLyrics(overview.topic_name, selectedStyle),
@@ -568,6 +653,7 @@ export default function SummaryStep({
     } catch (error) {
       console.error("[SummaryStep] Mnemonic generation failed:", error);
       setMnemonic({
+        mnemonicId: null,
         style: selectedStyle,
         styleReference: "",
         lyrics: "",
@@ -711,13 +797,7 @@ export default function SummaryStep({
               </div>
             </div>
           ) : (
-            <MnemonicPlayer
-              mnemonic={mnemonic}
-              onFavourite={() => {
-                // optional future feature
-                console.log("[SummaryStep] Favourite clicked");
-              }}
-            />
+            <MnemonicPlayer mnemonic={mnemonic} childId={overview.child_id} sessionId={overview.revision_session_id} />
           )}
         </div>
       </section>
