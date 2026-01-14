@@ -1,87 +1,72 @@
 // src/services/mnemonics/mnemonicActivityService.ts
-import { supabase } from "../../lib/supabase"; // adjust if your path differs
+import { supabase } from "../../lib/supabase";
 
-export async function isMnemonicFavourite(args: { childId: string; mnemonicId: string }) {
-  const { data, error } = await supabase
-    .from("mnemonic_favourites")
-    .select("id")
-    .eq("child_id", args.childId)
-    .eq("mnemonic_id", args.mnemonicId)
-    .maybeSingle();
+// =============================================================================
+// Mnemonic Activity Service (RPC-only)
+// =============================================================================
+// IMPORTANT:
+// - Do NOT pass childId from the client.
+// - DB derives child_id from auth.uid() via rpc_current_child_id().
+// - Requires the RPCs:
+//   - rpc_is_mnemonic_favourite(p_mnemonic_id uuid) returns boolean
+//   - rpc_set_mnemonic_favourite(p_mnemonic_id uuid, p_make_favourite boolean) returns boolean
+//   - rpc_start_mnemonic_play(p_mnemonic_id uuid, p_revision_session_id uuid, p_source text) returns uuid
+//   - rpc_end_mnemonic_play(p_play_id uuid, p_play_duration_seconds int, p_completed boolean) returns void
+// =============================================================================
+
+export async function isMnemonicFavourite(args: { mnemonicId: string }): Promise<boolean> {
+  const { data, error } = await supabase.rpc("rpc_is_mnemonic_favourite", {
+    p_mnemonic_id: args.mnemonicId,
+  });
 
   if (error) throw error;
-  return !!data?.id;
+  return !!data;
 }
 
 export async function setMnemonicFavourite(args: {
-  childId: string;
   mnemonicId: string;
   makeFavourite: boolean;
-}) {
-  if (args.makeFavourite) {
-    const { error } = await supabase.from("mnemonic_favourites").insert({
-      child_id: args.childId,
-      mnemonic_id: args.mnemonicId,
-      created_at: new Date().toISOString(),
-    });
-
-    // Unique constraint prevents duplicates; double-clicks can throw.
-    // Treat that case as success.
-    if (error && !String(error.message || "").toLowerCase().includes("duplicate")) {
-      throw error;
-    }
-
-    return { isFavourite: true };
-  }
-
-  const { error } = await supabase
-    .from("mnemonic_favourites")
-    .delete()
-    .eq("child_id", args.childId)
-    .eq("mnemonic_id", args.mnemonicId);
+}): Promise<{ isFavourite: boolean }> {
+  const { data, error } = await supabase.rpc("rpc_set_mnemonic_favourite", {
+    p_mnemonic_id: args.mnemonicId,
+    p_make_favourite: args.makeFavourite,
+  });
 
   if (error) throw error;
-  return { isFavourite: false };
+
+  // rpc returns boolean (true if favourited, false if removed)
+  return { isFavourite: !!data };
 }
 
 export async function startMnemonicPlay(args: {
-  childId: string;
   mnemonicId: string;
-  sessionId?: string | null;
-  source?: string | null; // "summary"
-}) {
-  const { data, error } = await supabase
-    .from("mnemonic_plays")
-    .insert({
-      child_id: args.childId,
-      mnemonic_id: args.mnemonicId,
-      session_id: args.sessionId ?? null,
-      source: args.source ?? "summary",
-      played_at: new Date().toISOString(),
-      completed: false,
-      play_duration_seconds: null,
-    })
-    .select("id")
-    .single();
+  revisionSessionId: string; // required for the RPC (matches your UI usage)
+  source?: string; // default "summary"
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("rpc_start_mnemonic_play", {
+    p_mnemonic_id: args.mnemonicId,
+    p_revision_session_id: args.revisionSessionId,
+    p_source: args.source ?? "summary",
+  });
 
   if (error) throw error;
-  return data.id as string;
+
+  // rpc returns uuid
+  return data as string;
 }
 
 export async function endMnemonicPlay(args: {
   playId: string;
   playDurationSeconds: number;
   completed: boolean;
-}) {
+}): Promise<void> {
   const duration = Math.max(0, Math.floor(args.playDurationSeconds));
 
-  const { error } = await supabase
-    .from("mnemonic_plays")
-    .update({
-      completed: args.completed,
-      play_duration_seconds: duration,
-    })
-    .eq("id", args.playId);
+  const { error } = await supabase.rpc("rpc_end_mnemonic_play", {
+    p_play_id: args.playId,
+    p_play_duration_seconds: duration,
+    p_completed: args.completed,
+  });
 
   if (error) throw error;
 }
