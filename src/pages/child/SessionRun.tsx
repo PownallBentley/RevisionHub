@@ -36,10 +36,12 @@ import {
   completeRevisionSession,
   startPlannedSession,
 } from "../../services/revisionSessionApi";
+
 import {
-  requestMnemonic,
+  requestMnemonicTracked,
   transformToMnemonicData,
-} from "../../services/mnemonicApi";
+  MnemonicStyle,
+} from "../../services/mnemonics/mnemonicApi";
 
 // =============================================================================
 // Types
@@ -133,26 +135,19 @@ function SessionHeader({
   return (
     <header className="bg-white border-b border-neutral-200 sticky top-0 z-40">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        {/* Subject Info */}
         <div className="flex items-center space-x-3">
           <div
             className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: subjectColor }}
           >
-            <FontAwesomeIcon
-              icon={subjectIcon}
-              className="text-white text-lg"
-            />
+            <FontAwesomeIcon icon={subjectIcon} className="text-white text-lg" />
           </div>
           <div>
             <p className="font-semibold text-primary-900">{subjectName}</p>
-            <p className="text-neutral-500 text-sm truncate max-w-[200px]">
-              {topicName}
-            </p>
+            <p className="text-neutral-500 text-sm truncate max-w-[200px]">{topicName}</p>
           </div>
         </div>
 
-        {/* Exit Button */}
         <button
           type="button"
           onClick={onExit}
@@ -182,7 +177,6 @@ function StepProgressBar({
   return (
     <div className="bg-white border-b border-neutral-200 py-4">
       <div className="max-w-4xl mx-auto px-4">
-        {/* Top row: label + time */}
         <div className="flex items-center justify-between mb-3">
           <p className="text-neutral-600 text-sm">
             {STEP_LABELS[STEP_ORDER[currentStepIndex - 1] ?? "preview"]}
@@ -200,7 +194,6 @@ function StepProgressBar({
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="w-full bg-neutral-200 rounded-full h-2 mb-4">
           <div
             className="bg-primary-600 h-full rounded-full transition-all duration-500"
@@ -208,7 +201,6 @@ function StepProgressBar({
           />
         </div>
 
-        {/* Step dots */}
         <div className="flex items-center justify-between">
           {STEP_ORDER.map((stepKey, idx) => {
             const stepData = steps.find((s) => s.step_key === stepKey);
@@ -227,10 +219,7 @@ function StepProgressBar({
                   }`}
                 >
                   {isComplete ? (
-                    <FontAwesomeIcon
-                      icon={faCheckCircle}
-                      className="text-white text-sm"
-                    />
+                    <FontAwesomeIcon icon={faCheckCircle} className="text-white text-sm" />
                   ) : (
                     <span
                       className={`text-sm font-semibold ${
@@ -243,9 +232,7 @@ function StepProgressBar({
                 </div>
                 <span
                   className={`text-xs mt-1 hidden md:block ${
-                    isCurrent
-                      ? "text-primary-600 font-semibold"
-                      : "text-neutral-400"
+                    isCurrent ? "text-primary-600 font-semibold" : "text-neutral-400"
                   }`}
                 >
                   {STEP_LABELS[stepKey]}
@@ -263,10 +250,7 @@ function LoadingState() {
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
       <div className="text-center">
-        <FontAwesomeIcon
-          icon={faSpinner}
-          className="text-primary-600 text-4xl animate-spin mb-4"
-        />
+        <FontAwesomeIcon icon={faSpinner} className="text-primary-600 text-4xl animate-spin mb-4" />
         <p className="text-neutral-600 font-medium">Loading session...</p>
       </div>
     </div>
@@ -277,13 +261,8 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-card p-8 max-w-md text-center">
-        <FontAwesomeIcon
-          icon={faExclamationTriangle}
-          className="text-accent-red text-4xl mb-4"
-        />
-        <h2 className="text-xl font-bold text-neutral-900 mb-2">
-          Something went wrong
-        </h2>
+        <FontAwesomeIcon icon={faExclamationTriangle} className="text-accent-red text-4xl mb-4" />
+        <h2 className="text-xl font-bold text-neutral-900 mb-2">Something went wrong</h2>
         <p className="text-neutral-600 mb-6">{message}</p>
         <button
           type="button"
@@ -305,7 +284,6 @@ export default function SessionRun() {
   const { plannedSessionId } = useParams<{ plannedSessionId: string }>();
   const navigate = useNavigate();
 
-  // State
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [revisionSessionId, setRevisionSessionId] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(1);
@@ -313,7 +291,6 @@ export default function SessionRun() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Load session data
   const loadSession = useCallback(async () => {
     if (!plannedSessionId) {
       setError("No session ID provided");
@@ -325,23 +302,14 @@ export default function SessionRun() {
       setLoading(true);
       setError(null);
 
-      // Start/get the revision session from planned session
       const rsId = await startPlannedSession(plannedSessionId);
       setRevisionSessionId(rsId);
 
-      // Load the full revision session data
       const data = await getRevisionSession(rsId);
       setSessionData(data);
 
-      // Decide where the learner should land:
-      // - If a step is already in progress, resume it
-      // - Otherwise always start at Preview (step 1)
       const inProgressStep = data.steps.find((s) => s.status === "in_progress");
-      if (inProgressStep) {
-        setCurrentStepIndex(inProgressStep.step_index);
-      } else {
-        setCurrentStepIndex(1);
-      }
+      setCurrentStepIndex(inProgressStep ? inProgressStep.step_index : 1);
     } catch (err) {
       console.error("[SessionRun] Failed to load session:", err);
       setError("Failed to load session. Please try again.");
@@ -354,7 +322,6 @@ export default function SessionRun() {
     loadSession();
   }, [loadSession]);
 
-  // Handlers
   async function handlePatchStep(stepKey: StepKey, patch: Record<string, any>) {
     if (!sessionData || !revisionSessionId) return;
 
@@ -362,7 +329,6 @@ export default function SessionRun() {
     try {
       await patchRevisionSessionStep(revisionSessionId, stepKey, patch);
 
-      // Update local state
       setSessionData((prev) => {
         if (!prev) return prev;
         return {
@@ -390,13 +356,11 @@ export default function SessionRun() {
     try {
       const currentStepKey = STEP_ORDER[currentStepIndex - 1];
 
-      // Mark current step complete
       await patchRevisionSessionStep(revisionSessionId, currentStepKey, {
         status: "completed",
         completed_at: new Date().toISOString(),
       });
 
-      // Update local state
       setSessionData((prev) => {
         if (!prev) return prev;
         return {
@@ -407,10 +371,7 @@ export default function SessionRun() {
         };
       });
 
-      // Move to next step in UI
-      if (nextIndex <= STEP_ORDER.length) {
-        setCurrentStepIndex(nextIndex);
-      }
+      if (nextIndex <= STEP_ORDER.length) setCurrentStepIndex(nextIndex);
     } catch (err) {
       console.error("[SessionRun] Failed to advance step:", err);
     } finally {
@@ -419,9 +380,7 @@ export default function SessionRun() {
   }
 
   function handleBack() {
-    if (currentStepIndex > 1) {
-      setCurrentStepIndex(currentStepIndex - 1);
-    }
+    if (currentStepIndex > 1) setCurrentStepIndex(currentStepIndex - 1);
   }
 
   function handleExit() {
@@ -442,19 +401,15 @@ export default function SessionRun() {
     }
   }
 
-  // Loading / Error states
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadSession} />;
-  if (!sessionData)
-    return <ErrorState message="Session data not found" onRetry={loadSession} />;
+  if (!sessionData) return <ErrorState message="Session data not found" onRetry={loadSession} />;
 
-  // Derived values
   const subjectIcon = getIconFromName(sessionData.subject_icon);
   const subjectColor = sessionData.subject_color || "#5B2CFF";
   const currentStepKey = STEP_ORDER[currentStepIndex - 1] ?? "preview";
   const currentStepData = sessionData.steps.find((s) => s.step_key === currentStepKey);
 
-  // Build overview object passed to all steps
   const stepOverview = {
     subject_name: sessionData.subject_name,
     subject_icon: sessionData.subject_icon,
@@ -466,29 +421,27 @@ export default function SessionRun() {
     step_index: currentStepIndex,
     total_steps: STEP_ORDER.length,
     child_name: sessionData.child_name,
+
+    // NEW: required for favourites/plays/requests
+    child_id: sessionData.child_id,
+    revision_session_id: revisionSessionId ?? sessionData.revision_session_id,
   };
 
-  // Build payload from generated_payload + step answer_summary
   const stepPayload = {
     ...sessionData.generated_payload,
     [currentStepKey]: currentStepData?.answer_summary ?? {},
   };
 
-  // Estimate time remaining (rough: assume equal time per step)
   const stepsRemaining = STEP_ORDER.length - currentStepIndex + 1;
-  const timePerStep = Math.ceil(
-    sessionData.session_duration_minutes / STEP_ORDER.length
-  );
+  const timePerStep = Math.ceil(sessionData.session_duration_minutes / STEP_ORDER.length);
   const timeRemainingMinutes = stepsRemaining * timePerStep;
 
-  // Render current step
   function renderStep() {
     const commonProps = {
       overview: stepOverview,
       payload: stepPayload,
       saving,
-      onPatch: (patch: Record<string, any>) =>
-        handlePatchStep(currentStepKey, patch),
+      onPatch: (patch: Record<string, any>) => handlePatchStep(currentStepKey, patch),
       onNext: handleNextStep,
       onBack: handleBack,
       onExit: handleExit,
@@ -503,7 +456,6 @@ export default function SessionRun() {
           <RecallStep
             {...commonProps}
             onUpdateFlashcardProgress={async (cardId, status) => {
-              // Could call RPC to update child_flashcard_progress
               console.log("[SessionRun] Update flashcard:", cardId, status);
             }}
           />
@@ -519,20 +471,16 @@ export default function SessionRun() {
         return (
           <SummaryStep
             {...commonProps}
-            onRequestMnemonic={async (style) => {
-              console.log("[SessionRun] Requesting mnemonic:", {
-                subject: sessionData?.subject_name,
-                topic: sessionData?.topic_name,
+            onRequestMnemonic={async (style: MnemonicStyle) => {
+              const originalPrompt = `${sessionData.subject_name} | ${sessionData.topic_name} | style=${style} | step=summary`;
+
+              const { response } = await requestMnemonicTracked({
+                childId: sessionData.child_id,
+                originalPrompt,
+                subjectName: sessionData.subject_name || "unknown",
+                topicName: sessionData.topic_name || "unknown topic",
                 style,
               });
-
-              const response = await requestMnemonic(
-                sessionData?.subject_name || "unknown",
-                sessionData?.topic_name || "unknown topic",
-                style
-              );
-
-              console.log("[SessionRun] Mnemonic response:", response);
 
               return transformToMnemonicData(response, style);
             }}
@@ -544,16 +492,9 @@ export default function SessionRun() {
           <CompleteStep
             {...commonProps}
             onFinish={handleFinish}
-            onStartNextSession={() => {
-              navigate("/child/today");
-            }}
+            onStartNextSession={() => navigate("/child/today")}
             onUploadAudio={async (blob) => {
-              // In production: upload to Supabase storage
-              console.log(
-                "[SessionRun] Would upload audio blob:",
-                blob.size,
-                "bytes"
-              );
+              console.log("[SessionRun] Would upload audio blob:", blob.size, "bytes");
               return "https://placeholder-audio-url.com/note.webm";
             }}
           />
@@ -570,7 +511,6 @@ export default function SessionRun() {
 
   return (
     <div className="min-h-screen bg-neutral-100">
-      {/* Header - subject info + exit */}
       <SessionHeader
         subjectName={sessionData.subject_name}
         subjectIcon={subjectIcon}
@@ -579,7 +519,6 @@ export default function SessionRun() {
         onExit={handleExit}
       />
 
-      {/* Progress Bar - 6 steps */}
       <StepProgressBar
         currentStepIndex={currentStepIndex}
         totalSteps={STEP_ORDER.length}
@@ -587,10 +526,7 @@ export default function SessionRun() {
         timeRemainingMinutes={timeRemainingMinutes}
       />
 
-      {/* Step Content */}
-      <main className="max-w-4xl mx-auto px-4 py-6 pb-24">
-        {renderStep()}
-      </main>
+      <main className="max-w-4xl mx-auto px-4 py-6 pb-24">{renderStep()}</main>
     </div>
   );
 }
