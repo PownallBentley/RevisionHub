@@ -639,37 +639,38 @@ export default function CompleteStep({
     if (audioData.blob && onUploadAudio) {
       try {
         audioUrl = await onUploadAudio(audioData.blob);
-        
-        // =====================================================================
-        // INSERT INTO child_session_reflections FOR TRANSCRIPTION WORKFLOW
-        // This triggers the N8n webhook via Supabase database webhook
-        // Captures both audio (for transcription) and text notes
-        // =====================================================================
-        const hasAudio = !!audioUrl;
-        const hasTextNote = journalNote.trim().length > 0;
-        
-        if (hasAudio || hasTextNote) {
-          const { error: reflectionError } = await supabase
-            .from("child_session_reflections")
-            .insert({
-              child_id: overview.child_id,
-              revision_session_id: overview.revision_session_id,
-              audio_url: audioUrl || null,
-              audio_duration_seconds: hasAudio ? audioData.durationSeconds : null,
-              text_note: hasTextNote ? journalNote.trim() : null,
-              context_type: "session_reflection",
-              transcription_status: hasAudio ? "pending" : null,
-            });
-
-          if (reflectionError) {
-            // Log but don't block session completion
-            console.error("[CompleteStep] Failed to create reflection record:", reflectionError);
-          } else {
-            console.log("[CompleteStep] Session reflection record created", { hasAudio, hasTextNote });
-          }
-        }
       } catch (error) {
         console.error("[CompleteStep] Audio upload failed:", error);
+      }
+    }
+
+    // =========================================================================
+    // INSERT INTO child_session_reflections FOR TRANSCRIPTION WORKFLOW
+    // This triggers the N8n webhook via Supabase database webhook
+    // Captures both audio (for transcription) and text notes
+    // Runs regardless of whether audio was uploaded
+    // =========================================================================
+    const hasAudio = !!audioUrl;
+    const hasTextNote = journalNote.trim().length > 0;
+    
+    if (hasAudio || hasTextNote) {
+      const { error: reflectionError } = await supabase
+        .from("child_session_reflections")
+        .insert({
+          child_id: overview.child_id,
+          revision_session_id: overview.revision_session_id,
+          audio_url: audioUrl || null,
+          audio_duration_seconds: hasAudio ? audioData.durationSeconds : null,
+          text_note: hasTextNote ? journalNote.trim() : null,
+          context_type: "session_reflection",
+          transcription_status: hasAudio ? "pending" : null,
+        });
+
+      if (reflectionError) {
+        // Log but don't block session completion
+        console.error("[CompleteStep] Failed to create reflection record:", reflectionError);
+      } else {
+        console.log("[CompleteStep] Session reflection record created", { hasAudio, hasTextNote });
       }
     }
 
