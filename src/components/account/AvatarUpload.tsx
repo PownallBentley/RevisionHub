@@ -13,7 +13,7 @@ import { supabase } from "../../lib/supabase";
 
 interface AvatarUploadProps {
   currentAvatarUrl: string | null;
-  userId: string; // parent: auth user id, child: child id
+  userId: string; // parent: profile id (auth uid), child: children.id
   userType: "parent" | "child";
   userName: string;
   onAvatarChange: (newUrl: string | null) => void;
@@ -21,16 +21,34 @@ interface AvatarUploadProps {
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png"];
-const CROP_SIZE = 200; // output image size
-const PREVIEW_SIZE = 200; // crop preview circle size
+const CROP_SIZE = 200; // Output size in pixels
+const PREVIEW_SIZE = 200; // Preview circle size
 
+/**
+ * Extract storage object path from a Supabase public URL.
+ * Expected format:
+ * https://<project>.supabase.co/storage/v1/object/public/avatars/<objectPath>
+ */
 function getStoragePathFromPublicUrl(publicUrl: string): string | null {
-  // Supabase public URL usually looks like:
-  // https://<project>.supabase.co/storage/v1/object/public/avatars/<path>
   const marker = "/storage/v1/object/public/avatars/";
   const idx = publicUrl.indexOf(marker);
   if (idx === -1) return null;
   return publicUrl.slice(idx + marker.length);
+}
+
+/**
+ * Build a path that matches your CURRENT policies:
+ * - folder must be 'children'
+ * - filename must match: <childId>-%
+ *
+ * So we use: children/<childId>-<timestamp>.jpg
+ *
+ * (And similarly for parents if you have equivalent policies.)
+ */
+function buildAvatarPath(userType: "parent" | "child", userId: string) {
+  const folder = userType === "child" ? "children" : "parents";
+  const fileName = `${userId}-${Date.now()}.jpg`;
+  return `${folder}/${fileName}`;
 }
 
 export default function AvatarUpload({
@@ -44,19 +62,22 @@ export default function AvatarUpload({
   const [error, setError] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
 
+  // Image state for cropping
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [sliderValue, setSliderValue] = useState(50);
+  const [sliderValue, setSliderValue] = useState(50); // 0-100 slider
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
 
+  // Zoom bounds calculated from image size
   const [minZoom, setMinZoom] = useState(0.1);
   const [fitZoom, setFitZoom] = useState(1);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Generate initials for fallback avatar
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -64,7 +85,10 @@ export default function AvatarUpload({
     .toUpperCase()
     .slice(0, 2);
 
-  // slider (0..100) -> zoom
+  // Convert slider (0-100) to actual zoom
+  // 0% = minZoom (see whole image)
+  // 50% = fitZoom (smallest dimension fills circle)
+  // 100% = fitZoom * 2 (zoomed in 2x)
   const sliderToZoom = useCallback(
     (slider: number): number => {
       if (slider <= 50) {
@@ -107,9 +131,11 @@ export default function AvatarUpload({
 
         setNaturalSize({ width: natWidth, height: natHeight });
 
+        // fitZoom: smallest dimension fills the circle
         const minDim = Math.min(natWidth, natHeight);
         const calculatedFitZoom = PREVIEW_SIZE / minDim;
 
+        // minZoom: largest dimension fills the circle
         const maxDim = Math.max(natWidth, natHeight);
         const calculatedMinZoom = PREVIEW_SIZE / maxDim;
 
@@ -152,21 +178,22 @@ export default function AvatarUpload({
   }, []);
 
   useEffect(() => {
-    if (!isDragging) return;
+    if (isDragging) {
+      window.addEventListener("mousemove", handleDragMove);
+      window.addEventListener("mouseup", handleDragEnd);
+      window.addEventListener("touchmove", handleDragMove);
+      window.addEventListener("touchend", handleDragEnd);
 
-    window.addEventListener("mousemove", handleDragMove);
-    window.addEventListener("mouseup", handleDragEnd);
-    window.addEventListener("touchmove", handleDragMove);
-    window.addEventListener("touchend", handleDragEnd);
-
-    return () => {
-      window.removeEventListener("mousemove", handleDragMove);
-      window.removeEventListener("mouseup", handleDragEnd);
-      window.removeEventListener("touchmove", handleDragMove);
-      window.removeEventListener("touchend", handleDragEnd);
-    };
+      return () => {
+        window.removeEventListener("mousemove", handleDragMove);
+        window.removeEventListener("mouseup", handleDragEnd);
+        window.removeEventListener("touchmove", handleDragMove);
+        window.removeEventListener("touchend", handleDragEnd);
+      };
+    }
   }, [isDragging, handleDragMove, handleDragEnd]);
 
+  // Generate cropped image at whatever zoom/position user has chosen
   const getCroppedImage = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const canvas = canvasRef.current;
@@ -224,7 +251,7 @@ export default function AvatarUpload({
         canvas.toBlob(
           (blob) => {
             if (blob) resolve(blob);
-            else reject(new Error("Failed to create image blob"));
+            else reject(new Error("Failed to create blob"));
           },
           "image/jpeg",
           0.9
@@ -240,7 +267,9 @@ export default function AvatarUpload({
     setImageSrc(null);
     setSliderValue(50);
     setPosition({ x: 0, y: 0 });
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleUpload = async () => {
@@ -252,14 +281,10 @@ export default function AvatarUpload({
     try {
       const croppedBlob = await getCroppedImage();
 
-      // IMPORTANT:
-      // Store in a per-user folder so policies can match reliably.
-      // parent: parents/<authUserId>/<filename>
-      // child:  children/<childId>/<filename>
-      const fileName = `${Date.now()}.jpg`;
-      const filePath = `${userType}s/${userId}/${fileName}`;
+      // ✅ Path matches your policy: children/<childId>-<timestamp>.jpg
+      const filePath = buildAvatarPath(userType, userId);
 
-      // Remove old avatar from storage (best effort)
+      // Delete old avatar (best effort)
       if (currentAvatarUrl) {
         const oldPath = getStoragePathFromPublicUrl(currentAvatarUrl);
         if (oldPath) {
@@ -267,6 +292,7 @@ export default function AvatarUpload({
         }
       }
 
+      // Upload new avatar
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, croppedBlob, {
@@ -277,10 +303,11 @@ export default function AvatarUpload({
 
       if (uploadError) throw uploadError;
 
+      // Public URL
       const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
       const publicUrl = data.publicUrl;
 
-      // Update DB pointer (this is separate from Storage policies)
+      // Update profile/children table
       if (userType === "parent") {
         const { error: updateError } = await supabase
           .from("profiles")
@@ -300,8 +327,8 @@ export default function AvatarUpload({
       onAvatarChange(publicUrl);
       closeCropper();
     } catch (err: any) {
-      console.error("Avatar upload error:", err);
-      setError(err?.message || "Failed to save photo");
+      console.error("Upload error:", err);
+      setError(err.message || "Failed to upload avatar");
     } finally {
       setUploading(false);
     }
@@ -337,8 +364,8 @@ export default function AvatarUpload({
 
       onAvatarChange(null);
     } catch (err: any) {
-      console.error("Avatar remove error:", err);
-      setError(err?.message || "Failed to remove avatar");
+      console.error("Remove error:", err);
+      setError(err.message || "Failed to remove avatar");
     } finally {
       setUploading(false);
     }
@@ -465,7 +492,7 @@ export default function AvatarUpload({
                 max="100"
                 step="1"
                 value={sliderValue}
-                onChange={(e) => setSliderValue(parseInt(e.target.value, 10))}
+                onChange={(e) => setSliderValue(parseInt(e.target.value))}
                 className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                 style={{
                   background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${sliderValue}%, #E1E4EE ${sliderValue}%, #E1E4EE 100%)`,
@@ -483,10 +510,7 @@ export default function AvatarUpload({
                 onClick={closeCropper}
                 disabled={uploading}
                 className="flex-1 py-2.5 rounded-xl font-medium transition-colors"
-                style={{
-                  border: "1px solid #E1E4EE",
-                  color: "#4B5161",
-                }}
+                style={{ border: "1px solid #E1E4EE", color: "#4B5161" }}
               >
                 Cancel
               </button>
