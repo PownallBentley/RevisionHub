@@ -13,7 +13,7 @@ import { supabase } from "../../lib/supabase";
 
 interface AvatarUploadProps {
   currentAvatarUrl: string | null;
-  userId: string; // parent: auth uid, child: child.id
+  userId: string; // parent: auth user id, child: child id
   userType: "parent" | "child";
   userName: string;
   onAvatarChange: (newUrl: string | null) => void;
@@ -21,8 +21,17 @@ interface AvatarUploadProps {
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png"];
-const CROP_SIZE = 200; // Output size in pixels
-const PREVIEW_SIZE = 200; // Preview circle size
+const CROP_SIZE = 200; // output image size
+const PREVIEW_SIZE = 200; // crop preview circle size
+
+function getStoragePathFromPublicUrl(publicUrl: string): string | null {
+  // Supabase public URL usually looks like:
+  // https://<project>.supabase.co/storage/v1/object/public/avatars/<path>
+  const marker = "/storage/v1/object/public/avatars/";
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return publicUrl.slice(idx + marker.length);
+}
 
 export default function AvatarUpload({
   currentAvatarUrl,
@@ -35,28 +44,19 @@ export default function AvatarUpload({
   const [error, setError] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
 
-  // Image state for cropping
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [sliderValue, setSliderValue] = useState(50); // 0-100 slider
+  const [sliderValue, setSliderValue] = useState(50);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
 
-  // Zoom bounds calculated from image size
   const [minZoom, setMinZoom] = useState(0.1);
   const [fitZoom, setFitZoom] = useState(1);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Folder rules (IMPORTANT for Storage policies)
-  // parent -> parents/<auth.uid()>/*
-  // child  -> children/<child.id>/*
-  const folderBase =
-    userType === "parent" ? `parents/${userId}` : `children/${userId}`;
-
-  // Generate initials for fallback avatar
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -64,7 +64,7 @@ export default function AvatarUpload({
     .toUpperCase()
     .slice(0, 2);
 
-  // Convert slider (0-100) to actual zoom
+  // slider (0..100) -> zoom
   const sliderToZoom = useCallback(
     (slider: number): number => {
       if (slider <= 50) {
@@ -80,54 +80,51 @@ export default function AvatarUpload({
 
   const actualZoom = sliderToZoom(sliderValue);
 
-  const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      setError(null);
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setError(null);
 
-      if (!file) return;
+    if (!file) return;
 
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        setError("Please upload a JPEG or PNG image");
-        return;
-      }
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError("Please upload a JPEG or PNG image");
+      return;
+    }
 
-      if (file.size > MAX_FILE_SIZE) {
-        setError("Image must be less than 2MB");
-        return;
-      }
+    if (file.size > MAX_FILE_SIZE) {
+      setError("Image must be less than 2MB");
+      return;
+    }
 
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const src = ev.target?.result as string;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const src = evt.target?.result as string;
 
-        const img = new Image();
-        img.onload = () => {
-          const natWidth = img.naturalWidth;
-          const natHeight = img.naturalHeight;
+      const img = new Image();
+      img.onload = () => {
+        const natWidth = img.naturalWidth;
+        const natHeight = img.naturalHeight;
 
-          setNaturalSize({ width: natWidth, height: natHeight });
+        setNaturalSize({ width: natWidth, height: natHeight });
 
-          const minDim = Math.min(natWidth, natHeight);
-          const calculatedFitZoom = PREVIEW_SIZE / minDim;
+        const minDim = Math.min(natWidth, natHeight);
+        const calculatedFitZoom = PREVIEW_SIZE / minDim;
 
-          const maxDim = Math.max(natWidth, natHeight);
-          const calculatedMinZoom = PREVIEW_SIZE / maxDim;
+        const maxDim = Math.max(natWidth, natHeight);
+        const calculatedMinZoom = PREVIEW_SIZE / maxDim;
 
-          setFitZoom(calculatedFitZoom);
-          setMinZoom(calculatedMinZoom);
+        setFitZoom(calculatedFitZoom);
+        setMinZoom(calculatedMinZoom);
 
-          setSliderValue(50);
-          setPosition({ x: 0, y: 0 });
-          setImageSrc(src);
-          setShowCropper(true);
-        };
-        img.src = src;
+        setSliderValue(50);
+        setPosition({ x: 0, y: 0 });
+        setImageSrc(src);
+        setShowCropper(true);
       };
-      reader.readAsDataURL(file);
-    },
-    []
-  );
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  }, []);
 
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -227,7 +224,7 @@ export default function AvatarUpload({
         canvas.toBlob(
           (blob) => {
             if (blob) resolve(blob);
-            else reject(new Error("Failed to create blob"));
+            else reject(new Error("Failed to create image blob"));
           },
           "image/jpeg",
           0.9
@@ -238,18 +235,13 @@ export default function AvatarUpload({
     });
   };
 
-  // Helper: extract storage object path from a public URL (best-effort)
-  function tryExtractStoragePath(publicUrl: string): string | null {
-    // your current method:
-    const split = publicUrl.split("/avatars/");
-    if (split.length === 2 && split[1]) return split[1];
-
-    // fallback: handle URLs where bucket name appears differently
-    const alt = publicUrl.split("/storage/v1/object/public/avatars/");
-    if (alt.length === 2 && alt[1]) return alt[1];
-
-    return null;
-  }
+  const closeCropper = () => {
+    setShowCropper(false);
+    setImageSrc(null);
+    setSliderValue(50);
+    setPosition({ x: 0, y: 0 });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleUpload = async () => {
     if (!imageSrc) return;
@@ -260,12 +252,16 @@ export default function AvatarUpload({
     try {
       const croppedBlob = await getCroppedImage();
 
+      // IMPORTANT:
+      // Store in a per-user folder so policies can match reliably.
+      // parent: parents/<authUserId>/<filename>
+      // child:  children/<childId>/<filename>
       const fileName = `${Date.now()}.jpg`;
-      const filePath = `${folderBase}/${fileName}`;
+      const filePath = `${userType}s/${userId}/${fileName}`;
 
-      // Delete old avatar if we can resolve its object path
+      // Remove old avatar from storage (best effort)
       if (currentAvatarUrl) {
-        const oldPath = tryExtractStoragePath(currentAvatarUrl);
+        const oldPath = getStoragePathFromPublicUrl(currentAvatarUrl);
         if (oldPath) {
           await supabase.storage.from("avatars").remove([oldPath]);
         }
@@ -281,10 +277,10 @@ export default function AvatarUpload({
 
       if (uploadError) throw uploadError;
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
 
+      // Update DB pointer (this is separate from Storage policies)
       if (userType === "parent") {
         const { error: updateError } = await supabase
           .from("profiles")
@@ -304,8 +300,8 @@ export default function AvatarUpload({
       onAvatarChange(publicUrl);
       closeCropper();
     } catch (err: any) {
-      console.error("Upload error:", err);
-      setError(err?.message || "Failed to upload avatar");
+      console.error("Avatar upload error:", err);
+      setError(err?.message || "Failed to save photo");
     } finally {
       setUploading(false);
     }
@@ -318,7 +314,7 @@ export default function AvatarUpload({
     setError(null);
 
     try {
-      const oldPath = tryExtractStoragePath(currentAvatarUrl);
+      const oldPath = getStoragePathFromPublicUrl(currentAvatarUrl);
       if (oldPath) {
         await supabase.storage.from("avatars").remove([oldPath]);
       }
@@ -341,19 +337,11 @@ export default function AvatarUpload({
 
       onAvatarChange(null);
     } catch (err: any) {
-      console.error("Remove error:", err);
+      console.error("Avatar remove error:", err);
       setError(err?.message || "Failed to remove avatar");
     } finally {
       setUploading(false);
     }
-  };
-
-  const closeCropper = () => {
-    setShowCropper(false);
-    setImageSrc(null);
-    setSliderValue(50);
-    setPosition({ x: 0, y: 0 });
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const displayWidth = naturalSize.width * actualZoom;
@@ -423,11 +411,7 @@ export default function AvatarUpload({
         )}
       </div>
 
-      {error && (
-        <p className="text-sm mt-2" style={{ color: "#F05151" }}>
-          {error}
-        </p>
-      )}
+      {error && <p className="text-sm mt-2" style={{ color: "#F05151" }}>{error}</p>}
 
       <p className="text-xs mt-1" style={{ color: "#6C7280" }}>
         JPEG or PNG, max 2MB
@@ -481,7 +465,7 @@ export default function AvatarUpload({
                 max="100"
                 step="1"
                 value={sliderValue}
-                onChange={(e) => setSliderValue(parseInt(e.target.value))}
+                onChange={(e) => setSliderValue(parseInt(e.target.value, 10))}
                 className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                 style={{
                   background: `linear-gradient(to right, #5B2CFF 0%, #5B2CFF ${sliderValue}%, #E1E4EE ${sliderValue}%, #E1E4EE 100%)`,
