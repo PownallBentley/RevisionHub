@@ -2,7 +2,7 @@
 // NEW: 7-Step Session Model - January 2026
 // Step 5: Key takeaways consolidation + mnemonic generation
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowRight,
@@ -29,6 +29,7 @@ import {
   faBook,
   faLayerGroup,
   faPenFancy,
+  faTriangleExclamation,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -117,7 +118,7 @@ const MNEMONIC_STYLES: Array<{
     description: "Street anthem style beats",
     icon: faMicrophone,
     gradient: "from-purple-500 to-pink-500",
-    styleReference: "street-Anthem",
+    styleReference: "street-anthem",
   },
   {
     id: "pop",
@@ -125,7 +126,7 @@ const MNEMONIC_STYLES: Array<{
     description: "Catchy pop melody",
     icon: faMusic,
     gradient: "from-blue-500 to-cyan-500",
-    styleReference: "opoline",
+    styleReference: "upbeat-pop",
   },
   {
     id: "rock",
@@ -133,9 +134,43 @@ const MNEMONIC_STYLES: Array<{
     description: "Energetic rock vibes",
     icon: faGuitar,
     gradient: "from-orange-500 to-red-500",
-    styleReference: "youth",
+    styleReference: "indie-rock",
   },
 ];
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function formatTime(seconds: number | null | undefined) {
+  if (!seconds || Number.isNaN(seconds) || !Number.isFinite(seconds)) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * If your n8n returns:
+ *  - a full URL (https://...) => we use it directly
+ *  - a storage path (e.g. "mnemonics/abc123.mp3" or "children/<id>-....mp3")
+ *    => we try to build a public Supabase URL
+ *
+ * If your bucket is PRIVATE, you must return a SIGNED URL from n8n instead.
+ */
+function resolveAudioUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!supabaseUrl) return raw; // best effort fallback
+
+  // 👇 CHANGE THIS if your audio is stored in a different bucket name
+  const AUDIO_BUCKET = "mnemonics";
+
+  // If raw already includes a leading folder (e.g. "children/.."), keep it as-is.
+  const path = raw.replace(/^\/+/, "");
+  return `${supabaseUrl}/storage/v1/object/public/${AUDIO_BUCKET}/${path}`;
+}
 
 // =============================================================================
 // Sub-components
@@ -208,35 +243,107 @@ function MnemonicStyleSelector({
 function MnemonicPlayer({
   mnemonic,
   onFavourite,
-  onDownload,
 }: {
   mnemonic: MnemonicData;
   onFavourite?: () => void;
-  onDownload?: () => void;
 }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState<number | null>(mnemonic.durationSeconds ?? null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [isMetadataReady, setIsMetadataReady] = useState(false);
 
-  const styleConfig = MNEMONIC_STYLES.find((s) => s.id === mnemonic.style);
+  const styleConfig = useMemo(
+    () => MNEMONIC_STYLES.find((s) => s.id === mnemonic.style),
+    [mnemonic.style]
+  );
 
-  function togglePlay() {
-    setIsPlaying(!isPlaying);
-    // In production, this would control an actual audio element
+  const resolvedAudioUrl = useMemo(() => resolveAudioUrl(mnemonic.audioUrl), [mnemonic.audioUrl]);
+
+  const progressPercent = useMemo(() => {
+    if (!duration || duration <= 0) return 0;
+    return Math.min(100, Math.max(0, (currentTime / duration) * 100));
+  }, [currentTime, duration]);
+
+  useEffect(() => {
+    // If mnemonic changes, reset player state
+    setIsPlaying(false);
+    setDuration(mnemonic.durationSeconds ?? null);
+    setCurrentTime(0);
+    setAudioError(null);
+    setIsMetadataReady(false);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.load();
+    }
+  }, [mnemonic.audioUrl, mnemonic.durationSeconds, mnemonic.style]);
+
+  async function togglePlay() {
+    if (!audioRef.current) return;
+
+    setAudioError(null);
+
+    // If we have no URL, fail fast with a clear UI message
+    if (!resolvedAudioUrl) {
+      setAudioError("No audio URL was provided for this mnemonic.");
+      return;
+    }
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+        return;
+      }
+
+      const playPromise = audioRef.current.play();
+      if (playPromise) await playPromise;
+      setIsPlaying(true);
+    } catch (err) {
+      console.error("[MnemonicPlayer] play() failed:", err);
+      setIsPlaying(false);
+      setAudioError(
+        "Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue."
+      );
+    }
+  }
+
+  async function handleDownload() {
+    if (!resolvedAudioUrl) return;
+
+    try {
+      const res = await fetch(resolvedAudioUrl);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mnemonic-${mnemonic.style}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[MnemonicPlayer] download failed:", err);
+      setAudioError("Couldn’t download the audio file.");
+    }
   }
 
   if (mnemonic.status === "generating") {
     return (
       <div className="p-6 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
         <div className="flex items-center justify-center space-x-4 py-8">
-          <FontAwesomeIcon
-            icon={faSpinner}
-            className="text-primary-600 text-3xl animate-spin"
-          />
+          <FontAwesomeIcon icon={faSpinner} className="text-primary-600 text-3xl animate-spin" />
           <div>
             <p className="font-semibold text-primary-900">Creating your mnemonic...</p>
-            <p className="text-neutral-600 text-sm">
-              Our AI elves are busy writing lyrics and composing audio. This typically takes a couple of minutes
-            </p>
+            <p className="text-neutral-600 text-sm">StudyBuddy is writing lyrics and generating audio</p>
           </div>
         </div>
       </div>
@@ -246,9 +353,7 @@ function MnemonicPlayer({
   if (mnemonic.status === "failed") {
     return (
       <div className="p-6 bg-accent-red/5 rounded-xl border border-accent-red/20">
-        <p className="text-accent-red font-semibold mb-2">
-          Couldn't generate mnemonic
-        </p>
+        <p className="text-accent-red font-semibold mb-2">Couldn't generate mnemonic</p>
         <p className="text-neutral-600 text-sm">
           Something went wrong. Try selecting a different style or continue without.
         </p>
@@ -256,12 +361,33 @@ function MnemonicPlayer({
     );
   }
 
-  if (mnemonic.status !== "ready") {
-    return null;
-  }
+  if (mnemonic.status !== "ready") return null;
 
   return (
     <div className="p-6 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
+      {/* Hidden but real audio element */}
+      <audio
+        ref={audioRef}
+        src={resolvedAudioUrl ?? undefined}
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const d = (e.currentTarget as HTMLAudioElement).duration;
+          if (Number.isFinite(d)) {
+            setDuration(d);
+            setIsMetadataReady(true);
+          }
+        }}
+        onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLAudioElement).currentTime)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onError={() => {
+          setIsPlaying(false);
+          setAudioError("Audio failed to load. Check that the URL is public or signed, and that CORS allows playback.");
+        }}
+      />
+
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
@@ -270,43 +396,37 @@ function MnemonicPlayer({
               styleConfig?.gradient || "from-primary-500 to-primary-600"
             }`}
           >
-            <FontAwesomeIcon
-              icon={styleConfig?.icon || faMusic}
-              className="text-white text-lg"
-            />
+            <FontAwesomeIcon icon={styleConfig?.icon || faMusic} className="text-white text-lg" />
           </div>
           <div>
-            <h3 className="font-bold text-primary-900">
-              Your {styleConfig?.name || "Mnemonic"}
-            </h3>
+            <h3 className="font-bold text-primary-900">Your {styleConfig?.name || "Mnemonic"}</h3>
             <p className="text-neutral-600 text-sm">
-              {mnemonic.durationSeconds
-                ? `${Math.floor(mnemonic.durationSeconds / 60)}:${String(
-                    mnemonic.durationSeconds % 60
-                  ).padStart(2, "0")}`
-                : "Audio ready"}
+              {duration ? formatTime(duration) : isMetadataReady ? "Audio ready" : "Loading audio…"}
             </p>
           </div>
         </div>
+
         <div className="flex items-center space-x-2">
           {onFavourite && (
             <button
               type="button"
               onClick={onFavourite}
               className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition"
+              title="Favourite"
             >
               <FontAwesomeIcon icon={faHeart} className="text-primary-600" />
             </button>
           )}
-          {onDownload && (
-            <button
-              type="button"
-              onClick={onDownload}
-              className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition"
-            >
-              <FontAwesomeIcon icon={faDownload} className="text-primary-600" />
-            </button>
-          )}
+
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={!resolvedAudioUrl}
+            className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition disabled:opacity-50"
+            title="Download"
+          >
+            <FontAwesomeIcon icon={faDownload} className="text-primary-600" />
+          </button>
         </div>
       </div>
 
@@ -317,31 +437,41 @@ function MnemonicPlayer({
             type="button"
             onClick={togglePlay}
             className="w-14 h-14 rounded-full bg-primary-600 flex items-center justify-center hover:bg-primary-700 transition flex-shrink-0"
+            title={isPlaying ? "Pause" : "Play"}
           >
-            <FontAwesomeIcon
-              icon={isPlaying ? faPause : faPlay}
-              className="text-white text-xl"
-            />
+            <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} className="text-white text-xl" />
           </button>
+
           <div className="flex-1">
             <div className="w-full bg-neutral-200 rounded-full h-2 mb-2">
               <div
                 className="bg-primary-600 h-full rounded-full transition-all"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
+
             <div className="flex justify-between text-xs text-neutral-500">
-              <span>0:00</span>
-              <span>
-                {mnemonic.durationSeconds
-                  ? `${Math.floor(mnemonic.durationSeconds / 60)}:${String(
-                      mnemonic.durationSeconds % 60
-                    ).padStart(2, "0")}`
-                  : "--:--"}
-              </span>
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
             </div>
           </div>
         </div>
+
+        {!resolvedAudioUrl && (
+          <div className="mt-3 text-xs text-neutral-600 flex items-start space-x-2">
+            <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5" />
+            <span>
+              No audio URL found. Your n8n workflow needs to store/return a playable URL (public or signed).
+            </span>
+          </div>
+        )}
+
+        {audioError && (
+          <div className="mt-3 text-xs text-accent-red flex items-start space-x-2">
+            <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5" />
+            <span>{audioError}</span>
+          </div>
+        )}
       </div>
 
       {/* Lyrics */}
@@ -350,9 +480,7 @@ function MnemonicPlayer({
           <FontAwesomeIcon icon={faCompactDisc} className="text-primary-600" />
           <span>Lyrics</span>
         </h4>
-        <p className="text-neutral-700 whitespace-pre-line text-sm leading-relaxed">
-          {mnemonic.lyrics}
-        </p>
+        <p className="text-neutral-700 whitespace-pre-line text-sm leading-relaxed">{mnemonic.lyrics}</p>
       </div>
     </div>
   );
@@ -378,9 +506,7 @@ export default function SummaryStep({
   const existingMnemonic = summary.mnemonic ?? null;
 
   // State
-  const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(
-    summary.selectedStyle ?? null
-  );
+  const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(summary.selectedStyle ?? null);
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(existingMnemonic);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -389,7 +515,6 @@ export default function SummaryStep({
   const subjectIcon = getIconFromName(overview.subject_icon);
   const subjectColor = overview.subject_color || "#5B2CFF";
 
-  // Handlers
   function handleSelectStyle(style: MnemonicStyle) {
     setSelectedStyle(style);
   }
@@ -411,6 +536,7 @@ export default function SummaryStep({
       if (onRequestMnemonic) {
         const result = await onRequestMnemonic(selectedStyle);
         setMnemonic(result);
+
         await onPatch({
           summary: {
             ...summary,
@@ -420,7 +546,7 @@ export default function SummaryStep({
         });
       } else {
         // Mock for development
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 1500));
         const mockMnemonic: MnemonicData = {
           style: selectedStyle,
           styleReference: MNEMONIC_STYLES.find((s) => s.id === selectedStyle)?.styleReference || "",
@@ -430,6 +556,7 @@ export default function SummaryStep({
           status: "ready",
         };
         setMnemonic(mockMnemonic);
+
         await onPatch({
           summary: {
             ...summary,
@@ -454,7 +581,6 @@ export default function SummaryStep({
   }
 
   async function handleContinue() {
-    // Save current state
     await onPatch({
       summary: {
         ...summary,
@@ -466,7 +592,6 @@ export default function SummaryStep({
     await onNext();
   }
 
-  // Default takeaways if none provided
   const displayTakeaways =
     keyTakeaways.length > 0
       ? keyTakeaways
@@ -474,22 +599,16 @@ export default function SummaryStep({
           {
             id: "1",
             title: "Key concept from this topic",
-            description:
-              "The main ideas you've learned will appear here after completing the session.",
+            description: "The main ideas you've learned will appear here after completing the session.",
           },
         ];
 
   return (
     <div className="space-y-8">
-      {/* ================================================================== */}
-      {/* Session Header Section */}
-      {/* ================================================================== */}
+      {/* Header */}
       <section className="mb-8">
         <div className="flex items-center space-x-3 mb-4">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center"
-            style={{ backgroundColor: subjectColor }}
-          >
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: subjectColor }}>
             <FontAwesomeIcon icon={subjectIcon} className="text-white text-xl" />
           </div>
           <div>
@@ -500,16 +619,11 @@ export default function SummaryStep({
           </div>
         </div>
         <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-primary-600 h-full rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
+          <div className="bg-primary-600 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* Key Takeaways Section */}
-      {/* ================================================================== */}
+      {/* Key Takeaways */}
       <section className="mb-8">
         <div className="bg-white rounded-2xl shadow-card p-6">
           <div className="flex items-center space-x-3 mb-6">
@@ -527,9 +641,7 @@ export default function SummaryStep({
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* Memory Tools / Mnemonic Section */}
-      {/* ================================================================== */}
+      {/* Memory Tools */}
       <section className="mb-8">
         <div className="bg-white rounded-2xl shadow-card p-6">
           <div className="flex items-center space-x-3 mb-6">
@@ -538,13 +650,10 @@ export default function SummaryStep({
             </div>
             <div>
               <h2 className="text-2xl font-bold text-primary-900">Memory Tools</h2>
-              <p className="text-neutral-500 text-sm">
-                Create a musical mnemonic to help remember key concepts
-              </p>
+              <p className="text-neutral-500 text-sm">Create a musical mnemonic to help remember key concepts</p>
             </div>
           </div>
 
-          {/* Style Selector or Generated Mnemonic */}
           {!mnemonic || mnemonic.status === "failed" ? (
             <div className="space-y-6">
               <div className="p-5 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
@@ -553,21 +662,14 @@ export default function SummaryStep({
                     <FontAwesomeIcon icon={faRobot} className="text-white" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-primary-900 mb-1">
-                      StudyBuddy's Musical Mnemonics
-                    </h3>
+                    <h3 className="font-bold text-primary-900 mb-1">StudyBuddy's Musical Mnemonics</h3>
                     <p className="text-neutral-600 text-sm">
-                      Choose a music style and I'll create a catchy song to help you remember
-                      the key points from this topic!
+                      Choose a music style and I’ll create a song to help you remember the key points from this topic.
                     </p>
                   </div>
                 </div>
 
-                <MnemonicStyleSelector
-                  selectedStyle={selectedStyle}
-                  onSelect={handleSelectStyle}
-                  disabled={isGenerating}
-                />
+                <MnemonicStyleSelector selectedStyle={selectedStyle} onSelect={handleSelectStyle} disabled={isGenerating} />
 
                 {selectedStyle && (
                   <div className="mt-6 flex justify-center">
@@ -584,7 +686,6 @@ export default function SummaryStep({
                 )}
               </div>
 
-              {/* Alternative options */}
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
@@ -594,9 +695,7 @@ export default function SummaryStep({
                     <FontAwesomeIcon icon={faLayerGroup} className="text-primary-600 text-xl" />
                   </div>
                   <span className="font-semibold text-neutral-700 mb-1">Save to Flashcards</span>
-                  <span className="text-neutral-500 text-xs text-center">
-                    Add these key points to your revision deck
-                  </span>
+                  <span className="text-neutral-500 text-xs text-center">Add these key points to your revision deck</span>
                 </button>
 
                 <button
@@ -607,21 +706,23 @@ export default function SummaryStep({
                     <FontAwesomeIcon icon={faPenFancy} className="text-primary-600 text-xl" />
                   </div>
                   <span className="font-semibold text-neutral-700 mb-1">Create Your Own</span>
-                  <span className="text-neutral-500 text-xs text-center">
-                    Make a personal mnemonic that works for you
-                  </span>
+                  <span className="text-neutral-500 text-xs text-center">Make a personal mnemonic that works for you</span>
                 </button>
               </div>
             </div>
           ) : (
-            <MnemonicPlayer mnemonic={mnemonic} />
+            <MnemonicPlayer
+              mnemonic={mnemonic}
+              onFavourite={() => {
+                // optional future feature
+                console.log("[SummaryStep] Favourite clicked");
+              }}
+            />
           )}
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* StudyBuddy Encouragement Section */}
-      {/* ================================================================== */}
+      {/* Encouragement */}
       <section className="mb-8">
         <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-card p-6 text-white">
           <div className="flex items-start space-x-4">
@@ -631,32 +732,25 @@ export default function SummaryStep({
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3">Great progress!</h3>
               <p className="text-primary-50 mb-4">
-                You've covered the key concepts for {overview.topic_name}. Take a moment to
-                review the takeaways above — they'll be important for your exams.
+                You've covered the key concepts for {overview.topic_name}. Take a moment to review the takeaways above — they’ll
+                matter later.
               </p>
               <p className="text-primary-100 text-sm flex items-center space-x-2">
                 <FontAwesomeIcon icon={faLightbulb} />
-                <span>
-                  Tip: Try explaining these concepts to someone else — it's one of the best
-                  ways to reinforce your learning!
-                </span>
+                <span>Tip: Explain it to someone else — it’s one of the fastest ways to lock it in.</span>
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* Continue Button */}
-      {/* ================================================================== */}
+      {/* Continue */}
       <section className="mb-8">
         <div className="bg-white rounded-2xl shadow-card p-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-primary-900 mb-1">Ready to continue?</h3>
-              <p className="text-neutral-600 text-sm">
-                Next: Quick reflection on what you've learned
-              </p>
+              <p className="text-neutral-600 text-sm">Next: Quick reflection on what you've learned</p>
             </div>
             <button
               type="button"
@@ -686,8 +780,6 @@ ${topicName}, we never stop
 Verse 1:
 Atoms in the nucleus, protons and neutrons tight
 Electrons spinning round, keeping it right
-Atomic number tells you what element you got
-The periodic table, yeah we learned a lot
 
 Chorus:
 Learn it, know it, ace that test
@@ -695,29 +787,20 @@ ReviseRight helping us be the best!`,
 
     pop: `🎵 ${topicName} 🎵
 
-Every atom has a story to tell
-Protons, neutrons, electrons as well
-The periodic table shows the way
-Learning chemistry every day
-
+Protons, neutrons, electrons too
+Keep the facts and you'll be through
 Remember the numbers, remember the signs
-Understanding science, it all aligns
-We've got this, we know the facts
-Nothing's gonna hold us back!`,
+You've got this — you’ll be fine!`,
 
     rock: `⚡ ${topicName} ⚡
 
 [Verse]
-Atoms colliding, electrons are free
-Understanding chemistry, that's the key
-Mass number minus atomic gives you neutrons
-Learning these facts, we're the new icons
+Facts are flying, keep it tight
+Learn the rules, you’ll get it right
 
 [Chorus]
 We rock this knowledge, we own this stage
-Writing our future on every page
-Science is power, knowledge is might
-With ReviseRight, our future's bright!`,
+Writing our future on every page`,
   };
 
   return mockLyrics[style] || mockLyrics["pop"];
