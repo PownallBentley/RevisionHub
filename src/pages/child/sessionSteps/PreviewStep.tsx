@@ -256,4 +256,88 @@ export default function PreviewStep({
             <div className="flex items-center space-x-2 bg-primary-50 px-4 py-2 rounded-full">
               <FontAwesomeIcon icon={faClock} className="text-primary-600" />
               <span className="text-primary-900 font-semibold text-sm">
-                ~{session
+                ~{sessionMinutes} minutes
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2 bg-neutral-100 px-4 py-2 rounded-full">
+              <FontAwesomeIcon icon={faListCheck} className="text-neutral-600" />
+              <span className="text-neutral-700 font-semibold text-sm">
+                {overview.total_steps} steps
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* Pre-Confidence Section */}
+      {/* ================================================================== */}
+      <section className="mb-6">
+        <div className="bg-white rounded-2xl shadow-card p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+              <FontAwesomeIcon icon={faGaugeHigh} className="text-primary-600 text-xl" />
+            </div>
+
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-primary-900">
+                How confident are you with this topic?
+              </h2>
+              <p className="text-neutral-500 text-sm">
+                This helps us tailor the session to your needs
+              </p>
+            </div>
+          </div>
+
+          <ConfidenceSelector
+            selected={preConfidence}
+            onSelect={handleConfidenceSelect}
+            disabled={saving}
+          />
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* Start Button Section */}
+      {/* ================================================================== */}
+      <section className="mb-6">
+        <div className="bg-white rounded-2xl shadow-card p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-primary-900 mb-1">Ready to begin?</h3>
+              <p className="text-neutral-600 text-sm">
+                {canStart
+                  ? "Let's start your revision session"
+                  : "Select your confidence level to continue"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={!canStart || saving}
+              className="flex items-center space-x-2 px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span>{saving ? "Starting..." : "Start Session"}</span>
+              <FontAwesomeIcon icon={faArrowRight} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* Exit Option */}
+      {/* ================================================================== */}
+      <section className="text-center">
+        <button
+          type="button"
+          onClick={onExit}
+          className="text-neutral-500 hover:text-neutral-700 text-sm font-medium transition"
+        >
+          Not ready? Go back to dashboard
+        </button>
+      </section>
+    </div>
+  );
+}
