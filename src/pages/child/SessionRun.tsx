@@ -1,6 +1,7 @@
 // src/pages/child/SessionRun.tsx
 // UPDATED: 6-Step Session Model - January 2026
 // Main runner that orchestrates all session steps
+// NOW INCLUDES: Actual audio upload to Supabase Storage
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -42,6 +43,8 @@ import {
   transformToMnemonicData,
   MnemonicStyle,
 } from "../../services/mnemonics/mnemonicApi";
+
+import { supabase } from "../../lib/supabase";
 
 // =============================================================================
 // Types
@@ -401,6 +404,41 @@ export default function SessionRun() {
     }
   }
 
+  // ===========================================================================
+  // Audio Upload Handler
+  // ===========================================================================
+  async function handleUploadAudio(blob: Blob): Promise<string> {
+    if (!sessionData || !revisionSessionId) {
+      throw new Error("Session data not available for audio upload");
+    }
+
+    const timestamp = Date.now();
+    const fileName = `${sessionData.child_id}/${revisionSessionId}_${timestamp}.webm`;
+
+    console.log("[SessionRun] Uploading audio:", fileName, blob.size, "bytes");
+
+    // Upload to Supabase Storage
+    const { data, error: uploadError } = await supabase.storage
+      .from("voice-notes")
+      .upload(fileName, blob, {
+        contentType: "audio/webm",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("[SessionRun] Audio upload failed:", uploadError);
+      throw uploadError;
+    }
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from("voice-notes")
+      .getPublicUrl(data.path);
+
+    console.log("[SessionRun] Audio uploaded successfully:", urlData.publicUrl);
+    return urlData.publicUrl;
+  }
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadSession} />;
   if (!sessionData) return <ErrorState message="Session data not found" onRetry={loadSession} />;
@@ -422,7 +460,7 @@ export default function SessionRun() {
     total_steps: STEP_ORDER.length,
     child_name: sessionData.child_name,
 
-    // NEW: required for favourites/plays/requests
+    // Required for voice note tracking and other features
     child_id: sessionData.child_id,
     revision_session_id: revisionSessionId ?? sessionData.revision_session_id,
   };
@@ -493,10 +531,7 @@ export default function SessionRun() {
             {...commonProps}
             onFinish={handleFinish}
             onStartNextSession={() => navigate("/child/today")}
-            onUploadAudio={async (blob) => {
-              console.log("[SessionRun] Would upload audio blob:", blob.size, "bytes");
-              return "https://placeholder-audio-url.com/note.webm";
-            }}
+            onUploadAudio={handleUploadAudio}
           />
         );
 
