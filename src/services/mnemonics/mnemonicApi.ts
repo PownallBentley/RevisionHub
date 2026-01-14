@@ -1,9 +1,11 @@
 // src/services/mnemonics/mnemonicApi.ts
 // =============================================================================
-// Mnemonic Generation API Service
+// Mnemonic Generation API Service (RPC-first)
+// - Client does NOT write to mnemonic_requests or mnemonics directly
+// - We use RPCs to create/complete/fail requests
 // =============================================================================
 
-import { supabase } from "../../lib/supabase"; // adjust if needed
+import { supabase } from "../../lib/supabase";
 
 export type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
@@ -22,7 +24,7 @@ export type MnemonicResponse = {
   status: "ready" | "processing" | "failed";
   cached?: boolean;
   mnemonic?: {
-    id: string;
+    id: string; // mnemonic UUID
     topic: string;
     content_summary: string;
     lyrics: string;
@@ -30,7 +32,7 @@ export type MnemonicResponse = {
     style: string;
     duration_seconds?: number;
   };
-  mnemonic_id?: string;
+  mnemonic_id?: string; // fallback id
   message?: string;
   error?: string;
 };
@@ -100,45 +102,42 @@ export async function requestMnemonic(
 }
 
 /**
- * Create + update mnemonic_requests around the n8n call.
+ * Create + update mnemonic_requests around the n8n call (RPC-first).
+ * Assumes caller is a logged-in child user.
  */
 export async function requestMnemonicTracked(args: {
-  childId: string;
   originalPrompt: string;
   subjectName: string;
+  level?: string; // default "gcse"
+  examBoard?: string | null;
+
   topicName: string;
+  topicId?: string | null; // optional if you have it in runner
   style: MnemonicStyle;
   callbackUrl?: string;
 
-  // Optional enrichment (keep null unless you have it)
+  // Optional enrichment
   parsedTopic?: string | null;
   parsedStyle?: string | null;
   parsedType?: string | null;
-  subject?: string | null;
-  level?: string | null;
-  examBoard?: string | null;
 }): Promise<{ response: MnemonicResponse; requestId: string }> {
-  const { data: created, error: createErr } = await supabase
-    .from("mnemonic_requests")
-    .insert({
-      child_id: args.childId,
-      original_prompt: args.originalPrompt,
-      parsed_topic: args.parsedTopic ?? null,
-      parsed_style: args.parsedStyle ?? null,
-      parsed_type: args.parsedType ?? null,
-      subject: args.subject ?? args.subjectName ?? null,
-      level: args.level ?? "gcse",
-      exam_board: args.examBoard ?? null,
-      status: "processing",
-      requested_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const level = (args.level ?? "gcse").toLowerCase();
+
+  // 1) Create request row via RPC (child_id derived from auth)
+  const { data: requestId, error: createErr } = await supabase.rpc("rpc_create_mnemonic_request", {
+    p_original_prompt: args.originalPrompt,
+    p_subject: args.subjectName,
+    p_level: level,
+    p_exam_board: args.examBoard ?? null,
+    p_parsed_topic: args.parsedTopic ?? null,
+    p_parsed_style: args.parsedStyle ?? null,
+    p_parsed_type: args.parsedType ?? null,
+  });
 
   if (createErr) throw createErr;
+  if (!requestId) throw new Error("rpc_create_mnemonic_request returned no request id");
 
-  const requestId = created.id as string;
-
+  // 2) Call n8n webhook (transport)
   try {
     const response = await requestMnemonic(
       args.subjectName,
@@ -149,63 +148,63 @@ export async function requestMnemonicTracked(args: {
 
     const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
 
+    // 3) If failed, mark failed via RPC
     if (!response.success || response.status === "failed") {
-      const { error } = await supabase
-        .from("mnemonic_requests")
-        .update({
-          status: "failed",
-          mnemonic_id: mnemonicId,
-          was_cached: response.cached ?? null,
-          error_message: response.error ?? "Mnemonic generation failed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", requestId);
-
+      const { error } = await supabase.rpc("rpc_mark_mnemonic_request_failed", {
+        p_request_id: requestId,
+        p_mnemonic_id: mnemonicId,
+        p_was_cached: response.cached ?? null,
+        p_error_message: response.error ?? "Mnemonic generation failed",
+      });
       if (error) throw error;
+
       return { response, requestId };
     }
 
+    // 4) If processing, we leave request as processing (no poll here)
     if (response.status === "processing") {
-      const { error } = await supabase
-        .from("mnemonic_requests")
-        .update({
-          status: "processing",
-          mnemonic_id: mnemonicId,
-          was_cached: response.cached ?? null,
-        })
-        .eq("id", requestId);
-
-      if (error) throw error;
       return { response, requestId };
     }
 
-    // ready
-    const { error } = await supabase
-      .from("mnemonic_requests")
-      .update({
-        status: "completed",
-        mnemonic_id: mnemonicId,
-        was_cached: response.cached ?? null,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", requestId);
+    // 5) Ready: upsert mnemonics + mark request completed via RPC
+    const { error: completeErr } = await supabase.rpc("rpc_mark_mnemonic_request_completed", {
+      p_request_id: requestId,
+      p_mnemonic_id: mnemonicId,
 
-    if (error) throw error;
+      p_was_cached: response.cached ?? null,
+
+      p_subject: args.subjectName,
+      p_level: level,
+      p_exam_board: args.examBoard ?? null,
+
+      p_topic_id: args.topicId ?? null,
+      p_topic_name: args.topicName,
+
+      p_style: response.mnemonic?.style ?? args.style,
+      p_lyrics: response.mnemonic?.lyrics ?? null,
+      p_audio_url: response.mnemonic?.audio_url ?? null,
+      p_duration_seconds: response.mnemonic?.duration_seconds ?? null,
+    });
+
+    if (completeErr) throw completeErr;
+
     return { response, requestId };
   } catch (e: any) {
-    const { error } = await supabase
-      .from("mnemonic_requests")
-      .update({
-        status: "failed",
-        error_message: e?.message ? String(e.message) : "Request failed",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", requestId);
+    const { error } = await supabase.rpc("rpc_mark_mnemonic_request_failed", {
+      p_request_id: requestId,
+      p_mnemonic_id: null,
+      p_was_cached: null,
+      p_error_message: e?.message ? String(e.message) : "Request failed",
+    });
 
     if (error) throw error;
 
     return {
-      response: { success: false, status: "failed", error: e?.message ? String(e.message) : "Request failed" },
+      response: {
+        success: false,
+        status: "failed",
+        error: e?.message ? String(e.message) : "Request failed",
+      },
       requestId,
     };
   }
