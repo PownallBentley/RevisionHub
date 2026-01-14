@@ -1,10 +1,10 @@
 // src/pages/child/sessionSteps/SummaryStep.tsx
 // Step 5: Key takeaways + mnemonic
 //
-// CORRECTED (RPC-first):
+// RPC-first:
 // - No direct table writes from the client
 // - No reliance on passing child_id for favourites/plays (RPC derives child from auth.uid())
-// - Favourite toggle + play tracking calls are routed through mnemonicActivityService (RPC-only)
+// - Favourite toggle + play tracking calls are routed through mnemonicActivityService (RPC)
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -57,7 +57,7 @@ type KeyTakeaway = {
 type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
 type MnemonicData = {
-  mnemonicId: string | null; // IMPORTANT: must be the DB mnemonic UUID
+  mnemonicId: string | null; // DB mnemonic UUID
   style: MnemonicStyle;
   styleReference: string;
   lyrics: string;
@@ -78,8 +78,8 @@ type SummaryStepProps = {
     step_index: number;
     total_steps: number;
 
-    // From SessionRun (child_id kept for compatibility, but NOT used for DB writes here)
-    child_id: string;
+    // From SessionRun
+    child_id: string; // kept for compatibility, not used for DB writes here
     revision_session_id: string;
   };
   payload: {
@@ -311,7 +311,6 @@ function MnemonicPlayer({
     setAudioError(null);
     setIsMetadataReady(false);
 
-    // if a mnemonic changes while we had an open play, close it best-effort
     if (playId) {
       void endMnemonicPlay({
         playId,
@@ -319,6 +318,7 @@ function MnemonicPlayer({
         completed: false,
       }).catch((e) => console.error("[MnemonicPlayer] end play (reset) failed:", e));
     }
+
     setPlayId(null);
     playStartMsRef.current = null;
 
@@ -330,17 +330,17 @@ function MnemonicPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mnemonic.audioUrl, mnemonic.durationSeconds, mnemonic.style]);
 
-  // Ensure we close any active play on unmount
+  // Close any active play on unmount
   useEffect(() => {
     return () => {
       if (!playId) return;
+
       const startMs = playStartMsRef.current;
       const elapsedSeconds = startMs ? (Date.now() - startMs) / 1000 : currentTime;
 
       void endMnemonicPlay({
         playId,
-        playDurationSeconds:
-          safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
+        playDurationSeconds: safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
         completed: false,
       }).catch((e) => console.error("[MnemonicPlayer] end play (unmount) failed:", e));
     };
@@ -354,8 +354,7 @@ function MnemonicPlayer({
     setFavBusy(true);
     const next = !isFav;
 
-    // optimistic UI
-    setIsFav(next);
+    setIsFav(next); // optimistic
 
     try {
       await setMnemonicFavourite({
@@ -375,10 +374,9 @@ function MnemonicPlayer({
     if (playId) return;
 
     try {
-      // ✅ RPC service expects revisionSessionId (not sessionId)
       const id = await startMnemonicPlay({
         mnemonicId: mnemonic.mnemonicId,
-        revisionSessionId: sessionId,
+        sessionId,
         source: "summary",
       });
       setPlayId(id);
@@ -397,8 +395,7 @@ function MnemonicPlayer({
     try {
       await endMnemonicPlay({
         playId,
-        playDurationSeconds:
-          safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
+        playDurationSeconds: safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
         completed,
       });
     } catch (e) {
@@ -673,11 +670,14 @@ export default function SummaryStep({
             mnemonic: result,
           },
         });
-      } else {
-        // Dev fallback (optional)
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return;
+      }
+
+      // Dev-only fallback
+      if (import.meta.env.DEV) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
         const mockMnemonic: MnemonicData = {
-          mnemonicId: "mock",
+          mnemonicId: "00000000-0000-0000-0000-000000000000",
           style: selectedStyle,
           styleReference: MNEMONIC_STYLES.find((s) => s.id === selectedStyle)?.styleReference || "",
           lyrics: generateMockLyrics(overview.topic_name, selectedStyle),
@@ -685,6 +685,7 @@ export default function SummaryStep({
           durationSeconds: 45,
           status: "ready",
         };
+
         setMnemonic(mockMnemonic);
 
         await onPatch({
@@ -694,7 +695,10 @@ export default function SummaryStep({
             mnemonic: mockMnemonic,
           },
         });
+        return;
       }
+
+      throw new Error("onRequestMnemonic is not configured");
     } catch (error) {
       console.error("[SummaryStep] Mnemonic generation failed:", error);
       setMnemonic({
@@ -857,7 +861,8 @@ export default function SummaryStep({
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3">Great progress!</h3>
               <p className="text-primary-50 mb-4">
-                You've covered the key concepts for {overview.topic_name}. Take a moment to review the takeaways above — they’ll matter later.
+                You've covered the key concepts for {overview.topic_name}. Take a moment to review the takeaways above — they’ll
+                matter later.
               </p>
               <p className="text-primary-100 text-sm flex items-center space-x-2">
                 <FontAwesomeIcon icon={faLightbulb} />
@@ -893,11 +898,8 @@ export default function SummaryStep({
 }
 
 // =============================================================================
-// Mock Lyrics Generator (Development Only)
+// Mock Lyrics Generator (DEV ONLY)
 // =============================================================================
-// Do we still need this?
-// - If onRequestMnemonic is ALWAYS provided in production, you can delete this whole section.
-// - If you want a safe local/dev fallback when n8n is down, keep it.
 
 function generateMockLyrics(topicName: string, style: MnemonicStyle): string {
   const mockLyrics: Record<MnemonicStyle, string> = {
@@ -911,14 +913,12 @@ Electrons spinning round, keeping it right
 Chorus:
 Learn it, know it, ace that test
 ReviseRight helping us be the best!`,
-
     pop: `🎵 ${topicName} 🎵
 
 Protons, neutrons, electrons too
 Keep the facts and you'll be through
 Remember the numbers, remember the signs
 You've got this — you’ll be fine!`,
-
     rock: `⚡ ${topicName} ⚡
 
 [Verse]
