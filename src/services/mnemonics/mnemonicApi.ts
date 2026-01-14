@@ -3,7 +3,7 @@
 // Mnemonic Generation API Service
 // =============================================================================
 
-import { supabase } from "../../lib/supabaseClient"; // adjust if needed
+import { supabase } from "../../lib/supabase"; // adjust if needed
 
 export type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
