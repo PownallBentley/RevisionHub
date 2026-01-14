@@ -1,5 +1,6 @@
 // src/components/layout/AppHeader.tsx
-// FIXED: Never shows "User" - handles loading state properly
+// Shows My Account for both Parent and Student
+// Shows Settings for Parent only
 
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -19,11 +20,12 @@ function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  return (
+    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
 }
 
 function getDisplayName(profile: any, isChild: boolean): string | null {
-  // Return null if profile not loaded yet - caller should show loading state
   if (!profile) return null;
 
   if (isChild) {
@@ -33,25 +35,25 @@ function getDisplayName(profile: any, isChild: boolean): string | null {
   if (profile.full_name) {
     return profile.full_name.split(" ")[0];
   }
+
   if (profile.email) {
     return profile.email.split("@")[0];
   }
-  
-  // Last resort - use email prefix or "Parent"
+
   return "Parent";
 }
 
 export default function AppHeader() {
   const navigate = useNavigate();
   const { user, profile, loading, isChild, isParent, signOut } = useAuth();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isLoggedIn = !!user;
   const displayName = getDisplayName(profile, isChild);
   const initials = displayName ? getInitials(displayName) : "?";
-  
-  // Profile is still loading if we have a user but no profile yet
+
   const isProfileLoading = isLoggedIn && !profile;
 
   useEffect(() => {
@@ -69,18 +71,14 @@ export default function AppHeader() {
 
   function handleSignOut() {
     setDropdownOpen(false);
-    
-    // Navigate IMMEDIATELY - don't wait for signOut
     navigate("/", { replace: true });
-    
-    // Then trigger signOut (which clears state synchronously, 
-    // and tells Supabase in background)
     signOut();
   }
 
   const headerBg = isChild
     ? "bg-indigo-50 border-indigo-100"
     : "bg-white border-gray-100";
+
   const avatarBg = isChild
     ? "bg-gradient-to-br from-indigo-400 to-purple-500"
     : "bg-brand-purple";
@@ -88,9 +86,8 @@ export default function AppHeader() {
   return (
     <header className={`${headerBg} border-b sticky top-0 z-50`}>
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Left side: Logo + Parent Nav */}
+        {/* Left side */}
         <div className="flex items-center gap-8">
-          {/* Logo */}
           <Link
             to="/"
             className="flex items-center gap-3 text-gray-900 hover:opacity-80 transition-opacity"
@@ -112,18 +109,18 @@ export default function AppHeader() {
             </div>
           </Link>
 
-          {/* Parent Navigation */}
           {isLoggedIn && isParent && <ParentNav />}
         </div>
 
         {/* Right side */}
         {loading ? (
-          // Initial auth loading - show spinner
           <div className="w-9 h-9 flex items-center justify-center">
-            <FontAwesomeIcon icon={faSpinner} className="text-gray-400 animate-spin" />
+            <FontAwesomeIcon
+              icon={faSpinner}
+              className="text-gray-400 animate-spin"
+            />
           </div>
         ) : !isLoggedIn ? (
-          // Not logged in - show login/signup buttons
           <div className="flex items-center gap-2">
             <Link
               to="/login"
@@ -139,16 +136,17 @@ export default function AppHeader() {
             </Link>
           </div>
         ) : isProfileLoading ? (
-          // Logged in but profile loading - show avatar placeholder with spinner
           <div className="flex items-center gap-3 px-3 py-2">
             <div
               className={`w-9 h-9 ${avatarBg} rounded-full flex items-center justify-center`}
             >
-              <FontAwesomeIcon icon={faSpinner} className="text-white text-sm animate-spin" />
+              <FontAwesomeIcon
+                icon={faSpinner}
+                className="text-white text-sm animate-spin"
+              />
             </div>
           </div>
         ) : (
-          // Fully loaded - show user menu
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
@@ -173,39 +171,42 @@ export default function AppHeader() {
 
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                {!isChild && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        navigate("/settings");
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <FontAwesomeIcon
-                        icon={faCog}
-                        className="text-gray-400 w-4"
-                      />
-                      Settings
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        navigate("/account");
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <FontAwesomeIcon
-                        icon={faUser}
-                        className="text-gray-400 w-4"
-                      />
-                      My Account
-                    </button>
-                    <div className="border-t border-gray-100 my-1" />
-                  </>
+                {/* My Account - parent & student */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    navigate("/account");
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                >
+                  <FontAwesomeIcon
+                    icon={faUser}
+                    className="text-gray-400 w-4"
+                  />
+                  My Account
+                </button>
+
+                {/* Settings - parent only */}
+                {isParent && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      navigate("/settings");
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <FontAwesomeIcon
+                      icon={faCog}
+                      className="text-gray-400 w-4"
+                    />
+                    Settings
+                  </button>
                 )}
+
+                <div className="border-t border-gray-100 my-1" />
+
                 <button
                   type="button"
                   onClick={handleSignOut}
