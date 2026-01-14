@@ -1,5 +1,10 @@
 // src/pages/child/sessionSteps/SummaryStep.tsx
 // Step 5: Key takeaways + mnemonic
+//
+// CORRECTED (RPC-first):
+// - No direct table writes from the client
+// - No reliance on passing child_id for favourites/plays (RPC derives child from auth.uid())
+// - Favourite toggle + play tracking calls are routed through mnemonicActivityService (which must call RPCs)
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -52,7 +57,7 @@ type KeyTakeaway = {
 type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
 type MnemonicData = {
-  mnemonicId: string | null;
+  mnemonicId: string | null; // IMPORTANT: must be the DB mnemonic UUID (or whatever you use as mnemonic_id)
   style: MnemonicStyle;
   styleReference: string;
   lyrics: string;
@@ -73,8 +78,8 @@ type SummaryStepProps = {
     step_index: number;
     total_steps: number;
 
-    // NEW (from SessionRun)
-    child_id: string;
+    // From SessionRun
+    child_id: string; // kept for compatibility with your runner, but NOT used for DB writes here
     revision_session_id: string;
   };
   payload: {
@@ -172,6 +177,13 @@ function resolveAudioUrl(raw: string | null): string | null {
   return `${supabaseUrl}/storage/v1/object/public/${AUDIO_BUCKET}/${path}`;
 }
 
+function safeIntSeconds(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value)) return null;
+  if (value < 0) return 0;
+  return Math.round(value);
+}
+
 // =============================================================================
 // Sub-components
 // =============================================================================
@@ -236,11 +248,9 @@ function MnemonicStyleSelector({
 
 function MnemonicPlayer({
   mnemonic,
-  childId,
   sessionId,
 }: {
   mnemonic: MnemonicData;
-  childId: string;
   sessionId: string;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -257,7 +267,7 @@ function MnemonicPlayer({
 
   // play tracking
   const [playId, setPlayId] = useState<string | null>(null);
-  const playStartTimeRef = useRef<number | null>(null);
+  const playStartMsRef = useRef<number | null>(null);
 
   const styleConfig = useMemo(
     () => MNEMONIC_STYLES.find((s) => s.id === mnemonic.style),
@@ -271,7 +281,7 @@ function MnemonicPlayer({
     return Math.min(100, Math.max(0, (currentTime / duration) * 100));
   }, [currentTime, duration]);
 
-  // Load favourite status once mnemonic is ready + has an id
+  // Load favourite status when ready + id present
   useEffect(() => {
     let cancelled = false;
 
@@ -280,7 +290,8 @@ function MnemonicPlayer({
       if (!mnemonic.mnemonicId) return;
 
       try {
-        const fav = await isMnemonicFavourite({ childId, mnemonicId: mnemonic.mnemonicId });
+        // RPC-first: service derives child_id from auth.uid()
+        const fav = await isMnemonicFavourite({ mnemonicId: mnemonic.mnemonicId });
         if (!cancelled) setIsFav(fav);
       } catch (e) {
         console.error("[MnemonicPlayer] favourite lookup failed:", e);
@@ -291,8 +302,9 @@ function MnemonicPlayer({
     return () => {
       cancelled = true;
     };
-  }, [mnemonic.status, mnemonic.mnemonicId, childId]);
+  }, [mnemonic.status, mnemonic.mnemonicId]);
 
+  // Reset player state when mnemonic changes
   useEffect(() => {
     setIsPlaying(false);
     setDuration(mnemonic.durationSeconds ?? null);
@@ -300,32 +312,61 @@ function MnemonicPlayer({
     setAudioError(null);
     setIsMetadataReady(false);
 
+    // if a mnemonic changes while we had an open play, close it best-effort
+    if (playId) {
+      void endMnemonicPlay({
+        playId,
+        playDurationSeconds: safeIntSeconds(currentTime) ?? 0,
+        completed: false,
+      }).catch((e) => console.error("[MnemonicPlayer] end play (reset) failed:", e));
+    }
     setPlayId(null);
-    playStartTimeRef.current = null;
+    playStartMsRef.current = null;
 
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
       audioRef.current.load();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mnemonic.audioUrl, mnemonic.durationSeconds, mnemonic.style]);
+
+  // Ensure we close any active play on unmount
+  useEffect(() => {
+    return () => {
+      if (!playId) return;
+      const startMs = playStartMsRef.current;
+      const elapsedSeconds =
+        startMs ? (Date.now() - startMs) / 1000 : currentTime;
+
+      void endMnemonicPlay({
+        playId,
+        playDurationSeconds: safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
+        completed: false,
+      }).catch((e) => console.error("[MnemonicPlayer] end play (unmount) failed:", e));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playId]);
 
   async function toggleFavourite() {
     if (!mnemonic.mnemonicId) return;
     if (favBusy) return;
 
     setFavBusy(true);
+    const next = !isFav;
+
+    // optimistic UI
+    setIsFav(next);
+
     try {
-      const next = !isFav;
-      setIsFav(next); // optimistic
+      // RPC-first: service derives child_id from auth.uid()
       await setMnemonicFavourite({
-        childId,
         mnemonicId: mnemonic.mnemonicId,
         makeFavourite: next,
       });
     } catch (e) {
       console.error("[MnemonicPlayer] favourite toggle failed:", e);
-      setIsFav((v) => !v); // revert
+      setIsFav(!next); // revert
     } finally {
       setFavBusy(false);
     }
@@ -336,14 +377,14 @@ function MnemonicPlayer({
     if (playId) return;
 
     try {
+      // RPC-first: service derives child_id from auth.uid()
       const id = await startMnemonicPlay({
-        childId,
         mnemonicId: mnemonic.mnemonicId,
         sessionId,
         source: "summary",
       });
       setPlayId(id);
-      playStartTimeRef.current = Date.now();
+      playStartMsRef.current = Date.now();
     } catch (e) {
       console.error("[MnemonicPlayer] start play tracking failed:", e);
     }
@@ -352,20 +393,21 @@ function MnemonicPlayer({
   async function stopPlayTracking(completed: boolean) {
     if (!playId) return;
 
-    const startMs = playStartTimeRef.current;
-    const elapsedSeconds = startMs ? (Date.now() - startMs) / 1000 : currentTime;
+    const startMs = playStartMsRef.current;
+    const elapsedSeconds =
+      startMs ? (Date.now() - startMs) / 1000 : currentTime;
 
     try {
       await endMnemonicPlay({
         playId,
-        playDurationSeconds: elapsedSeconds,
+        playDurationSeconds: safeIntSeconds(elapsedSeconds) ?? safeIntSeconds(currentTime) ?? 0,
         completed,
       });
     } catch (e) {
       console.error("[MnemonicPlayer] end play tracking failed:", e);
     } finally {
       setPlayId(null);
-      playStartTimeRef.current = null;
+      playStartMsRef.current = null;
     }
   }
 
@@ -397,7 +439,9 @@ function MnemonicPlayer({
       console.error("[MnemonicPlayer] play() failed:", err);
       setIsPlaying(false);
       await stopPlayTracking(false);
-      setAudioError("Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue.");
+      setAudioError(
+        "Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue."
+      );
     }
   }
 
@@ -474,7 +518,9 @@ function MnemonicPlayer({
         onError={async () => {
           setIsPlaying(false);
           await stopPlayTracking(false);
-          setAudioError("Audio failed to load. Check that the URL is public or signed, and that CORS allows playback.");
+          setAudioError(
+            "Audio failed to load. Check that the URL is public or signed, and that CORS allows playback."
+          );
         }}
       />
 
@@ -504,7 +550,10 @@ function MnemonicPlayer({
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition disabled:opacity-50"
             title="Favourite"
           >
-            <FontAwesomeIcon icon={faHeart} className={isFav ? "text-accent-red" : "text-primary-600"} />
+            <FontAwesomeIcon
+              icon={faHeart}
+              className={isFav ? "text-accent-red" : "text-primary-600"}
+            />
           </button>
 
           <button
@@ -549,7 +598,9 @@ function MnemonicPlayer({
         {!resolvedAudioUrl && (
           <div className="mt-3 text-xs text-neutral-600 flex items-start space-x-2">
             <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5" />
-            <span>No audio URL found. Your n8n workflow needs to return a playable URL (public or signed).</span>
+            <span>
+              No audio URL found. Your n8n workflow needs to return a playable URL (public or signed).
+            </span>
           </div>
         )}
 
@@ -591,7 +642,9 @@ export default function SummaryStep({
   const keyTakeaways: KeyTakeaway[] = summary.keyTakeaways ?? [];
   const existingMnemonic = summary.mnemonic ?? null;
 
-  const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(summary.selectedStyle ?? null);
+  const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(
+    summary.selectedStyle ?? null
+  );
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(existingMnemonic);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -630,6 +683,7 @@ export default function SummaryStep({
           },
         });
       } else {
+        // Dev fallback
         await new Promise((resolve) => setTimeout(resolve, 1500));
         const mockMnemonic: MnemonicData = {
           mnemonicId: "mock",
@@ -685,7 +739,8 @@ export default function SummaryStep({
           {
             id: "1",
             title: "Key concept from this topic",
-            description: "The main ideas you've learned will appear here after completing the session.",
+            description:
+              "The main ideas you've learned will appear here after completing the session.",
           },
         ];
 
@@ -694,7 +749,10 @@ export default function SummaryStep({
       {/* Header */}
       <section className="mb-8">
         <div className="flex items-center space-x-3 mb-4">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: subjectColor }}>
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ backgroundColor: subjectColor }}
+          >
             <FontAwesomeIcon icon={subjectIcon} className="text-white text-xl" />
           </div>
           <div>
@@ -705,7 +763,10 @@ export default function SummaryStep({
           </div>
         </div>
         <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
-          <div className="bg-primary-600 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+          <div
+            className="bg-primary-600 h-full rounded-full transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
       </section>
 
@@ -736,7 +797,9 @@ export default function SummaryStep({
             </div>
             <div>
               <h2 className="text-2xl font-bold text-primary-900">Memory Tools</h2>
-              <p className="text-neutral-500 text-sm">Create a musical mnemonic to help remember key concepts</p>
+              <p className="text-neutral-500 text-sm">
+                Create a musical mnemonic to help remember key concepts
+              </p>
             </div>
           </div>
 
@@ -750,12 +813,17 @@ export default function SummaryStep({
                   <div>
                     <h3 className="font-bold text-primary-900 mb-1">StudyBuddy's Musical Mnemonics</h3>
                     <p className="text-neutral-600 text-sm">
-                      Choose a music style and I’ll create a song to help you remember the key points from this topic.
+                      Choose a music style and I’ll create a song to help you remember the key points
+                      from this topic.
                     </p>
                   </div>
                 </div>
 
-                <MnemonicStyleSelector selectedStyle={selectedStyle} onSelect={handleSelectStyle} disabled={isGenerating} />
+                <MnemonicStyleSelector
+                  selectedStyle={selectedStyle}
+                  onSelect={handleSelectStyle}
+                  disabled={isGenerating}
+                />
 
                 {selectedStyle && (
                   <div className="mt-6 flex justify-center">
@@ -781,7 +849,9 @@ export default function SummaryStep({
                     <FontAwesomeIcon icon={faLayerGroup} className="text-primary-600 text-xl" />
                   </div>
                   <span className="font-semibold text-neutral-700 mb-1">Save to Flashcards</span>
-                  <span className="text-neutral-500 text-xs text-center">Add these key points to your revision deck</span>
+                  <span className="text-neutral-500 text-xs text-center">
+                    Add these key points to your revision deck
+                  </span>
                 </button>
 
                 <button
@@ -792,12 +862,14 @@ export default function SummaryStep({
                     <FontAwesomeIcon icon={faPenFancy} className="text-primary-600 text-xl" />
                   </div>
                   <span className="font-semibold text-neutral-700 mb-1">Create Your Own</span>
-                  <span className="text-neutral-500 text-xs text-center">Make a personal mnemonic that works for you</span>
+                  <span className="text-neutral-500 text-xs text-center">
+                    Make a personal mnemonic that works for you
+                  </span>
                 </button>
               </div>
             </div>
           ) : (
-            <MnemonicPlayer mnemonic={mnemonic} childId={overview.child_id} sessionId={overview.revision_session_id} />
+            <MnemonicPlayer mnemonic={mnemonic} sessionId={overview.revision_session_id} />
           )}
         </div>
       </section>
@@ -812,8 +884,8 @@ export default function SummaryStep({
             <div className="flex-1">
               <h3 className="text-xl font-bold mb-3">Great progress!</h3>
               <p className="text-primary-50 mb-4">
-                You've covered the key concepts for {overview.topic_name}. Take a moment to review the takeaways above — they’ll
-                matter later.
+                You've covered the key concepts for {overview.topic_name}. Take a moment to review the
+                takeaways above — they’ll matter later.
               </p>
               <p className="text-primary-100 text-sm flex items-center space-x-2">
                 <FontAwesomeIcon icon={faLightbulb} />
@@ -848,3 +920,40 @@ export default function SummaryStep({
   );
 }
 
+// =============================================================================
+// Mock Lyrics Generator (Development Only)
+// =============================================================================
+
+function generateMockLyrics(topicName: string, style: MnemonicStyle): string {
+  const mockLyrics: Record<MnemonicStyle, string> = {
+    "hip-hop": `Yo, listen up, here's the knowledge drop
+${topicName}, we never stop
+
+Verse 1:
+Atoms in the nucleus, protons and neutrons tight
+Electrons spinning round, keeping it right
+
+Chorus:
+Learn it, know it, ace that test
+ReviseRight helping us be the best!`,
+
+    pop: `🎵 ${topicName} 🎵
+
+Protons, neutrons, electrons too
+Keep the facts and you'll be through
+Remember the numbers, remember the signs
+You've got this — you’ll be fine!`,
+
+    rock: `⚡ ${topicName} ⚡
+
+[Verse]
+Facts are flying, keep it tight
+Learn the rules, you’ll get it right
+
+[Chorus]
+We rock this knowledge, we own this stage
+Writing our future on every page`,
+  };
+
+  return mockLyrics[style] || mockLyrics["pop"];
+}
