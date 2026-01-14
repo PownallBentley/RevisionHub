@@ -308,6 +308,7 @@ function AudioRecorder({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recordingTimeRef = useRef<number>(0); // Track duration in ref for accurate capture
 
   // Cleanup on unmount
   useEffect(() => {
@@ -346,6 +347,7 @@ function AudioRecorder({
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      recordingTimeRef.current = 0;
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -356,10 +358,11 @@ function AudioRecorder({
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         const url = URL.createObjectURL(blob);
+        const finalDuration = recordingTimeRef.current; // Use ref value, not state
         const newAudioData = {
           blob,
           url,
-          durationSeconds: recordingTime,
+          durationSeconds: finalDuration,
         };
         setAudioData(newAudioData);
         onRecordingComplete(newAudioData);
@@ -372,15 +375,17 @@ function AudioRecorder({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Start timer
+      // Start timer - update both state (for UI) and ref (for capture)
       timerRef.current = setInterval(() => {
+        recordingTimeRef.current += 1;
         setRecordingTime((prev) => {
+          const newTime = prev + 1;
           // Max 60 seconds
-          if (prev >= 60) {
+          if (newTime >= 60) {
             stopRecording();
             return prev;
           }
-          return prev + 1;
+          return newTime;
         });
       }, 1000);
     } catch (error) {
