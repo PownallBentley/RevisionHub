@@ -14,7 +14,7 @@ import { ProgressMomentsCard } from "./../../components/parent/dashboard/Progres
 import { SupportTipCard } from "./../../components/parent/dashboard/SupportTipCard";
 import { QuickActionsSection } from "./../../components/parent/dashboard/QuickActionsSection";
 import { FamilyOverviewCard } from "./../../components/parent/dashboard/FamilyOverviewCard";
-import { WeeklyRhythmChart } from "./../../components/parent/dashboard/WeeklyRhythmChart";
+import { WeeklyRhythmChart } from "../../../components/parent/dashboard/WeeklyRhythmChart";
 import { ResourcesSection } from "./../../components/parent/dashboard/ResourcesSection";
 import type { ParentDashboardData } from "./../../types/parent/parentDashboardTypes";
 
