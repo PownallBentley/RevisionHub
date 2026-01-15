@@ -4,10 +4,6 @@
 import React from "react";
 import type { HeroStatusBannerProps, StatusIndicator, GentleReminder, ReminderType } from "../../../types/parent/parentDashboardTypes";
 
-interface ExtendedHeroStatusBannerProps extends HeroStatusBannerProps {
-  reminders: GentleReminder[];
-}
-
 const statusContent: Record<StatusIndicator, {
   headline: string;
   description: string;
@@ -51,7 +47,7 @@ export function HeroStatusBanner({
   onViewTodaySessions, 
   onViewInsights,
   reminders,
-}: ExtendedHeroStatusBannerProps) {
+}: HeroStatusBannerProps) {
   const status = weekSummary.family_status || "on_track";
   const content = statusContent[status];
   
@@ -62,7 +58,7 @@ export function HeroStatusBanner({
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <h2 className="text-3xl font-bold text-primary-900">{content.headline}</h2>
-              <span className={`inline-flex items-center gap-2 px-4 py-1.5 ${content.badgeBg} ${content.badgeTextColor} rounded-pill text-sm font-semibold`}>
+              <span className={`inline-flex items-center gap-2 px-4 py-1.5 ${content.badgeBg} ${content.badgeTextColor} rounded-full text-sm font-semibold`}>
                 <i className="fa-solid fa-circle-check"></i>
                 {content.badgeText}
               </span>
@@ -120,13 +116,13 @@ export function HeroStatusBanner({
           </button>
         </div>
 
-        {/* Helpful Nudges - integrated */}
-        {reminders.length > 0 && (
-          <div className="bg-neutral-0/70 rounded-xl p-4 mb-6 border border-neutral-200/50">
-            <div className="flex items-center gap-2 mb-3">
-              <i className="fa-solid fa-lightbulb text-accent-amber text-sm"></i>
-              <span className="text-sm font-semibold text-primary-900">Helpful Nudges</span>
-            </div>
+        {/* Helpful Nudges - always visible */}
+        <div className="bg-neutral-0/70 rounded-xl p-4 mb-6 border border-neutral-200/50">
+          <div className="flex items-center gap-2 mb-3">
+            <i className="fa-solid fa-lightbulb text-accent-amber text-sm"></i>
+            <span className="text-sm font-semibold text-primary-900">Helpful Nudges</span>
+          </div>
+          {reminders.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {reminders.slice(0, 3).map((reminder, index) => {
                 const config = reminderConfig[reminder.type] || {
@@ -150,20 +146,25 @@ export function HeroStatusBanner({
                 );
               })}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-neutral-500">
+              <i className="fa-solid fa-check-circle text-accent-green"></i>
+              <span>Everything looks great — no nudges needed right now!</span>
+            </div>
+          )}
+        </div>
         
-        {/* CTAs */}
+        {/* CTAs - consistent button styling (rounded-xl to match NBA buttons) */}
         <div className="flex items-center gap-3 flex-wrap">
           <button 
             onClick={onViewTodaySessions}
-            className="px-6 py-3 bg-primary-600 text-white rounded-pill font-semibold hover:bg-primary-700 transition-colors shadow-soft"
+            className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors shadow-soft"
           >
             View today's sessions
           </button>
           <button 
             onClick={onViewInsights}
-            className="px-6 py-3 bg-neutral-0 text-primary-600 rounded-pill font-semibold hover:bg-primary-50 transition-colors border border-primary-200"
+            className="px-6 py-3 bg-neutral-0 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors border border-primary-200"
           >
             Check progress details
           </button>
