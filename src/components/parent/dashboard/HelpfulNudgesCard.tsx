@@ -147,9 +147,9 @@ const getStatusColors = (status: string) => {
       };
     case 'needs_attention':
       return {
-        bg: 'bg-[#FFB547]/10',
-        border: 'border-[#FFB547]/30',
-        icon: 'text-white bg-[#FFB547]',
+        bg: 'bg-[#E69B2C]/10',
+        border: 'border-[#E69B2C]/30',
+        icon: 'text-white bg-[#E69B2C]',
         text: 'text-amber-900',
       };
     case 'getting_started':
@@ -192,7 +192,7 @@ function StatusExplainerItem({ explainer }: { explainer: StatusExplainer }) {
             <span className="font-semibold text-primary-900">{explainer.child_name}</span>
             <span 
               className={`text-xs px-2 py-0.5 rounded-full text-white font-medium ${
-                explainer.status_indicator === 'needs_attention' ? 'bg-[#FFB547]' : 
+                explainer.status_indicator === 'needs_attention' ? 'bg-[#E69B2C]' : 
                 explainer.status_indicator === 'keep_an_eye' ? 'bg-[#5B8DEF]' : 
                 explainer.status_indicator === 'getting_started' ? 'bg-[#7C3AED]' : 'bg-[#1EC592]'
               }`}
