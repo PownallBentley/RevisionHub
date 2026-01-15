@@ -9,7 +9,6 @@ import { HeroStatusBanner } from "../../components/parent/dashboard/HeroStatusBa
 import { ChildHealthCardGrid } from "../../components/parent/dashboard/ChildHealthCardGrid";
 import { WeeklyFocusStrip } from "../../components/parent/dashboard/WeeklyFocusStrip";
 import { ComingUpCard } from "../../components/parent/dashboard/ComingUpCard";
-import { HelpfulNudgesCard } from "../../components/parent/dashboard/HelpfulNudgesCard";
 import { ProgressMomentsCard } from "../../components/parent/dashboard/ProgressMomentsCard";
 import { SupportTipCard } from "../../components/parent/dashboard/SupportTipCard";
 import { QuickActionsSection } from "../../components/parent/dashboard/QuickActionsSection";
@@ -170,12 +169,13 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
-      {/* Hero Status Banner */}
+      {/* Hero Status Banner (now includes nudges) */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
         onViewTodaySessions={handleViewTodaySessions}
         onViewInsights={handleViewInsights}
+        reminders={data.gentle_reminders}
       />
 
       {/* Child Health Cards */}
@@ -185,13 +185,8 @@ export function ParentDashboardV2() {
         onViewInsights={handleViewChildInsights}
       />
 
-      {/* Weekly Focus Strip */}
-      {data.daily_pattern.length > 0 && (
-        <WeeklyFocusStrip
-          dailyPattern={data.daily_pattern}
-          onSeeWhy={handleSeeWhy}
-        />
-      )}
+      {/* Quick Actions (moved up) */}
+      <QuickActionsSection />
 
       {/* Two-column layout for cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
@@ -201,26 +196,30 @@ export function ParentDashboardV2() {
             sessions={data.coming_up_next}
             onViewFullSchedule={handleViewFullSchedule}
           />
-          <HelpfulNudgesCard reminders={data.gentle_reminders} />
+          <ProgressMomentsCard moments={data.progress_moments} />
         </div>
 
         {/* Right column */}
         <div className="space-y-6">
-          <ProgressMomentsCard moments={data.progress_moments} />
+          <FamilyOverviewCard
+            weekSummary={data.week_summary}
+            subjectCoverage={data.subject_coverage}
+            childrenCount={data.children.length}
+          />
           <SupportTipCard />
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <QuickActionsSection />
-
-      {/* Two-column layout for charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-        <FamilyOverviewCard
-          weekSummary={data.week_summary}
-          subjectCoverage={data.subject_coverage}
-          childrenCount={data.children.length}
+      {/* Weekly Focus Strip (moved down) */}
+      {data.daily_pattern.length > 0 && (
+        <WeeklyFocusStrip
+          dailyPattern={data.daily_pattern}
+          onSeeWhy={handleSeeWhy}
         />
+      )}
+
+      {/* Weekly Rhythm Chart */}
+      <div className="mb-10">
         <WeeklyRhythmChart
           dailyPattern={data.daily_pattern}
           onViewDetailedBreakdown={handleViewDetailedBreakdown}
