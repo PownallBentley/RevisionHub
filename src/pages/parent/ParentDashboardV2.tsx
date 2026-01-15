@@ -3,20 +3,20 @@
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "./../../contexts/AuthContext";
-import { getParentDashboard } from "./../../services/parent/parentDashboardService";
-import { HeroStatusBanner } from "./../../components/parent/dashboard/HeroStatusBanner";
-import { ChildHealthCardGrid } from "./../../components/parent/dashboard/ChildHealthCardGrid";
-import { WeeklyFocusStrip } from "./../../components/parent/dashboard/WeeklyFocusStrip";
-import { ComingUpCard } from "./../../components/parent/dashboard/ComingUpCard";
-import { HelpfulNudgesCard } from "./../../components/parent/dashboard/HelpfulNudgesCard";
-import { ProgressMomentsCard } from "./../../components/parent/dashboard/ProgressMomentsCard";
-import { SupportTipCard } from "./../../components/parent/dashboard/SupportTipCard";
-import { QuickActionsSection } from "./../../components/parent/dashboard/QuickActionsSection";
-import { FamilyOverviewCard } from "./../../components/parent/dashboard/FamilyOverviewCard";
-import { WeeklyRhythmChart } from "../../../components/parent/dashboard/WeeklyRhythmChart";
-import { ResourcesSection } from "./../../components/parent/dashboard/ResourcesSection";
-import type { ParentDashboardData } from "./../../types/parent/parentDashboardTypes";
+import { useAuth } from "../../contexts/AuthContext";
+import { getParentDashboard } from "../../services/parent/parentDashboardService";
+import { HeroStatusBanner } from "../../components/parent/dashboard/HeroStatusBanner";
+import { ChildHealthCardGrid } from "../../components/parent/dashboard/ChildHealthCardGrid";
+import { WeeklyFocusStrip } from "../../components/parent/dashboard/WeeklyFocusStrip";
+import { ComingUpCard } from "../../components/parent/dashboard/ComingUpCard";
+import { HelpfulNudgesCard } from "../../components/parent/dashboard/HelpfulNudgesCard";
+import { ProgressMomentsCard } from "../../components/parent/dashboard/ProgressMomentsCard";
+import { SupportTipCard } from "../../components/parent/dashboard/SupportTipCard";
+import { QuickActionsSection } from "../../components/parent/dashboard/QuickActionsSection";
+import { FamilyOverviewCard } from "../../components/parent/dashboard/FamilyOverviewCard";
+import { WeeklyRhythmChart } from "../../components/parent/dashboard/WeeklyRhythmChart";
+import { ResourcesSection } from "../../components/parent/dashboard/ResourcesSection";
+import type { ParentDashboardData } from "../../types/parent/parentDashboardTypes";
 
 function HeroSkeleton() {
   return (
