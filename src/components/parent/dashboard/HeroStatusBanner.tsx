@@ -1,8 +1,8 @@
 // src/components/parent/dashboard/HeroStatusBanner.tsx
-// Hero status banner with integrated nudges for Parent Dashboard v2 (FEAT-009)
+// Hero status banner with nudges as 4th stat card for Parent Dashboard v2 (FEAT-009)
 
 import React from "react";
-import type { HeroStatusBannerProps, StatusIndicator, GentleReminder, ReminderType } from "../../../types/parent/parentDashboardTypes";
+import type { HeroStatusBannerProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
 
 const statusContent: Record<StatusIndicator, {
   headline: string;
@@ -34,13 +34,6 @@ const statusContent: Record<StatusIndicator, {
   },
 };
 
-const reminderConfig: Record<ReminderType, { icon: string; iconBg: string }> = {
-  mocks_coming_up: { icon: "fa-calendar-exclamation", iconBg: "bg-accent-amber" },
-  topic_to_revisit: { icon: "fa-rotate", iconBg: "bg-primary-500" },
-  building_momentum: { icon: "fa-seedling", iconBg: "bg-accent-green" },
-  subject_neglected: { icon: "fa-book-open", iconBg: "bg-neutral-400" },
-};
-
 export function HeroStatusBanner({ 
   weekSummary, 
   comingUpCount,
@@ -50,6 +43,12 @@ export function HeroStatusBanner({
 }: HeroStatusBannerProps) {
   const status = weekSummary.family_status || "on_track";
   const content = statusContent[status];
+  const nudgeCount = reminders.length;
+  
+  // Get first nudge message for preview
+  const nudgePreview = nudgeCount > 0 
+    ? reminders[0].message 
+    : "All good!";
   
   return (
     <section className="mb-10">
@@ -74,8 +73,9 @@ export function HeroStatusBanner({
           </div>
         </div>
         
-        {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Stat Cards - 4 columns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Revision Rhythm */}
           <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
@@ -89,6 +89,7 @@ export function HeroStatusBanner({
             <div className="text-sm text-neutral-500 font-medium">Revision Rhythm</div>
           </button>
           
+          {/* Coming Up */}
           <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-accent-green/10 rounded-xl flex items-center justify-center group-hover:bg-accent-green/20 transition-colors">
@@ -102,6 +103,7 @@ export function HeroStatusBanner({
             <div className="text-sm text-neutral-500 font-medium">Coming Up</div>
           </button>
           
+          {/* Active Coverage */}
           <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
@@ -114,44 +116,22 @@ export function HeroStatusBanner({
             </div>
             <div className="text-sm text-neutral-500 font-medium">Active Coverage</div>
           </button>
-        </div>
 
-        {/* Helpful Nudges - always visible */}
-        <div className="bg-neutral-0/70 rounded-xl p-4 mb-6 border border-neutral-200/50">
-          <div className="flex items-center gap-2 mb-3">
-            <i className="fa-solid fa-lightbulb text-accent-amber text-sm"></i>
-            <span className="text-sm font-semibold text-primary-900">Helpful Nudges</span>
-          </div>
-          {reminders.length > 0 ? (
-            <div className="flex flex-wrap gap-3">
-              {reminders.slice(0, 3).map((reminder, index) => {
-                const config = reminderConfig[reminder.type] || {
-                  icon: "fa-circle-info",
-                  iconBg: "bg-neutral-400",
-                };
-
-                return (
-                  <div
-                    key={`${reminder.type}-${reminder.child_id}-${index}`}
-                    className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2"
-                  >
-                    <div
-                      className={`w-6 h-6 ${config.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}
-                    >
-                      <i className={`fa-solid ${config.icon} text-white text-xs`}></i>
-                    </div>
-                    <span className="text-sm text-primary-900">{reminder.message}</span>
-                    <span className="text-xs text-neutral-500">· {reminder.child_name}</span>
-                  </div>
-                );
-              })}
+          {/* Helpful Nudges - 4th card */}
+          <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
+            <div className="flex items-center justify-between mb-3">
+              <div className={`w-12 h-12 ${nudgeCount > 0 ? 'bg-accent-amber/10' : 'bg-accent-green/10'} rounded-xl flex items-center justify-center group-hover:${nudgeCount > 0 ? 'bg-accent-amber/20' : 'bg-accent-green/20'} transition-colors`}>
+                <i className={`fa-solid ${nudgeCount > 0 ? 'fa-lightbulb text-accent-amber' : 'fa-check text-accent-green'} text-xl`}></i>
+              </div>
+              <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-neutral-500">
-              <i className="fa-solid fa-check-circle text-accent-green"></i>
-              <span>Everything looks great — no nudges needed right now!</span>
+            <div className="text-2xl font-bold text-primary-900 mb-1">
+              {nudgeCount > 0 ? `${nudgeCount} nudge${nudgeCount !== 1 ? "s" : ""}` : "All good!"}
             </div>
-          )}
+            <div className="text-sm text-neutral-500 font-medium truncate" title={nudgePreview}>
+              {nudgeCount > 0 ? nudgePreview : "Helpful Nudges"}
+            </div>
+          </button>
         </div>
         
         {/* CTAs - consistent button styling (rounded-xl to match NBA buttons) */}
