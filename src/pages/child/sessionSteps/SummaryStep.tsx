@@ -1,5 +1,10 @@
 // src/pages/child/sessionSteps/SummaryStep.tsx
 // Step 5: Key takeaways + mnemonic
+// UPDATED: January 2026
+// - Key takeaways now pulled from reinforce.slides[].key_points
+// - Mnemonic suitability check based on subject
+// - Removed placeholder buttons (Save to Flashcards, Create Your Own)
+// - Child-friendly language updates
 //
 // RPC-first:
 // - No direct table writes from the client
@@ -31,8 +36,6 @@ import {
   faLandmark,
   faDna,
   faBook,
-  faLayerGroup,
-  faPenFancy,
   faTriangleExclamation,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
@@ -58,6 +61,15 @@ type KeyTakeaway = {
   id: string;
   title: string;
   description: string;
+};
+
+type TeachingSlide = {
+  id: string;
+  title: string;
+  content: string;
+  key_points?: string[];
+  examiner_tip?: string;
+  slide_number?: number;
 };
 
 type MnemonicStyle = "hip-hop" | "pop" | "rock";
@@ -89,6 +101,9 @@ type SummaryStepProps = {
     revision_session_id: string;
   };
   payload: {
+    reinforce?: {
+      slides?: TeachingSlide[];
+    };
     summary?: {
       keyTakeaways?: KeyTakeaway[];
       mnemonic?: MnemonicData;
@@ -123,6 +138,93 @@ function getIconFromName(iconName?: string): IconDefinition {
 }
 
 // =============================================================================
+// Mnemonic Suitability Check
+// =============================================================================
+
+// Subjects that benefit from mnemonics (formulas, dates, sequences)
+const MNEMONIC_SUITABLE_SUBJECTS = [
+  "chemistry",
+  "physics",
+  "biology",
+  "maths",
+  "mathematics",
+  "history",
+  "geography",
+  "computer science",
+  "computing",
+];
+
+// Subjects that don't benefit from mnemonics (analysis, essay-based)
+const MNEMONIC_UNSUITABLE_SUBJECTS = [
+  "english literature",
+  "english language",
+  "religious studies",
+  "art",
+  "drama",
+];
+
+function isSubjectMnemonicSuitable(subjectName: string): boolean {
+  const normalised = subjectName.toLowerCase().trim();
+  
+  // Check explicit unsuitable first
+  if (MNEMONIC_UNSUITABLE_SUBJECTS.some(s => normalised.includes(s))) {
+    return false;
+  }
+  
+  // Check explicit suitable
+  if (MNEMONIC_SUITABLE_SUBJECTS.some(s => normalised.includes(s))) {
+    return true;
+  }
+  
+  // Default to not suitable for unknown subjects (cost control)
+  return false;
+}
+
+// =============================================================================
+// Key Takeaways Extraction
+// =============================================================================
+
+function extractKeyTakeaways(payload: SummaryStepProps["payload"]): KeyTakeaway[] {
+  const takeaways: KeyTakeaway[] = [];
+  
+  // First, try to get from summary.keyTakeaways if already computed
+  if (payload.summary?.keyTakeaways && payload.summary.keyTakeaways.length > 0) {
+    return payload.summary.keyTakeaways;
+  }
+  
+  // Extract from reinforce.slides[].key_points
+  const slides = payload.reinforce?.slides ?? [];
+  
+  slides.forEach((slide, slideIndex) => {
+    if (slide.key_points && slide.key_points.length > 0) {
+      slide.key_points.forEach((point, pointIndex) => {
+        takeaways.push({
+          id: `${slide.id}-${pointIndex}`,
+          title: slide.title || `Key Point ${slideIndex + 1}`,
+          description: point,
+        });
+      });
+    }
+  });
+  
+  // If no key points found, create a summary from slide titles
+  if (takeaways.length === 0 && slides.length > 0) {
+    slides.forEach((slide, index) => {
+      if (slide.title) {
+        takeaways.push({
+          id: `slide-${index}`,
+          title: slide.title,
+          description: slide.content?.substring(0, 150) + (slide.content?.length > 150 ? "..." : "") || "Review this concept in your notes.",
+        });
+      }
+    });
+  }
+  
+  // Limit to 5 takeaways maximum
+  return takeaways.slice(0, 5);
+}
+
+// =============================================================================
 // Style Configuration
 // =============================================================================
 
@@ -136,24 +238,24 @@ const MNEMONIC_STYLES: Array<{
 }> = [
   {
     id: "hip-hop",
-    name: "Hip-Hop Rap",
-    description: "Street anthem style beats",
+    name: "Hip-Hop",
+    description: "Catchy rap beats",
     icon: faMicrophone,
     gradient: "from-purple-500 to-pink-500",
     styleReference: "street-anthem",
   },
   {
     id: "pop",
-    name: "Pop Song",
-    description: "Catchy pop melody",
+    name: "Pop",
+    description: "Upbeat melody",
     icon: faMusic,
     gradient: "from-blue-500 to-cyan-500",
     styleReference: "upbeat-pop",
   },
   {
     id: "rock",
-    name: "Rock Track",
-    description: "Energetic rock vibes",
+    name: "Rock",
+    description: "Electric vibes",
     icon: faGuitar,
     gradient: "from-orange-500 to-red-500",
     styleReference: "indie-rock",
@@ -218,7 +320,7 @@ function MnemonicStyleSelector({
   disabled: boolean;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-3 gap-3">
       {MNEMONIC_STYLES.map((style) => {
         const isSelected = selectedStyle === style.id;
         return (
@@ -227,18 +329,18 @@ function MnemonicStyleSelector({
             type="button"
             onClick={() => onSelect(style.id)}
             disabled={disabled}
-            className={`flex flex-col items-center p-5 rounded-xl transition border-2 ${
+            className={`flex flex-col items-center p-4 rounded-xl transition border-2 ${
               isSelected
                 ? "bg-primary-50 border-primary-600"
                 : "bg-neutral-50 border-transparent hover:border-primary-300"
             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <div
-              className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-gradient-to-br ${style.gradient}`}
+              className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 bg-gradient-to-br ${style.gradient}`}
             >
-              <FontAwesomeIcon icon={style.icon} className="text-white text-xl" />
+              <FontAwesomeIcon icon={style.icon} className="text-white text-lg" />
             </div>
-            <span className="font-semibold text-neutral-700 mb-1">{style.name}</span>
+            <span className="font-semibold text-neutral-700 text-sm">{style.name}</span>
             <span className="text-neutral-500 text-xs text-center">{style.description}</span>
             {isSelected && (
               <div className="mt-2">
@@ -441,7 +543,7 @@ function MnemonicPlayer({
       setIsPlaying(false);
       await stopPlayTracking(false);
       setAudioError(
-        "Audio couldn’t be played. This is usually a private file URL, an expired signed link, or a CORS issue."
+        "Audio couldn't be played. This is usually a private file URL, an expired signed link, or a CORS issue."
       );
     }
   }
@@ -466,7 +568,7 @@ function MnemonicPlayer({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("[MnemonicPlayer] download failed:", err);
-      setAudioError("Couldn’t download the audio file.");
+      setAudioError("Couldn't download the audio file.");
     }
   }
 
@@ -476,8 +578,8 @@ function MnemonicPlayer({
         <div className="flex items-center justify-center space-x-4 py-8">
           <FontAwesomeIcon icon={faSpinner} className="text-primary-600 text-3xl animate-spin" />
           <div>
-            <p className="font-semibold text-primary-900">Creating your mnemonic...</p>
-            <p className="text-neutral-600 text-sm">StudyBuddy is writing lyrics and generating audio</p>
+            <p className="font-semibold text-primary-900">Creating your song... 🎵</p>
+            <p className="text-neutral-600 text-sm">StudyBuddy is writing lyrics and making music</p>
           </div>
         </div>
       </div>
@@ -487,9 +589,9 @@ function MnemonicPlayer({
   if (mnemonic.status === "failed") {
     return (
       <div className="p-6 bg-accent-red/5 rounded-xl border border-accent-red/20">
-        <p className="text-accent-red font-semibold mb-2">Couldn't generate mnemonic</p>
+        <p className="text-accent-red font-semibold mb-2">Oops! Something went wrong 😕</p>
         <p className="text-neutral-600 text-sm">
-          Something went wrong. Try selecting a different style or continue without.
+          We couldn't make your song this time. Try picking a different style or skip for now.
         </p>
       </div>
     );
@@ -499,7 +601,6 @@ function MnemonicPlayer({
 
   return (
     <div className="p-6 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
-      {/* (player UI unchanged) */}
       <audio
         ref={audioRef}
         src={resolvedAudioUrl ?? undefined}
@@ -537,9 +638,9 @@ function MnemonicPlayer({
             <FontAwesomeIcon icon={styleConfig?.icon || faMusic} className="text-white text-lg" />
           </div>
           <div>
-            <h3 className="font-bold text-primary-900">Your {styleConfig?.name || "Mnemonic"}</h3>
+            <h3 className="font-bold text-primary-900">Your {styleConfig?.name || "Song"} 🎵</h3>
             <p className="text-neutral-600 text-sm">
-              {duration ? formatTime(duration) : isMetadataReady ? "Audio ready" : "Loading audio…"}
+              {duration ? formatTime(duration) : isMetadataReady ? "Ready to play" : "Loading..."}
             </p>
           </div>
         </div>
@@ -550,7 +651,7 @@ function MnemonicPlayer({
             onClick={toggleFavourite}
             disabled={!mnemonic.mnemonicId || favBusy}
             className="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-primary-50 transition disabled:opacity-50"
-            title="Favourite"
+            title="Add to favourites"
           >
             <FontAwesomeIcon icon={faHeart} className={isFav ? "text-accent-red" : "text-primary-600"} />
           </button>
@@ -622,6 +723,29 @@ function MnemonicPlayer({
 }
 
 // =============================================================================
+// No Mnemonic Available Message
+// =============================================================================
+
+function MnemonicNotAvailable({ subjectName }: { subjectName: string }) {
+  return (
+    <div className="p-6 bg-neutral-50 rounded-xl border border-neutral-200">
+      <div className="flex items-start space-x-4">
+        <div className="w-12 h-12 bg-neutral-200 rounded-full flex items-center justify-center flex-shrink-0">
+          <FontAwesomeIcon icon={faMusic} className="text-neutral-400 text-lg" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-neutral-700 mb-2">Memory songs aren't available for {subjectName}</h3>
+          <p className="text-neutral-600 text-sm">
+            Songs work best for subjects with formulas, dates, or sequences to remember. 
+            For this subject, focus on understanding the key points above! 📚
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -631,13 +755,19 @@ export default function SummaryStep({
   saving,
   onPatch,
   onNext,
-  onBack,
-  onExit,
   onRequestMnemonic,
 }: SummaryStepProps) {
   const summary = payload?.summary ?? {};
-  const keyTakeaways: KeyTakeaway[] = summary.keyTakeaways ?? [];
   const existingMnemonic = summary.mnemonic ?? null;
+
+  // Extract key takeaways from slides
+  const keyTakeaways = useMemo(() => extractKeyTakeaways(payload), [payload]);
+
+  // Check if mnemonic generation is suitable for this subject
+  const mnemonicSuitable = useMemo(
+    () => isSubjectMnemonicSuitable(overview.subject_name),
+    [overview.subject_name]
+  );
 
   const [selectedStyle, setSelectedStyle] = useState<MnemonicStyle | null>(summary.selectedStyle ?? null);
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(existingMnemonic);
@@ -691,6 +821,7 @@ export default function SummaryStep({
         await onPatch({
           summary: {
             ...summary,
+            keyTakeaways,
             selectedStyle,
             mnemonic: result,
           },
@@ -711,7 +842,6 @@ export default function SummaryStep({
         level: "gcse",
         examBoard: null,
         callbackUrl: null,
-        // Once you’re confident n8n stage 5 always runs, set this true.
         disableClientFallbackTracking: false,
       });
 
@@ -732,6 +862,7 @@ export default function SummaryStep({
       await onPatch({
         summary: {
           ...summary,
+          keyTakeaways,
           selectedStyle,
           mnemonic: result,
         },
@@ -756,6 +887,7 @@ export default function SummaryStep({
     await onPatch({
       summary: {
         ...summary,
+        keyTakeaways,
         selectedStyle,
         mnemonic,
         completed_at: new Date().toISOString(),
@@ -764,21 +896,22 @@ export default function SummaryStep({
     await onNext();
   }
 
+  // Fallback takeaways if none extracted
   const displayTakeaways =
     keyTakeaways.length > 0
       ? keyTakeaways
       : [
           {
             id: "1",
-            title: "Key concept from this topic",
-            description: "The main ideas you've learned will appear here after completing the session.",
+            title: "Great job completing this session!",
+            description: "Review your notes and flashcards to reinforce what you've learned today.",
           },
         ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <section className="mb-8">
+      <section>
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: subjectColor }}>
             <FontAwesomeIcon icon={subjectIcon} className="text-white text-xl" />
@@ -796,16 +929,19 @@ export default function SummaryStep({
       </section>
 
       {/* Key Takeaways */}
-      <section className="mb-8">
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
-          <div className="flex items-center space-x-3 mb-6">
+          <div className="flex items-center space-x-3 mb-5">
             <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
               <FontAwesomeIcon icon={faLightbulb} className="text-primary-600 text-xl" />
             </div>
-            <h2 className="text-2xl font-bold text-primary-900">Key Takeaways</h2>
+            <div>
+              <h2 className="text-xl font-bold text-primary-900">What You've Learned 🎯</h2>
+              <p className="text-neutral-500 text-sm">The key points from this session</p>
+            </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {displayTakeaways.map((takeaway, index) => (
               <KeyTakeawayCard key={takeaway.id} takeaway={takeaway} index={index} />
             ))}
@@ -813,30 +949,32 @@ export default function SummaryStep({
         </div>
       </section>
 
-      {/* Memory Tools */}
-      <section className="mb-8">
+      {/* Help Me Remember (Memory Tools) */}
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
-          <div className="flex items-center space-x-3 mb-6">
+          <div className="flex items-center space-x-3 mb-5">
             <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
               <FontAwesomeIcon icon={faBrain} className="text-primary-600 text-xl" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-primary-900">Memory Tools</h2>
-              <p className="text-neutral-500 text-sm">Create a musical mnemonic to help remember key concepts</p>
+              <h2 className="text-xl font-bold text-primary-900">Help Me Remember 🎵</h2>
+              <p className="text-neutral-500 text-sm">Create a song to help the facts stick!</p>
             </div>
           </div>
 
-          {!mnemonic || mnemonic.status === "failed" ? (
-            <div className="space-y-6">
+          {!mnemonicSuitable ? (
+            <MnemonicNotAvailable subjectName={overview.subject_name} />
+          ) : !mnemonic || mnemonic.status === "failed" ? (
+            <div className="space-y-5">
               <div className="p-5 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
                 <div className="flex items-start space-x-3 mb-4">
                   <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
                     <FontAwesomeIcon icon={faRobot} className="text-white" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-primary-900 mb-1">StudyBuddy's Musical Mnemonics</h3>
+                    <h3 className="font-bold text-primary-900 mb-1">StudyBuddy's Music Maker 🎤</h3>
                     <p className="text-neutral-600 text-sm">
-                      Choose a music style and I’ll create a song to help you remember the key points from this topic.
+                      Pick a music style and I'll create a catchy song to help you remember the key facts!
                     </p>
                   </div>
                 </div>
@@ -844,43 +982,28 @@ export default function SummaryStep({
                 <MnemonicStyleSelector selectedStyle={selectedStyle} onSelect={handleSelectStyle} disabled={isGenerating} />
 
                 {selectedStyle && (
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-5 flex justify-center">
                     <button
                       type="button"
                       onClick={handleGenerateMnemonic}
                       disabled={isGenerating || saving}
-                      className="flex items-center space-x-2 px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
+                      className="flex items-center space-x-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
                     >
                       <FontAwesomeIcon icon={faWandMagicSparkles} />
-                      <span>Generate My Mnemonic</span>
+                      <span>Make My Song! ✨</span>
                     </button>
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  className="flex flex-col items-center p-5 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition border-2 border-transparent hover:border-primary-300"
-                >
-                  <div className="w-14 h-14 bg-primary-100 rounded-full flex items-center justify-center mb-3">
-                    <FontAwesomeIcon icon={faLayerGroup} className="text-primary-600 text-xl" />
-                  </div>
-                  <span className="font-semibold text-neutral-700 mb-1">Save to Flashcards</span>
-                  <span className="text-neutral-500 text-xs text-center">Add these key points to your revision deck</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="flex flex-col items-center p-5 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition border-2 border-transparent hover:border-primary-300"
-                >
-                  <div className="w-14 h-14 bg-primary-100 rounded-full flex items-center justify-center mb-3">
-                    <FontAwesomeIcon icon={faPenFancy} className="text-primary-600 text-xl" />
-                  </div>
-                  <span className="font-semibold text-neutral-700 mb-1">Create Your Own</span>
-                  <span className="text-neutral-500 text-xs text-center">Make a personal mnemonic that works for you</span>
-                </button>
-              </div>
+              {mnemonic?.status === "failed" && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-amber-800 text-sm">
+                    <FontAwesomeIcon icon={faTriangleExclamation} className="mr-2" />
+                    The last attempt didn't work. Try a different style or continue without a song.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <MnemonicPlayer mnemonic={mnemonic} sessionId={overview.revision_session_id} />
@@ -889,21 +1012,20 @@ export default function SummaryStep({
       </section>
 
       {/* Encouragement */}
-      <section className="mb-8">
+      <section>
         <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-card p-6 text-white">
           <div className="flex items-start space-x-4">
-            <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <FontAwesomeIcon icon={faRobot} className="text-white text-2xl" />
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <FontAwesomeIcon icon={faRobot} className="text-white text-xl" />
             </div>
             <div className="flex-1">
-              <h3 className="text-xl font-bold mb-3">Great progress!</h3>
-              <p className="text-primary-50 mb-4">
-                You've covered the key concepts for {overview.topic_name}. Take a moment to review the takeaways above — they’ll
-                matter later.
+              <h3 className="text-lg font-bold mb-2">Amazing progress! 🌟</h3>
+              <p className="text-primary-50 mb-3 text-sm">
+                You've covered the key concepts for {overview.topic_name}. Take a moment to look over the points above — they'll help in your exams!
               </p>
-              <p className="text-primary-100 text-sm flex items-center space-x-2">
+              <p className="text-primary-100 text-xs flex items-center space-x-2">
                 <FontAwesomeIcon icon={faLightbulb} />
-                <span>Tip: Explain it to someone else — it’s one of the fastest ways to lock it in.</span>
+                <span>Top tip: Try explaining what you learned to someone else — it really helps it stick!</span>
               </p>
             </div>
           </div>
@@ -911,20 +1033,20 @@ export default function SummaryStep({
       </section>
 
       {/* Continue */}
-      <section className="mb-8">
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-primary-900 mb-1">Ready to continue?</h3>
-              <p className="text-neutral-600 text-sm">Next: Quick reflection on what you've learned</p>
+              <h3 className="font-bold text-primary-900 mb-1">Ready to wrap up?</h3>
+              <p className="text-neutral-600 text-sm">One quick reflection and you're done!</p>
             </div>
             <button
               type="button"
               onClick={handleContinue}
               disabled={saving}
-              className="flex items-center space-x-2 px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
+              className="flex items-center space-x-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
             >
-              <span>Continue to Reflection</span>
+              <span>Continue</span>
               <FontAwesomeIcon icon={faArrowRight} />
             </button>
           </div>
@@ -932,40 +1054,4 @@ export default function SummaryStep({
       </section>
     </div>
   );
-}
-
-// =============================================================================
-// Mock Lyrics Generator (DEV ONLY)
-// =============================================================================
-
-function generateMockLyrics(topicName: string, style: MnemonicStyle): string {
-  const mockLyrics: Record<MnemonicStyle, string> = {
-    "hip-hop": `Yo, listen up, here's the knowledge drop
-${topicName}, we never stop
-
-Verse 1:
-Atoms in the nucleus, protons and neutrons tight
-Electrons spinning round, keeping it right
-
-Chorus:
-Learn it, know it, ace that test
-ReviseRight helping us be the best!`,
-    pop: `🎵 ${topicName} 🎵
-
-Protons, neutrons, electrons too
-Keep the facts and you'll be through
-Remember the numbers, remember the signs
-You've got this — you’ll be fine!`,
-    rock: `⚡ ${topicName} ⚡
-
-[Verse]
-Facts are flying, keep it tight
-Learn the rules, you’ll get it right
-
-[Chorus]
-We rock this knowledge, we own this stage
-Writing our future on every page`,
-  };
-
-  return mockLyrics[style] || mockLyrics.pop;
 }
