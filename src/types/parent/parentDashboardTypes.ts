@@ -188,6 +188,8 @@ export interface HeroStatusBannerProps {
   comingUpCount: number;
   onViewTodaySessions: () => void;
   onViewInsights: () => void;
+  reminders: GentleReminder[];
+  onAddChild: () => void;
 }
 
 export interface ChildHealthCardProps {
