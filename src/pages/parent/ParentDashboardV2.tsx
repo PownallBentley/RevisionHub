@@ -22,8 +22,8 @@ function HeroSkeleton() {
     <div className="bg-gradient-to-br from-primary-50 via-primary-100/50 to-neutral-0 rounded-2xl shadow-card p-8 border border-primary-200/30 animate-pulse mb-10">
       <div className="h-8 bg-primary-200/50 rounded w-2/3 mb-4"></div>
       <div className="h-4 bg-primary-200/30 rounded w-1/2 mb-6"></div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="bg-neutral-0 rounded-xl p-5 h-28"></div>
         ))}
       </div>
@@ -85,6 +85,12 @@ export function ParentDashboardV2() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper to navigate and scroll to top
+  const navigateWithScroll = (path: string) => {
+    navigate(path);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -106,36 +112,35 @@ export function ParentDashboardV2() {
     }
   }, [user]);
 
-  // Navigation handlers
+  // Navigation handlers - all use navigateWithScroll
   const handleViewTodaySessions = () => {
-    // Navigate to timetable with today's date
     const today = new Date().toISOString().split('T')[0];
-    navigate(`/parent/timetable?date=${today}`);
+    navigateWithScroll(`/parent/timetable?date=${today}`);
   };
 
   const handleViewInsights = () => {
-    navigate("/parent/insights");
+    navigateWithScroll("/parent/insights");
   };
 
   const handleGoToToday = (childId: string) => {
     const today = new Date().toISOString().split('T')[0];
-    navigate(`/parent/timetable?date=${today}&child=${childId}`);
+    navigateWithScroll(`/parent/timetable?date=${today}&child=${childId}`);
   };
 
   const handleViewChildInsights = (childId: string) => {
-    navigate(`/parent/insights?child=${childId}`);
+    navigateWithScroll(`/parent/insights?child=${childId}`);
   };
 
   const handleViewFullSchedule = () => {
-    navigate("/parent/timetable");
+    navigateWithScroll("/parent/timetable");
   };
 
   const handleSeeWhy = () => {
-    navigate("/parent/insights");
+    navigateWithScroll("/parent/insights");
   };
 
   const handleViewDetailedBreakdown = () => {
-    navigate("/parent/insights");
+    navigateWithScroll("/parent/insights");
   };
 
   // Loading state
@@ -168,7 +173,7 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
-      {/* Hero Status Banner (includes nudges) */}
+      {/* Hero Status Banner (includes nudges as 4th card) */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
