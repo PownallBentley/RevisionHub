@@ -1,11 +1,12 @@
 // src/components/parent/dashboard/HeroStatusBanner.tsx
 // Hero status banner for Parent Dashboard v2 (FEAT-009)
-// Updated: FEAT-010 - Solid badge colors, keep_an_eye status, centralized styling
+// Updated: FEAT-010 - Solid badge colors, keep_an_eye status
+// Updated: Removed arrows, nudges card now clickable
 
 import React from "react";
 import type { HeroStatusBannerProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
 
-// UPDATED: Solid badge colors, added keep_an_eye
+// Status content with solid badge colors
 const statusContent: Record<StatusIndicator, {
   headline: string;
   description: string;
@@ -38,7 +39,7 @@ const statusContent: Record<StatusIndicator, {
   },
 };
 
-// UPDATED: Solid background colors with white text
+// Centralized status colors
 const STATUS_COLORS: Record<StatusIndicator, string> = {
   on_track: '#1EC592',
   keep_an_eye: '#5B8DEF',
@@ -48,6 +49,7 @@ const STATUS_COLORS: Record<StatusIndicator, string> = {
 
 interface ExtendedHeroStatusBannerProps extends HeroStatusBannerProps {
   onAddChild: () => void;
+  onViewNudges?: () => void; // NEW: Handler for nudges card click
 }
 
 export function HeroStatusBanner({ 
@@ -57,16 +59,25 @@ export function HeroStatusBanner({
   onViewInsights,
   reminders,
   onAddChild,
+  onViewNudges,
 }: ExtendedHeroStatusBannerProps) {
   const status = (weekSummary.family_status || "on_track") as StatusIndicator;
   const content = statusContent[status] || statusContent.on_track;
   const badgeColor = STATUS_COLORS[status] || STATUS_COLORS.on_track;
   const nudgeCount = reminders.length;
   
-  // Get first nudge message for preview
-  const nudgePreview = nudgeCount > 0 
-    ? reminders[0].message 
-    : "All good!";
+  // Handle nudges click - scroll to nudges section or open modal
+  const handleNudgesClick = () => {
+    if (onViewNudges) {
+      onViewNudges();
+    } else {
+      // Default: scroll to nudges section
+      const nudgesSection = document.getElementById('helpful-nudges-section');
+      if (nudgesSection) {
+        nudgesSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
   
   return (
     <section className="mb-10">
@@ -75,7 +86,7 @@ export function HeroStatusBanner({
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <h2 className="text-3xl font-bold text-primary-900">{content.headline}</h2>
-              {/* UPDATED: Solid background badge with inline style */}
+              {/* Solid background badge */}
               <span 
                 className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold text-white"
                 style={{ backgroundColor: badgeColor }}
@@ -95,63 +106,65 @@ export function HeroStatusBanner({
           </div>
         </div>
         
-        {/* Stat Cards - 4 columns */}
+        {/* Stat Cards - 4 columns - REMOVED ARROWS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {/* Revision Rhythm */}
-          <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
+          <div className="bg-neutral-0 rounded-xl p-5 shadow-soft border border-neutral-200/50">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
+              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                 <i className="fa-solid fa-calendar-check text-primary-600 text-xl"></i>
               </div>
-              <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
             </div>
             <div className="text-2xl font-bold text-primary-900 mb-1">
               {weekSummary.days_active} active day{weekSummary.days_active !== 1 ? "s" : ""}
             </div>
             <div className="text-sm text-neutral-500 font-medium">Revision Rhythm</div>
-          </button>
+          </div>
           
           {/* Coming Up */}
-          <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
+          <div className="bg-neutral-0 rounded-xl p-5 shadow-soft border border-neutral-200/50">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-accent-green/10 rounded-xl flex items-center justify-center group-hover:bg-accent-green/20 transition-colors">
-                <i className="fa-solid fa-clock text-accent-green text-xl"></i>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <i className="fa-solid fa-clock text-[#1EC592] text-xl"></i>
               </div>
-              <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
             </div>
             <div className="text-2xl font-bold text-primary-900 mb-1">
               {comingUpCount} session{comingUpCount !== 1 ? "s" : ""}
             </div>
             <div className="text-sm text-neutral-500 font-medium">Coming Up</div>
-          </button>
+          </div>
           
           {/* Active Coverage */}
-          <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
+          <div className="bg-neutral-0 rounded-xl p-5 shadow-soft border border-neutral-200/50">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors">
+              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                 <i className="fa-solid fa-book-open text-primary-600 text-xl"></i>
               </div>
-              <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
             </div>
             <div className="text-2xl font-bold text-primary-900 mb-1">
               {weekSummary.subjects_active} subject{weekSummary.subjects_active !== 1 ? "s" : ""}
             </div>
             <div className="text-sm text-neutral-500 font-medium">Active Coverage</div>
-          </button>
+          </div>
 
-          {/* Helpful Nudges - 4th card */}
-          <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
+          {/* Helpful Nudges - CLICKABLE, shows count and scrolls to detail */}
+          <button 
+            onClick={handleNudgesClick}
+            className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group"
+          >
             <div className="flex items-center justify-between mb-3">
-              <div className={`w-12 h-12 ${nudgeCount > 0 ? 'bg-amber-100' : 'bg-green-100'} rounded-xl flex items-center justify-center transition-colors`}>
+              <div className={`w-12 h-12 ${nudgeCount > 0 ? 'bg-amber-100' : 'bg-green-100'} rounded-xl flex items-center justify-center`}>
                 <i className={`fa-solid ${nudgeCount > 0 ? 'fa-lightbulb text-[#E69B2C]' : 'fa-check text-[#1EC592]'} text-xl`}></i>
               </div>
-              <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
+              {nudgeCount > 0 && (
+                <span className="text-xs text-primary-600 font-medium group-hover:underline">View all</span>
+              )}
             </div>
             <div className="text-2xl font-bold text-primary-900 mb-1">
               {nudgeCount > 0 ? `${nudgeCount} nudge${nudgeCount !== 1 ? "s" : ""}` : "All good!"}
             </div>
-            <div className="text-sm text-neutral-500 font-medium truncate" title={nudgePreview}>
-              {nudgeCount > 0 ? nudgePreview : "Helpful Nudges"}
+            <div className="text-sm text-neutral-500 font-medium">
+              {nudgeCount > 0 ? "Click to see details" : "Helpful Nudges"}
             </div>
           </button>
         </div>
