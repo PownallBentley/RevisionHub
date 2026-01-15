@@ -298,14 +298,11 @@ function safeIntSeconds(value: number | null | undefined): number | null {
 
 function KeyTakeawayCard({ takeaway, index }: { takeaway: KeyTakeaway; index: number }) {
   return (
-    <div className="flex items-start space-x-4 p-4 bg-neutral-50 rounded-xl">
-      <div className="w-8 h-8 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-        <span className="text-white font-bold text-sm">{index + 1}</span>
+    <div className="flex items-center space-x-4 p-4 bg-neutral-50 rounded-xl">
+      <div className="w-10 h-10 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0">
+        <span className="text-white font-bold">{index + 1}</span>
       </div>
-      <div className="flex-1">
-        <h3 className="font-semibold text-neutral-700 mb-2">{takeaway.title}</h3>
-        <p className="text-neutral-600 text-sm">{takeaway.description}</p>
-      </div>
+      <p className="flex-1 text-neutral-800 font-semibold text-lg">{takeaway.description}</p>
     </div>
   );
 }
