@@ -1,8 +1,9 @@
 // src/pages/child/sessionSteps/CompleteStep.tsx
-// UPDATED: 6-Step Session Model - January 2026
+// UPDATED: January 2026 - 6-Step Session Model
 // Step 6: Combined Celebration + Reflection + Audio Notes
-// Merges previous Steps 6 (Reflection) and 7 (Complete)
-// NOW INCLUDES: Insert into child_session_reflections for transcription workflow and text notes
+// Child-friendly language update
+//
+// PRESERVES: Audio recording, transcription workflow, reflection insert
 
 import { useState, useRef, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -12,7 +13,6 @@ import {
   faTrophy,
   faCheckCircle,
   faClock,
-  faGaugeHigh,
   faFaceLaughBeam,
   faFaceSmile,
   faFaceMeh,
@@ -31,7 +31,7 @@ import {
   faLandmark,
   faDna,
   faBook,
-  faNoteSticky,
+  faPencil,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../../../lib/supabase";
@@ -69,7 +69,6 @@ type CompleteStepProps = {
     step_index: number;
     total_steps: number;
     child_name?: string;
-    // Required for voice note tracking
     child_id: string;
     revision_session_id: string;
   };
@@ -86,7 +85,7 @@ type CompleteStepProps = {
   onPatch: (patch: Record<string, any>) => Promise<void>;
   onFinish: () => Promise<void>;
   onStartNextSession?: () => void;
-  onUploadAudio?: (blob: Blob) => Promise<string>; // Returns URL after upload
+  onUploadAudio?: (blob: Blob) => Promise<string>;
 };
 
 // =============================================================================
@@ -96,52 +95,52 @@ type CompleteStepProps = {
 const CONFIDENCE_OPTIONS: Array<{
   id: ConfidenceLevel;
   label: string;
+  emoji: string;
   description: string;
   icon: IconDefinition;
   bgColor: string;
-  iconBgColor: string;
-  iconColor: string;
+  selectedBg: string;
   selectedBorder: string;
 }> = [
   {
     id: "very_confident",
-    label: "Very confident",
-    description: "I understand this really well and could explain it to someone else",
+    label: "Got it! 💪",
+    emoji: "😊",
+    description: "I could teach this to a friend",
     icon: faFaceLaughBeam,
-    bgColor: "bg-accent-green/10",
-    iconBgColor: "bg-accent-green",
-    iconColor: "text-white",
-    selectedBorder: "border-accent-green",
+    bgColor: "bg-white",
+    selectedBg: "bg-green-50",
+    selectedBorder: "border-green-500",
   },
   {
     id: "fairly_confident",
-    label: "Fairly confident",
-    description: "I get the main ideas but might need to review some parts",
+    label: "Pretty good",
+    emoji: "🙂",
+    description: "I understand most of it",
     icon: faFaceSmile,
-    bgColor: "bg-neutral-50",
-    iconBgColor: "bg-primary-200",
-    iconColor: "text-primary-600",
-    selectedBorder: "border-primary-600",
+    bgColor: "bg-white",
+    selectedBg: "bg-blue-50",
+    selectedBorder: "border-blue-500",
   },
   {
     id: "bit_unsure",
-    label: "A bit unsure",
-    description: "I understand some parts but others are still unclear",
+    label: "A bit wobbly",
+    emoji: "🤔",
+    description: "Some parts are still unclear",
     icon: faFaceMeh,
-    bgColor: "bg-neutral-50",
-    iconBgColor: "bg-accent-amber/20",
-    iconColor: "text-accent-amber",
-    selectedBorder: "border-accent-amber",
+    bgColor: "bg-white",
+    selectedBg: "bg-amber-50",
+    selectedBorder: "border-amber-500",
   },
   {
     id: "need_help",
-    label: "Need more help",
-    description: "This topic is still confusing and I'd like to go over it again",
+    label: "Need more practice",
+    emoji: "😅",
+    description: "I'd like to go over this again",
     icon: faFaceFrown,
-    bgColor: "bg-neutral-50",
-    iconBgColor: "bg-accent-red/20",
-    iconColor: "text-accent-red",
-    selectedBorder: "border-accent-red",
+    bgColor: "bg-white",
+    selectedBg: "bg-red-50",
+    selectedBorder: "border-red-400",
   },
 ];
 
@@ -166,54 +165,43 @@ function getIconFromName(iconName?: string): IconDefinition {
 
 function CelebrationBanner({
   childName,
-  subjectName,
   gamification,
 }: {
   childName: string;
-  subjectName: string;
   gamification: GamificationResult;
 }) {
   return (
-    <div className="bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200 rounded-2xl shadow-soft p-8 text-center border border-primary-300">
-      <div className="w-20 h-20 bg-accent-green rounded-full flex items-center justify-center mx-auto mb-4">
-        <FontAwesomeIcon icon={faStar} className="text-white text-3xl" />
-      </div>
-      <h2 className="text-3xl font-bold text-primary-900 mb-3">
-        Great work, {childName}! 🎉
+    <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 rounded-2xl shadow-card p-8 text-center border border-green-200">
+      <div className="text-6xl mb-4">🎉</div>
+      <h2 className="text-3xl font-bold text-neutral-900 mb-2">
+        You did it, {childName}!
       </h2>
-      <p className="text-neutral-600 text-lg mb-4">
-        You've completed today's {subjectName} session with excellent focus.
+      <p className="text-neutral-600 text-lg mb-6">
+        Another session complete - you're on fire!
       </p>
 
-      {/* Gamification Results */}
-      <div className="flex items-center justify-center space-x-6 mt-6">
+      {/* Stats Row */}
+      <div className="flex items-center justify-center gap-4">
         {/* XP Earned */}
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-soft">
-            <span className="text-2xl font-bold text-primary-900">
-              +{gamification.xpEarned}
-            </span>
-          </div>
-          <span className="text-neutral-600 text-sm font-medium">XP Earned</span>
+        <div className="bg-white rounded-xl p-4 shadow-sm min-w-[100px]">
+          <div className="text-2xl font-bold text-primary-600">+{gamification.xpEarned}</div>
+          <div className="text-xs text-neutral-500 mt-1">XP earned</div>
         </div>
 
         {/* Streak */}
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-soft">
-            <FontAwesomeIcon icon={faFire} className="text-accent-green text-2xl" />
+        <div className="bg-white rounded-xl p-4 shadow-sm min-w-[100px]">
+          <div className="flex items-center justify-center gap-1">
+            <FontAwesomeIcon icon={faFire} className="text-orange-500 text-xl" />
+            <span className="text-2xl font-bold text-neutral-900">{gamification.currentStreak}</span>
           </div>
-          <span className="text-neutral-600 text-sm font-medium">
-            {gamification.currentStreak}-Day Streak!
-          </span>
+          <div className="text-xs text-neutral-500 mt-1">day streak</div>
         </div>
 
         {/* Badge (if earned) */}
         {gamification.newBadge && (
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-soft">
-              <FontAwesomeIcon icon={faTrophy} className="text-accent-amber text-2xl" />
-            </div>
-            <span className="text-neutral-600 text-sm font-medium">New Badge</span>
+          <div className="bg-white rounded-xl p-4 shadow-sm min-w-[100px]">
+            <FontAwesomeIcon icon={faTrophy} className="text-amber-500 text-2xl" />
+            <div className="text-xs text-neutral-500 mt-1">New badge!</div>
           </div>
         )}
       </div>
@@ -231,7 +219,7 @@ function ConfidenceSelector({
   disabled: boolean;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-2 gap-3">
       {CONFIDENCE_OPTIONS.map((option) => {
         const isSelected = selected === option.id;
         return (
@@ -240,40 +228,20 @@ function ConfidenceSelector({
             type="button"
             onClick={() => onSelect(option.id)}
             disabled={disabled}
-            className={`w-full p-5 rounded-xl border-2 transition flex items-center space-x-4 ${
+            className={`p-4 rounded-xl border-2 transition text-left ${
               isSelected
-                ? `${option.bgColor} ${option.selectedBorder}`
-                : "bg-neutral-50 border-neutral-200 hover:border-primary-300"
+                ? `${option.selectedBg} ${option.selectedBorder}`
+                : `${option.bgColor} border-neutral-200 hover:border-neutral-300`
             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            <div
-              className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-                isSelected ? option.iconBgColor : "bg-neutral-200"
-              }`}
-            >
-              <FontAwesomeIcon
-                icon={option.icon}
-                className={`text-xl ${isSelected ? option.iconColor : "text-neutral-500"}`}
-              />
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-2xl">{option.emoji}</span>
+              <span className="font-semibold text-neutral-900">{option.label}</span>
+              {isSelected && (
+                <FontAwesomeIcon icon={faCheckCircle} className="text-green-500 ml-auto" />
+              )}
             </div>
-            <div className="flex-1 text-left">
-              <p className="font-bold text-neutral-900 mb-1">{option.label}</p>
-              <p className="text-neutral-600 text-sm">{option.description}</p>
-            </div>
-            {isSelected && (
-              <FontAwesomeIcon
-                icon={faCheckCircle}
-                className={`text-2xl ${
-                  option.id === "very_confident"
-                    ? "text-accent-green"
-                    : option.id === "fairly_confident"
-                    ? "text-primary-600"
-                    : option.id === "bit_unsure"
-                    ? "text-accent-amber"
-                    : "text-accent-red"
-                }`}
-              />
-            )}
+            <p className="text-neutral-500 text-sm">{option.description}</p>
           </button>
         );
       })}
@@ -308,9 +276,8 @@ function AudioRecorder({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recordingTimeRef = useRef<number>(0); // Track duration in ref for accurate capture
+  const recordingTimeRef = useRef<number>(0);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -318,7 +285,6 @@ function AudioRecorder({
     };
   }, []);
 
-  // Track playback progress
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -358,16 +324,10 @@ function AudioRecorder({
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         const url = URL.createObjectURL(blob);
-        const finalDuration = recordingTimeRef.current; // Use ref value, not state
-        const newAudioData = {
-          blob,
-          url,
-          durationSeconds: finalDuration,
-        };
+        const finalDuration = recordingTimeRef.current;
+        const newAudioData = { blob, url, durationSeconds: finalDuration };
         setAudioData(newAudioData);
         onRecordingComplete(newAudioData);
-
-        // Stop all tracks
         stream.getTracks().forEach((track) => track.stop());
       };
 
@@ -375,12 +335,10 @@ function AudioRecorder({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Start timer - update both state (for UI) and ref (for capture)
       timerRef.current = setInterval(() => {
         recordingTimeRef.current += 1;
         setRecordingTime((prev) => {
           const newTime = prev + 1;
-          // Max 60 seconds
           if (newTime >= 60) {
             stopRecording();
             return prev;
@@ -421,12 +379,10 @@ function AudioRecorder({
 
   function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!audioRef.current || !audioData.durationSeconds) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = clickX / rect.width;
     const newTime = percentage * audioData.durationSeconds;
-    
     audioRef.current.currentTime = newTime;
     setCurrentPlaybackTime(Math.floor(newTime));
   }
@@ -447,58 +403,43 @@ function AudioRecorder({
     return `${mins}:${String(secs).padStart(2, "0")}`;
   }
 
-  function formatFileSize(bytes: number | undefined): string {
-    if (!bytes) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
   const hasRecording = audioData.url !== null;
-  const progressPercentage = audioData.durationSeconds > 0 
-    ? (currentPlaybackTime / audioData.durationSeconds) * 100 
+  const progressPercentage = audioData.durationSeconds > 0
+    ? (currentPlaybackTime / audioData.durationSeconds) * 100
     : 0;
 
   return (
-    <div className="p-6 bg-neutral-50 rounded-xl">
-      {/* Hidden audio element for playback */}
-      {audioData.url && (
-        <audio
-          ref={audioRef}
-          src={audioData.url}
-        />
-      )}
+    <div className="p-5 bg-neutral-50 rounded-xl">
+      {audioData.url && <audio ref={audioRef} src={audioData.url} />}
 
       {!hasRecording ? (
-        // Recording UI
         <div className="text-center">
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
             disabled={disabled}
-            className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 transition ${
+            className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 transition ${
               isRecording
-                ? "bg-accent-red animate-pulse"
+                ? "bg-red-500 animate-pulse"
                 : "bg-primary-600 hover:bg-primary-700"
             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <FontAwesomeIcon
               icon={isRecording ? faStop : faMicrophone}
-              className="text-white text-2xl"
+              className="text-white text-xl"
             />
           </button>
 
           {isRecording ? (
             <>
-              <p className="text-lg font-semibold text-neutral-900 mb-1">
+              <p className="font-semibold text-neutral-900 mb-1">
                 Recording... {formatTime(recordingTime)}
               </p>
               <p className="text-neutral-500 text-sm">Tap to stop (max 60s)</p>
-              {/* Recording progress bar */}
-              <div className="mt-4 w-full max-w-xs mx-auto">
-                <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-accent-red transition-all duration-1000 ease-linear"
+              <div className="mt-3 w-full max-w-[200px] mx-auto">
+                <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-red-500 transition-all duration-1000 ease-linear"
                     style={{ width: `${(recordingTime / 60) * 100}%` }}
                   />
                 </div>
@@ -506,66 +447,48 @@ function AudioRecorder({
             </>
           ) : (
             <>
-              <p className="font-semibold text-neutral-700 mb-1">
-                Record a voice note
-              </p>
-              <p className="text-neutral-500 text-sm">
-                Capture your thoughts in your own words
-              </p>
+              <p className="font-medium text-neutral-700 mb-1">Record a voice note</p>
+              <p className="text-neutral-500 text-sm">Say what you learned in your own words</p>
             </>
           )}
         </div>
       ) : (
-        // Playback UI with progress bar
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={togglePreview}
-              className={`w-14 h-14 rounded-full flex items-center justify-center transition flex-shrink-0 ${
-                isPreviewing 
-                  ? "bg-primary-700" 
-                  : "bg-primary-600 hover:bg-primary-700"
-              }`}
+              className="w-12 h-12 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center transition flex-shrink-0"
             >
               <FontAwesomeIcon
                 icon={isPreviewing ? faPause : faPlay}
-                className="text-white text-xl"
+                className="text-white text-lg"
               />
             </button>
 
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-neutral-700 mb-1">Voice note recorded</p>
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
-                <span>{formatTime(currentPlaybackTime)} / {formatTime(audioData.durationSeconds)}</span>
-                {audioData.blob && (
-                  <>
-                    <span className="text-neutral-300">•</span>
-                    <span>{formatFileSize(audioData.blob.size)}</span>
-                  </>
-                )}
-              </div>
+              <p className="font-medium text-neutral-700">Voice note recorded ✓</p>
+              <p className="text-sm text-neutral-500">
+                {formatTime(currentPlaybackTime)} / {formatTime(audioData.durationSeconds)}
+              </p>
             </div>
 
             <button
               type="button"
               onClick={handleDelete}
               disabled={disabled}
-              className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center hover:bg-accent-red/10 hover:text-accent-red transition flex-shrink-0"
+              className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition flex-shrink-0"
             >
-              <FontAwesomeIcon icon={faTrash} className="text-neutral-600" />
+              <FontAwesomeIcon icon={faTrash} className="text-neutral-500" />
             </button>
           </div>
 
-          {/* Progress bar */}
-          <div 
-            className="h-2 bg-neutral-200 rounded-full overflow-hidden cursor-pointer"
+          <div
+            className="h-1.5 bg-neutral-200 rounded-full overflow-hidden cursor-pointer"
             onClick={handleProgressClick}
           >
-            <div 
-              className={`h-full bg-primary-600 transition-all ${
-                isPreviewing ? "duration-100" : "duration-0"
-              }`}
+            <div
+              className="h-full bg-primary-600 transition-all duration-100"
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
@@ -588,7 +511,6 @@ export default function CompleteStep({
   onStartNextSession,
   onUploadAudio,
 }: CompleteStepProps) {
-  // Extract from payload
   const complete = payload?.complete ?? {};
   const initialGamification: GamificationResult = complete.gamification ?? {
     xpEarned: 45,
@@ -596,7 +518,6 @@ export default function CompleteStep({
     newBadge: { id: "focus_master", name: "Focus Master", icon: "trophy" },
   };
 
-  // State
   const [postConfidence, setPostConfidence] = useState<ConfidenceLevel | null>(
     complete.postConfidence ?? null
   );
@@ -607,16 +528,12 @@ export default function CompleteStep({
     durationSeconds: complete.audioDurationSeconds ?? 0,
   });
 
-  // Derived
   const subjectIcon = getIconFromName(overview.subject_icon);
   const subjectColor = overview.subject_color || "#5B2CFF";
   const childName = overview.child_name || "there";
   const sessionMinutes = overview.session_duration_minutes ?? 20;
-
-  // Can finish if confidence is selected
   const canFinish = postConfidence !== null;
 
-  // Handlers
   function handleConfidenceSelect(level: ConfidenceLevel) {
     setPostConfidence(level);
   }
@@ -644,15 +561,10 @@ export default function CompleteStep({
       }
     }
 
-    // =========================================================================
-    // INSERT INTO child_session_reflections FOR TRANSCRIPTION WORKFLOW
-    // This triggers the N8n webhook via Supabase database webhook
-    // Captures both audio (for transcription) and text notes
-    // Runs regardless of whether audio was uploaded
-    // =========================================================================
+    // Insert reflection record for transcription workflow
     const hasAudio = !!audioUrl;
     const hasTextNote = journalNote.trim().length > 0;
-    
+
     if (hasAudio || hasTextNote) {
       const { error: reflectionError } = await supabase
         .from("child_session_reflections")
@@ -667,14 +579,13 @@ export default function CompleteStep({
         });
 
       if (reflectionError) {
-        // Log but don't block session completion
         console.error("[CompleteStep] Failed to create reflection record:", reflectionError);
       } else {
         console.log("[CompleteStep] Session reflection record created", { hasAudio, hasTextNote });
       }
     }
 
-    // Save all data to step payload
+    // Save to step payload
     await onPatch({
       complete: {
         gamification: initialGamification,
@@ -690,11 +601,9 @@ export default function CompleteStep({
   }
 
   return (
-    <div className="space-y-8">
-      {/* ================================================================== */}
-      {/* Session Header */}
-      {/* ================================================================== */}
-      <section className="mb-8">
+    <div className="space-y-6">
+      {/* Header */}
+      <section>
         <div className="flex items-center space-x-3 mb-4">
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -704,55 +613,38 @@ export default function CompleteStep({
           </div>
           <div>
             <p className="text-neutral-500 text-sm">
-              {overview.subject_name} • Step {overview.step_index} of{" "}
-              {overview.total_steps}
+              {overview.subject_name} • Step {overview.step_index} of {overview.total_steps}
             </p>
-            <h1 className="text-2xl font-bold text-primary-900">
-              {overview.topic_name}
-            </h1>
+            <h1 className="text-2xl font-bold text-primary-900">{overview.topic_name}</h1>
           </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 bg-accent-green/10 px-4 py-2 rounded-full">
-            <FontAwesomeIcon icon={faCheckCircle} className="text-accent-green" />
-            <span className="text-accent-green font-semibold text-sm">
-              Session Complete
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-green-100 px-3 py-1.5 rounded-full">
+            <FontAwesomeIcon icon={faCheckCircle} className="text-green-600" />
+            <span className="text-green-700 font-medium text-sm">Complete!</span>
           </div>
-          <div className="flex items-center space-x-2 text-neutral-500 text-sm">
+          <div className="flex items-center gap-2 text-neutral-500 text-sm">
             <FontAwesomeIcon icon={faClock} />
-            <span>{sessionMinutes} minutes</span>
+            <span>{sessionMinutes} mins</span>
           </div>
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* Celebration Section */}
-      {/* ================================================================== */}
-      <section className="mb-8">
-        <CelebrationBanner
-          childName={childName}
-          subjectName={overview.subject_name}
-          gamification={initialGamification}
-        />
+      {/* Celebration */}
+      <section>
+        <CelebrationBanner childName={childName} gamification={initialGamification} />
       </section>
 
-      {/* ================================================================== */}
-      {/* Confidence Check Section */}
-      {/* ================================================================== */}
-      <section className="mb-8">
+      {/* Confidence Check */}
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
-          <div className="flex items-center space-x-3 mb-6">
+          <div className="flex items-center space-x-3 mb-5">
             <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-              <FontAwesomeIcon icon={faGaugeHigh} className="text-primary-600 text-xl" />
+              <span className="text-2xl">🤔</span>
             </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-primary-900">
-                How confident do you feel?
-              </h2>
-              <p className="text-neutral-500 text-sm">
-                Your honest answer helps us support you better
-              </p>
+            <div>
+              <h2 className="text-xl font-bold text-primary-900">How do you feel about this topic?</h2>
+              <p className="text-neutral-500 text-sm">Be honest - it helps us help you!</p>
             </div>
           </div>
 
@@ -761,33 +653,19 @@ export default function CompleteStep({
             onSelect={handleConfidenceSelect}
             disabled={saving}
           />
-
-          <div className="mt-6 p-4 bg-primary-50 rounded-xl border border-primary-200">
-            <p className="text-neutral-600 text-sm">
-              <strong className="text-primary-900">Remember:</strong> It's completely
-              normal to need more time with some topics. Being honest about how you
-              feel helps us give you the right support.
-            </p>
-          </div>
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* Journal Note Section */}
-      {/* ================================================================== */}
-      <section className="mb-8">
+      {/* Notes Section */}
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
-          <div className="flex items-center space-x-3 mb-6">
+          <div className="flex items-center space-x-3 mb-5">
             <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-              <FontAwesomeIcon icon={faNoteSticky} className="text-primary-600 text-xl" />
+              <FontAwesomeIcon icon={faPencil} className="text-primary-600 text-xl" />
             </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-primary-900">
-                Anything you want to remember?
-              </h2>
-              <p className="text-neutral-500 text-sm">
-                Jot down notes, questions, or thoughts from this session
-              </p>
+            <div>
+              <h2 className="text-xl font-bold text-primary-900">Any notes for next time?</h2>
+              <p className="text-neutral-500 text-sm">Questions, thoughts, things to remember</p>
             </div>
           </div>
 
@@ -795,21 +673,16 @@ export default function CompleteStep({
             value={journalNote}
             onChange={(e) => handleJournalChange(e.target.value)}
             disabled={saving}
-            placeholder="Write your thoughts here... What stood out? Any questions for next time?"
-            rows={4}
-            className="w-full px-4 py-3 border-2 border-neutral-200 rounded-xl focus:outline-none focus:border-primary-600 transition resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="What stood out? Any questions? Write anything you want to remember..."
+            rows={3}
+            className="w-full px-4 py-3 border-2 border-neutral-200 rounded-xl focus:outline-none focus:border-primary-500 transition resize-none disabled:opacity-50 text-neutral-700"
           />
 
-          {/* Audio Recording */}
-          <div className="mt-6">
-            <div className="flex items-center space-x-2 mb-4">
+          <div className="mt-4">
+            <p className="text-sm text-neutral-600 mb-3 flex items-center gap-2">
               <FontAwesomeIcon icon={faMicrophone} className="text-primary-600" />
-              <span className="font-semibold text-neutral-700">
-                Or record a voice note
-              </span>
-              <span className="text-neutral-400 text-sm">(optional)</span>
-            </div>
-
+              <span className="font-medium">Or say it instead:</span>
+            </p>
             <AudioRecorder
               existingUrl={complete.audioNoteUrl ?? null}
               existingDuration={complete.audioDurationSeconds ?? 0}
@@ -821,50 +694,42 @@ export default function CompleteStep({
         </div>
       </section>
 
-      {/* ================================================================== */}
-      {/* StudyBuddy Encouragement */}
-      {/* ================================================================== */}
-      <section className="mb-8">
+      {/* Encouragement */}
+      <section>
         <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-card p-6 text-white">
           <div className="flex items-start space-x-4">
-            <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <FontAwesomeIcon icon={faStar} className="text-white text-2xl" />
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <FontAwesomeIcon icon={faStar} className="text-white text-xl" />
             </div>
             <div className="flex-1">
-              <h3 className="text-xl font-bold mb-3">Well done, {childName}!</h3>
-              <p className="text-primary-50 mb-4">
-                You've shown great focus today. Every session builds your knowledge
-                and gets you closer to exam success. Take a well-deserved break!
+              <h3 className="text-lg font-bold mb-2">Amazing work, {childName}! 🌟</h3>
+              <p className="text-primary-100 text-sm mb-3">
+                Every session makes you stronger. Take a break, have a snack, and feel proud of what you've done today!
               </p>
-              <div className="flex items-center space-x-2 text-primary-100 text-sm">
-                <FontAwesomeIcon icon={faStar} />
-                <span>
-                  Tip: Try explaining what you learned to someone — it's one of the
-                  best ways to remember!
-                </span>
-              </div>
+              <p className="text-primary-200 text-xs flex items-center gap-2">
+                <span>💡</span>
+                <span>Top tip: Tell someone what you learned - it helps it stick!</span>
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ================================================================== */}
       {/* Action Buttons */}
-      {/* ================================================================== */}
-      <section className="mb-8">
+      <section>
         <div className="bg-white rounded-2xl shadow-card p-6">
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={onFinish}
+              onClick={handleFinish}
               disabled={!canFinish || saving}
-              className="flex items-center space-x-2 px-6 py-3 bg-neutral-100 text-neutral-700 font-semibold rounded-xl hover:bg-neutral-200 transition disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-3 bg-neutral-100 text-neutral-700 font-medium rounded-xl hover:bg-neutral-200 transition disabled:opacity-50"
             >
               <FontAwesomeIcon icon={faHome} />
-              <span>Return Home</span>
+              <span>Home</span>
             </button>
 
-            {onStartNextSession && (
+            {onStartNextSession ? (
               <button
                 type="button"
                 onClick={async () => {
@@ -872,21 +737,19 @@ export default function CompleteStep({
                   onStartNextSession();
                 }}
                 disabled={!canFinish || saving}
-                className="flex items-center space-x-2 px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
               >
-                <span>{saving ? "Saving..." : "Start Next Session"}</span>
+                <span>{saving ? "Saving..." : "Next Session"}</span>
                 <FontAwesomeIcon icon={faArrowRight} />
               </button>
-            )}
-
-            {!onStartNextSession && (
+            ) : (
               <button
                 type="button"
                 onClick={handleFinish}
                 disabled={!canFinish || saving}
-                className="flex items-center space-x-2 px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50"
               >
-                <span>{saving ? "Saving..." : "Finish Session"}</span>
+                <span>{saving ? "Saving..." : "Finish"}</span>
                 <FontAwesomeIcon icon={faCheckCircle} />
               </button>
             )}
@@ -894,7 +757,7 @@ export default function CompleteStep({
 
           {!canFinish && (
             <p className="mt-4 text-center text-neutral-500 text-sm">
-              Please select how confident you feel to continue
+              Please tell us how you're feeling about this topic to continue
             </p>
           )}
         </div>
