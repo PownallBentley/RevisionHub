@@ -162,19 +162,18 @@ export default function SubjectProgress() {
     );
   }
 
-  // Calculate stats
+  // Calculate stats - USE ONLY RPC STATUS for consistency
   const totalSubjects = data.subjects.length;
+  const subjectsNeedingAttention = data.subjects.filter(
+    (s) => s.status === "needs_attention"
+  );
   const subjectsOnTrack = data.subjects.filter(
     (s) => s.status === "in_progress" || s.status === "completed"
   ).length;
+  const hasIssues = subjectsNeedingAttention.length > 0;
+
   const sessionsThisWeek = data.child.sessions_this_week || 0;
   const topicsCoveredThisWeek = data.child.topics_covered_this_week || 0;
-
-  // Find subjects needing attention
-  const subjectsNeedingAttention = data.subjects.filter(
-    (s) => s.status === "needs_attention" || s.completion_percentage < 50
-  );
-  const hasIssues = subjectsNeedingAttention.length > 0;
 
   // Calculate average coverage
   const avgCoverage =
@@ -269,7 +268,7 @@ export default function SubjectProgress() {
             </div>
           </div>
 
-          {/* Mini Stat Cards */}
+          {/* Mini Stat Cards - Consistent structure */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {/* Total Subjects Card */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
@@ -279,8 +278,10 @@ export default function SubjectProgress() {
                 </div>
                 <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
-              <div className="text-2xl font-bold text-primary-900">{totalSubjects}</div>
-              <div className="text-sm text-neutral-500">Total Subjects</div>
+              <div className="text-2xl font-bold text-primary-900">
+                {totalSubjects} subject{totalSubjects !== 1 ? "s" : ""}
+              </div>
+              <div className="text-sm text-neutral-500">Active Coverage</div>
             </div>
 
             {/* Sessions This Week Card */}
@@ -291,8 +292,10 @@ export default function SubjectProgress() {
                 </div>
                 <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
-              <div className="text-2xl font-bold text-primary-900">{sessionsThisWeek}</div>
-              <div className="text-sm text-neutral-500">Sessions This Week</div>
+              <div className="text-2xl font-bold text-primary-900">
+                {sessionsThisWeek} session{sessionsThisWeek !== 1 ? "s" : ""}
+              </div>
+              <div className="text-sm text-neutral-500">Completed This Week</div>
             </div>
 
             {/* Topics Covered Card */}
@@ -303,8 +306,10 @@ export default function SubjectProgress() {
                 </div>
                 <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
-              <div className="text-2xl font-bold text-primary-900">{topicsCoveredThisWeek}</div>
-              <div className="text-sm text-neutral-500">Topics This Week</div>
+              <div className="text-2xl font-bold text-primary-900">
+                {topicsCoveredThisWeek} topic{topicsCoveredThisWeek !== 1 ? "s" : ""}
+              </div>
+              <div className="text-sm text-neutral-500">Covered This Week</div>
             </div>
 
             {/* Coverage Status Card */}
