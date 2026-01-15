@@ -7,7 +7,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/SignUp";
 import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
-import ParentDashboardV2 from "./pages/ParentDashboardV2";
+import ParentDashboardV2 from "./pages/parent/ParentDashboardV2";
 import SubjectProgress from "./pages/parent/SubjectProgress";
 import Timetable from "./pages/parent/Timetable";
 import Account from "./pages/Account";
