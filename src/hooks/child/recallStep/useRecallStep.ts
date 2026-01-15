@@ -2,8 +2,8 @@
 // State management hook for RecallStep
 
 import { useState, useCallback, useMemo } from "react";
-import type { Flashcard, CardRating, CardHistory } from "@/types/child/recallStep";
-import { updateFlashcardProgress, buildRecallSummary } from "@/services/child/recallStep";
+import type { Flashcard, CardRating, CardHistory } from "../../../types/child/recallStep";
+import { updateFlashcardProgress, buildRecallSummary } from "../../../services/child/recallStep";
 
 type UseRecallStepProps = {
   cards: Flashcard[];
