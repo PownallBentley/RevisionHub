@@ -1,4 +1,5 @@
 // src/App.tsx
+// Updated 15 Jan 2026: Added ParentSettingsPage route
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "./components/layout/AppLayout";
@@ -15,12 +16,11 @@ import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 import DevRpcTest from "./pages/child/DevRpcTest";
-import InsightsReport from './pages/parent/InsightsReport';
-
+import ParentInsightsPage from "./pages/parent/ParentInsightsPage";
+import ParentSettingsPage from "./pages/parent/ParentSettingsPage";
 
 function HomeGate() {
   const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-neutral-600">
@@ -28,18 +28,13 @@ function HomeGate() {
       </div>
     );
   }
-
   if (!user) return <Landing />;
-
   if (isUnresolved) return <Landing />;
-
   if (isChild) return <Navigate to="/child/today" replace />;
-
   if (isParent) {
     if (parentChildCount === 0) return <Navigate to="/parent/onboarding" replace />;
     return <Navigate to="/parent" replace />;
   }
-
   return <Landing />;
 }
 
@@ -63,17 +58,16 @@ export default function App() {
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
-        <Route path="/parent/insights/report" element={<InsightsReport />} />
+          <Route path="/parent/insights" element={<ParentInsightsPage />} />
+          <Route path="/parent/settings" element={<ParentSettingsPage />} />
 
           {/* Shared */}
           <Route path="/account" element={<Account />} />
 
           {/* Child */}
           <Route path="/child/today" element={<Today />} />
-
           {/* Canonical: planned session opens the runner directly (Preview is step 1) */}
           <Route path="/child/session/:plannedSessionId" element={<SessionRun />} />
-
           {/* Legacy route kept for backwards compatibility */}
           <Route path="/child/session/:plannedSessionId/run" element={<Navigate to=".." replace />} />
 
