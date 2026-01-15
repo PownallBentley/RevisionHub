@@ -1,22 +1,19 @@
 // src/types/parent/parentDashboardTypes.ts
-// Types for Parent Dashboard v2 (FEAT-009)
+// Updated: FEAT-010 - Added keep_an_eye status
 
-// ============================================================================
-// Status Types
-// ============================================================================
+// UPDATED: Added keep_an_eye
+export type StatusIndicator = 'on_track' | 'keep_an_eye' | 'needs_attention' | 'getting_started';
 
-export type StatusIndicator = 'on_track' | 'needs_attention' | 'getting_started';
-
-export type MomentType = 
-  | 'achievement' 
-  | 'sessions_milestone' 
-  | 'streak_milestone' 
-  | 'getting_started'
-  | 'focus_mode';
-
-// ============================================================================
-// Child Types
-// ============================================================================
+// NEW: Status reason type
+export type StatusReason = 
+  | 'progressing_well'
+  | 'no_recent_activity'
+  | 'schedule_behind'
+  | 'confidence_declining'
+  | 'streak_broken'
+  | 'activity_gap'
+  | 'schedule_slipping'
+  | 'new_child';
 
 export interface ChildSubject {
   subject_id: string;
@@ -48,21 +45,20 @@ export interface ChildSummary {
   prev_week_sessions_completed: number;
   auth_user_id: string | null;
   invitation_code: string | null;
-  // v1.3 fields
   avatar_url: string | null;
   current_streak: number;
   longest_streak: number;
+  // Status fields (UPDATED for FEAT-010)
   status_indicator: StatusIndicator;
   status_label: string;
+  status_reason: StatusReason;    // NEW
+  status_detail: string;          // NEW
+  // Insight fields
   insight_message: string;
   insight_sub_message: string;
   insight_icon: string;
   next_session_time: string | null;
 }
-
-// ============================================================================
-// Week Summary Types
-// ============================================================================
 
 export interface WeekSummary {
   sessions_completed: number;
@@ -74,14 +70,9 @@ export interface WeekSummary {
   total_minutes: number;
   average_session_minutes: number;
   days_active: number;
-  // v1.3 fields
   family_status: StatusIndicator;
   family_status_label: string;
 }
-
-// ============================================================================
-// Daily Pattern Types
-// ============================================================================
 
 export interface DailyPattern {
   day_of_week: string;
@@ -93,18 +84,9 @@ export interface DailyPattern {
   is_rest_day: boolean;
 }
 
-// ============================================================================
-// Reminder Types
-// ============================================================================
-
-export type ReminderType = 
-  | 'mocks_coming_up' 
-  | 'topic_to_revisit' 
-  | 'building_momentum' 
-  | 'subject_neglected';
-
+// UPDATED: Added status fields for status_explainer type
 export interface GentleReminder {
-  type: ReminderType;
+  type: 'status_explainer' | 'mocks_coming_up' | 'topic_to_revisit' | 'subject_neglected';
   priority: number;
   child_id: string;
   child_name: string;
@@ -113,11 +95,10 @@ export interface GentleReminder {
   subject_name: string | null;
   topic_id: string | null;
   topic_name: string | null;
+  status_indicator?: StatusIndicator | null;  // NEW
+  status_reason?: StatusReason | null;        // NEW
+  status_detail?: string | null;              // NEW
 }
-
-// ============================================================================
-// Coming Up Types
-// ============================================================================
 
 export interface ComingUpSession {
   planned_session_id: string;
@@ -136,10 +117,6 @@ export interface ComingUpSession {
   day_label: string;
 }
 
-// ============================================================================
-// Subject Coverage Types
-// ============================================================================
-
 export interface SubjectCoverage {
   child_id: string;
   child_name: string;
@@ -151,23 +128,15 @@ export interface SubjectCoverage {
   topics_covered: number;
 }
 
-// ============================================================================
-// Progress Moments Types (v1.3)
-// ============================================================================
-
 export interface ProgressMoment {
   child_id: string;
   child_name: string;
   avatar_url: string | null;
-  moment_type: MomentType;
+  moment_type: 'achievement' | 'sessions_milestone' | 'streak_milestone' | 'getting_started';
   message: string;
   sub_message: string;
   icon: string;
 }
-
-// ============================================================================
-// Main Dashboard Response
-// ============================================================================
 
 export interface ParentDashboardData {
   children: ChildSummary[];
@@ -179,56 +148,17 @@ export interface ParentDashboardData {
   progress_moments: ProgressMoment[];
 }
 
-// ============================================================================
-// Component Props
-// ============================================================================
-
-export interface HeroStatusBannerProps {
-  weekSummary: WeekSummary;
-  comingUpCount: number;
-  onViewTodaySessions: () => void;
-  onViewInsights: () => void;
-  reminders: GentleReminder[];
-  onAddChild: () => void;
-}
-
+// Props types for components
 export interface ChildHealthCardProps {
   child: ChildSummary;
   onGoToToday: (childId: string) => void;
   onViewInsights: (childId: string) => void;
 }
 
-export interface ChildHealthCardGridProps {
-  children: ChildSummary[];
-  onGoToToday: (childId: string) => void;
-  onViewInsights: (childId: string) => void;
-}
-
-export interface WeeklyFocusStripProps {
-  dailyPattern: DailyPattern[];
-  onSeeWhy: () => void;
-}
-
-export interface ComingUpCardProps {
-  sessions: ComingUpSession[];
-  onViewFullSchedule: () => void;
-}
-
-export interface HelpfulNudgesCardProps {
-  reminders: GentleReminder[];
-}
-
-export interface ProgressMomentsCardProps {
-  moments: ProgressMoment[];
-}
-
-export interface FamilyOverviewCardProps {
-  weekSummary: WeekSummary;
-  subjectCoverage: SubjectCoverage[];
-  childrenCount: number;
-}
-
-export interface WeeklyRhythmChartProps {
-  dailyPattern: DailyPattern[];
-  onViewDetailedBreakdown: () => void;
-}
+// Color reference for status badges
+export const STATUS_COLORS: Record<StatusIndicator, { bg: string; text: string }> = {
+  on_track: { bg: '#1EC592', text: 'white' },
+  keep_an_eye: { bg: '#5B8DEF', text: 'white' },
+  needs_attention: { bg: '#E69B2C', text: 'white' },
+  getting_started: { bg: '#7C3AED', text: 'white' },
+};
