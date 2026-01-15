@@ -12,7 +12,6 @@ import {
   faExclamationCircle,
   faArrowRight,
   faPlus,
-  faUserPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
@@ -224,13 +223,20 @@ export default function SubjectProgress() {
                 <h1 className="text-2xl md:text-3xl font-bold text-primary-900">
                   {headlineContent.headline}
                 </h1>
+                {/* Status Badge - Solid style matching SubjectCard */}
                 {headlineContent.status === "attention" && (
-                  <span className="px-3 py-1 text-sm font-medium rounded-full bg-amber-100 text-accent-amber">
+                  <span 
+                    className="px-3 py-1 text-sm font-medium rounded-full text-white"
+                    style={{ backgroundColor: "#FFB547" }}
+                  >
                     Needs Attention
                   </span>
                 )}
                 {headlineContent.status === "good" && (
-                  <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-accent-green">
+                  <span 
+                    className="px-3 py-1 text-sm font-medium rounded-full text-white"
+                    style={{ backgroundColor: "#1EC592" }}
+                  >
                     On Track
                   </span>
                 )}
