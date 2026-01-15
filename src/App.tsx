@@ -7,7 +7,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/SignUp";
 import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
-import ParentDashboarV2 from "./pages/ParentDashboardV2";
+import ParentDashboardV2 from "./pages/ParentDashboardV2";
 import SubjectProgress from "./pages/parent/SubjectProgress";
 import Timetable from "./pages/parent/Timetable";
 import Account from "./pages/Account";
@@ -15,8 +15,6 @@ import Today from "./pages/child/Today";
 import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
-import DevRpcTest from "./pages/child/DevRpcTest";
-import ParentSettingsPage from "./pages/parent/ParentSettingsPage";
 import InsightsDashboard from './pages/parent/InsightsDashboard';
 
 function HomeGate() {
