@@ -1,8 +1,8 @@
 // src/services/parent/parentDashboardService.ts
 // Service layer for Parent Dashboard v2 (FEAT-009)
 
-import { supabase } from '@/lib/supabase';
-import type { ParentDashboardData } from '@/types/parent/parentDashboardTypes';
+import { supabase } from "../../lib/supabase";
+import type { ParentDashboardData } from "../../types/parent/parentDashboardTypes";
 
 /**
  * Fetches all data needed for the parent dashboard in a single RPC call.
@@ -12,17 +12,16 @@ export async function fetchParentDashboardData(
   parentId: string,
   weekStart?: string
 ): Promise<ParentDashboardData> {
-  const { data, error } = await supabase.rpc('rpc_get_parent_dashboard_summary', {
+  const { data, error } = await supabase.rpc("rpc_get_parent_dashboard_summary", {
     p_parent_id: parentId,
     p_week_start: weekStart || null,
   });
 
   if (error) {
-    console.error('Error fetching parent dashboard data:', error);
+    console.error("Error fetching parent dashboard data:", error);
     throw new Error(`Failed to fetch dashboard data: ${error.message}`);
   }
 
-  // Return with defaults for empty arrays
   return {
     children: data?.children ?? [],
     week_summary: data?.week_summary ?? {
@@ -35,8 +34,8 @@ export async function fetchParentDashboardData(
       total_minutes: 0,
       average_session_minutes: 0,
       days_active: 0,
-      family_status: 'getting_started',
-      family_status_label: 'Getting Started',
+      family_status: "getting_started",
+      family_status_label: "Getting Started",
     },
     daily_pattern: data?.daily_pattern ?? [],
     gentle_reminders: data?.gentle_reminders ?? [],
@@ -61,7 +60,7 @@ export async function getParentDashboard(weekStart?: string): Promise<ParentDash
   const parentId = await getCurrentParentId();
   
   if (!parentId) {
-    console.warn('No authenticated parent found');
+    console.warn("No authenticated parent found");
     return null;
   }
 
