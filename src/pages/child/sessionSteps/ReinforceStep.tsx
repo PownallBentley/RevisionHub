@@ -1,306 +1,472 @@
 // src/pages/child/sessionSteps/ReinforceStep.tsx
-// UPDATED: 7-Step Session Model - January 2026
-// This is now "Core Teaching" (Step 3) - delivers 3-4 learning slides
+// UPDATED: January 2026 - Teaching slides + worked examples
+// Child-friendly language throughout
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faArrowLeft,
   faArrowRight,
-  faCheck,
+  faArrowLeft,
   faLightbulb,
-  faCalculator,
-  faExclamation,
-  faRobot,
-  faCommentDots,
   faBookOpen,
-  faFlask,
-  faAtom,
-  faGlobe,
-  faLandmark,
-  faDna,
-  faBook,
-  IconDefinition,
+  faExclamationTriangle,
+  faCheckCircle,
+  faGraduationCap,
+  faPencil,
 } from "@fortawesome/free-solid-svg-icons";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type SlideKeyPoint = {
-  title: string;
-  text: string;
-};
-
-type SlideExample = {
-  title: string;
-  description: string;
-  data?: Record<string, string | number>; // e.g., { "Protons": 6, "Neutrons": 6 }
-};
-
-type SlideGridItem = {
-  icon?: string;
-  iconColor?: string;
-  title: string;
-  subtitle: string;
-  detail?: string;
-};
-
-type LearningSlide = {
+type TeachingSlide = {
   id: string;
-  slideNumber: number;
-  sectionTitle: string;
-  heading: string;
-  bodyText: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  keyPoint?: SlideKeyPoint;
-  example?: SlideExample;
-  gridItems?: SlideGridItem[];
-  isMisconception?: boolean;
-  misconceptionWrong?: string;
-  misconceptionCorrect?: string;
+  title: string;
+  content: string;
+  key_points: string[];
+  examiner_tip: string;
+  slide_number: number;
+};
+
+type WorkedExampleStep = {
+  step_id: string;
+  content: string;
+  marks: number;
+};
+
+type WorkedExample = {
+  id: string;
+  title: string;
+  question_context: string;
+  steps: WorkedExampleStep[];
+  final_answer: string;
+  common_mistake: string;
+};
+
+type StepOverview = {
+  subject_name: string;
+  subject_icon: string | null;
+  subject_color: string | null;
+  topic_name: string;
+  topic_id: string;
+  session_duration_minutes: number;
+  step_key: string;
+  step_index: number;
+  total_steps: number;
+  child_name: string;
+  child_id: string;
+  revision_session_id: string;
 };
 
 type ReinforceStepProps = {
-  overview: {
-    subject_name: string;
-    subject_icon?: string;
-    subject_color?: string;
-    topic_name: string;
-    session_duration_minutes: number | null;
-    step_key: string;
-    step_index: number;
-    total_steps: number;
-  };
-  payload: {
-    reinforce?: {
-      slides?: LearningSlide[];
-      total_slides?: number;
-    };
-  };
+  overview: StepOverview;
+  payload: Record<string, any>;
   saving: boolean;
-  onPatch: (patch: Record<string, any>) => Promise<void>;
-  onNext: () => Promise<void>;
+  onPatch: (patch: Record<string, any>) => void;
+  onNext: () => void;
   onBack: () => void;
   onExit: () => void;
 };
 
 // =============================================================================
-// Icon Mapping
+// Intro Screen Component
 // =============================================================================
 
-const ICON_MAP: Record<string, IconDefinition> = {
-  calculator: faCalculator,
-  book: faBook,
-  flask: faFlask,
-  atom: faAtom,
-  globe: faGlobe,
-  landmark: faLandmark,
-  dna: faDna,
-  plus: faLightbulb, // placeholder
-  minus: faLightbulb,
-  circle: faLightbulb,
-};
-
-function getIconFromName(iconName?: string): IconDefinition {
-  if (!iconName) return faBookOpen;
-  return ICON_MAP[iconName.toLowerCase()] || faBookOpen;
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-function KeyPointCard({ keyPoint }: { keyPoint: SlideKeyPoint }) {
+function IntroScreen({
+  topicName,
+  slideCount,
+  exampleCount,
+  onStart,
+}: {
+  topicName: string;
+  slideCount: number;
+  exampleCount: number;
+  onStart: () => void;
+}) {
   return (
-    <div className="bg-primary-50 border-l-4 border-primary-600 rounded-r-xl p-6 mb-8">
-      <div className="flex items-start space-x-3">
-        <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-          <FontAwesomeIcon icon={faLightbulb} className="text-white text-sm" />
-        </div>
-        <div>
-          <h3 className="font-bold text-primary-900 mb-2">{keyPoint.title}</h3>
-          <p className="text-neutral-700" dangerouslySetInnerHTML={{ __html: keyPoint.text }} />
-        </div>
+    <div className="bg-white rounded-2xl shadow-card p-8 text-center">
+      <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <FontAwesomeIcon icon={faBookOpen} className="text-blue-600 text-3xl" />
       </div>
+
+      <h2 className="text-2xl font-bold text-neutral-900 mb-3">
+        Time to learn! 📚
+      </h2>
+
+      <p className="text-lg text-neutral-600 mb-2">
+        Let's explore the key ideas about{" "}
+        <span className="font-semibold text-primary-600">{topicName}</span>.
+      </p>
+
+      <p className="text-neutral-500 mb-8">
+        {slideCount > 0 && `${slideCount} quick explanations`}
+        {slideCount > 0 && exampleCount > 0 && " + "}
+        {exampleCount > 0 && `${exampleCount} worked example${exampleCount > 1 ? "s" : ""}`}
+      </p>
+
+      <button
+        type="button"
+        onClick={onStart}
+        className="px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition text-lg"
+      >
+        Let's learn! 🎯
+      </button>
     </div>
   );
 }
 
-function ExampleCard({ example }: { example: SlideExample }) {
+// =============================================================================
+// Teaching Slide Component
+// =============================================================================
+
+function TeachingSlideCard({
+  slide,
+  currentIndex,
+  totalSlides,
+  onPrevious,
+  onNext,
+  isLastSlide,
+}: {
+  slide: TeachingSlide;
+  currentIndex: number;
+  totalSlides: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  isLastSlide: boolean;
+}) {
   return (
-    <div className="bg-accent-green/5 border border-accent-green/20 rounded-xl p-6">
-      <div className="flex items-start space-x-3">
-        <div className="w-8 h-8 bg-accent-green rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-          <FontAwesomeIcon icon={faCheck} className="text-white text-sm" />
+    <div className="space-y-4">
+      {/* Progress indicator */}
+      <div className="flex items-center justify-between text-sm text-neutral-500">
+        <span className="flex items-center gap-2">
+          <FontAwesomeIcon icon={faBookOpen} className="text-blue-500" />
+          Explanation {currentIndex + 1} of {totalSlides}
+        </span>
+        <div className="flex gap-1">
+          {Array.from({ length: totalSlides }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                i === currentIndex ? "bg-blue-500" : i < currentIndex ? "bg-blue-300" : "bg-neutral-200"
+              }`}
+            />
+          ))}
         </div>
-        <div>
-          <h3 className="font-bold text-neutral-900 mb-2">{example.title}</h3>
-          <p className="text-neutral-700 mb-3">{example.description}</p>
-          {example.data && (
-            <div className="flex items-center space-x-6 text-sm">
-              {Object.entries(example.data).map(([key, value]) => (
-                <div key={key} className="flex items-center space-x-2">
-                  <span className="text-neutral-600">{key}:</span>
-                  <span className="font-bold text-neutral-900">{value}</span>
-                </div>
-              ))}
+      </div>
+
+      {/* Main slide card */}
+      <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+        {/* Title bar */}
+        <div className="bg-blue-600 px-6 py-4">
+          <h3 className="text-xl font-bold text-white">{slide.title}</h3>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Main explanation */}
+          <p className="text-neutral-700 text-lg leading-relaxed">
+            {slide.content}
+          </p>
+
+          {/* Key points */}
+          {slide.key_points && slide.key_points.length > 0 && (
+            <div className="bg-blue-50 rounded-xl p-4">
+              <h4 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                <FontAwesomeIcon icon={faLightbulb} className="text-blue-600" />
+                Key Points
+              </h4>
+              <ul className="space-y-2">
+                {slide.key_points.map((point, i) => (
+                  <li key={i} className="flex items-start gap-2 text-blue-800">
+                    <span className="text-blue-500 mt-1">•</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Examiner tip */}
+          {slide.examiner_tip && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
+                <FontAwesomeIcon icon={faGraduationCap} className="text-amber-600" />
+                Exam Tip
+              </h4>
+              <p className="text-amber-800 text-sm">{slide.examiner_tip}</p>
             </div>
           )}
         </div>
       </div>
-    </div>
-  );
-}
 
-function GridItemCard({ item }: { item: SlideGridItem }) {
-  const bgColorMap: Record<string, string> = {
-    red: "bg-accent-red/10",
-    green: "bg-accent-green/10",
-    amber: "bg-accent-amber/10",
-    primary: "bg-primary-100",
-    neutral: "bg-neutral-200",
-  };
-  const textColorMap: Record<string, string> = {
-    red: "text-accent-red",
-    green: "text-accent-green",
-    amber: "text-accent-amber",
-    primary: "text-primary-600",
-    neutral: "text-neutral-600",
-  };
+      {/* Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onPrevious}
+          disabled={currentIndex === 0}
+          className="flex items-center gap-2 px-4 py-2 text-neutral-600 hover:bg-neutral-100 rounded-xl transition disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <FontAwesomeIcon icon={faArrowLeft} />
+          Previous
+        </button>
 
-  const bgColor = bgColorMap[item.iconColor || "primary"] || "bg-primary-100";
-  const textColor = textColorMap[item.iconColor || "primary"] || "text-primary-600";
-
-  return (
-    <div className="bg-white border-2 border-neutral-200 rounded-xl p-4 text-center">
-      <div className={`w-12 h-12 ${bgColor} rounded-full flex items-center justify-center mx-auto mb-3`}>
-        {item.icon && (
-          <FontAwesomeIcon icon={getIconFromName(item.icon)} className={`${textColor} text-xl`} />
-        )}
+        <button
+          type="button"
+          onClick={onNext}
+          className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition"
+        >
+          {isLastSlide ? "Next" : "Continue"}
+          <FontAwesomeIcon icon={faArrowRight} />
+        </button>
       </div>
-      <h4 className="font-bold text-neutral-900 mb-1">{item.title}</h4>
-      <p className="text-sm text-neutral-600">{item.subtitle}</p>
-      {item.detail && <p className="text-xs text-neutral-500 mt-2">{item.detail}</p>}
-    </div>
-  );
-}
-
-function MisconceptionSlide({ slide }: { slide: LearningSlide }) {
-  return (
-    <div className="max-w-3xl mx-auto">
-      {/* Section header */}
-      <div className="flex items-center space-x-2 mb-6">
-        <div className="w-8 h-8 bg-accent-amber/20 rounded-full flex items-center justify-center">
-          <FontAwesomeIcon icon={faExclamation} className="text-accent-amber text-sm" />
-        </div>
-        <span className="text-sm font-semibold text-accent-amber uppercase tracking-wide">
-          Common Misconception
-        </span>
-      </div>
-
-      <h2 className="text-4xl font-bold text-primary-900 mb-6 leading-tight">{slide.heading}</h2>
-
-      {/* The Wrong Way */}
-      <div className="bg-accent-amber/5 border-2 border-accent-amber/30 rounded-2xl p-8 mb-8">
-        <div className="flex items-start space-x-4 mb-6">
-          <div className="w-12 h-12 bg-accent-red/10 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-accent-red text-xl font-bold">✗</span>
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-neutral-900 mb-3">The Misconception</h3>
-            <p className="text-lg text-neutral-700">{slide.misconceptionWrong}</p>
-          </div>
-        </div>
-        {slide.imageUrl && (
-          <div className="flex items-center justify-center my-6">
-            <img
-              src={slide.imageUrl}
-              alt={slide.imageAlt || "Misconception illustration"}
-              className="w-full max-w-sm h-auto object-contain"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* The Correct Way */}
-      <div className="bg-accent-green/5 border-2 border-accent-green/30 rounded-2xl p-8 mb-8">
-        <div className="flex items-start space-x-4 mb-6">
-          <div className="w-12 h-12 bg-accent-green/20 rounded-full flex items-center justify-center flex-shrink-0">
-            <FontAwesomeIcon icon={faCheck} className="text-accent-green text-xl" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-neutral-900 mb-3">The Reality</h3>
-            <p className="text-lg text-neutral-700" dangerouslySetInnerHTML={{ __html: slide.misconceptionCorrect || "" }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Why it matters */}
-      {slide.keyPoint && (
-        <div className="bg-white border-2 border-neutral-200 rounded-2xl p-8">
-          <h3 className="text-xl font-bold text-primary-900 mb-4">{slide.keyPoint.title}</h3>
-          <div className="space-y-4" dangerouslySetInnerHTML={{ __html: slide.keyPoint.text }} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StandardSlide({ slide }: { slide: LearningSlide }) {
-  return (
-    <div className="max-w-3xl mx-auto">
-      {/* Section header */}
-      <div className="flex items-center space-x-2 mb-6">
-        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-          <span className="text-primary-700 font-bold text-sm">{slide.slideNumber}</span>
-        </div>
-        <span className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">
-          {slide.sectionTitle}
-        </span>
-      </div>
-
-      {/* Main heading */}
-      <h2 className="text-4xl font-bold text-primary-900 mb-6 leading-tight">{slide.heading}</h2>
-
-      {/* Body content */}
-      <div className="bg-neutral-50 rounded-2xl p-8 mb-8">
-        <p
-          className="text-xl text-neutral-700 leading-relaxed mb-6"
-          dangerouslySetInnerHTML={{ __html: slide.bodyText }}
-        />
-        {slide.imageUrl && (
-          <div className="flex items-center justify-center my-8">
-            <img
-              src={slide.imageUrl}
-              alt={slide.imageAlt || "Educational illustration"}
-              className="w-full max-w-md h-auto object-contain"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Key Point */}
-      {slide.keyPoint && <KeyPointCard keyPoint={slide.keyPoint} />}
-
-      {/* Grid Items (e.g., Protons, Neutrons, Electrons) */}
-      {slide.gridItems && slide.gridItems.length > 0 && (
-        <div className={`grid grid-cols-${Math.min(slide.gridItems.length, 3)} gap-4 mb-8`}>
-          {slide.gridItems.map((item, idx) => (
-            <GridItemCard key={idx} item={item} />
-          ))}
-        </div>
-      )}
-
-      {/* Example */}
-      {slide.example && <ExampleCard example={slide.example} />}
     </div>
   );
 }
 
 // =============================================================================
-// Main Component
+// Worked Example Component
+// =============================================================================
+
+function WorkedExampleCard({
+  example,
+  currentIndex,
+  totalExamples,
+  onPrevious,
+  onNext,
+  isLastExample,
+}: {
+  example: WorkedExample;
+  currentIndex: number;
+  totalExamples: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  isLastExample: boolean;
+}) {
+  const [revealedSteps, setRevealedSteps] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [showMistake, setShowMistake] = useState(false);
+
+  const totalSteps = example.steps?.length ?? 0;
+  const allStepsRevealed = revealedSteps >= totalSteps;
+
+  const handleRevealNext = () => {
+    if (revealedSteps < totalSteps) {
+      setRevealedSteps((prev) => prev + 1);
+    } else {
+      setShowAnswer(true);
+    }
+  };
+
+  const handleReset = () => {
+    setRevealedSteps(0);
+    setShowAnswer(false);
+    setShowMistake(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Progress indicator */}
+      <div className="flex items-center justify-between text-sm text-neutral-500">
+        <span className="flex items-center gap-2">
+          <FontAwesomeIcon icon={faPencil} className="text-teal-500" />
+          Worked Example {currentIndex + 1} of {totalExamples}
+        </span>
+      </div>
+
+      {/* Main card */}
+      <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+        {/* Title bar */}
+        <div className="bg-teal-600 px-6 py-4">
+          <h3 className="text-xl font-bold text-white">{example.title}</h3>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Question context */}
+          <div className="bg-neutral-50 rounded-xl p-4 border-l-4 border-teal-500">
+            <h4 className="font-semibold text-neutral-900 mb-2">Question</h4>
+            <p className="text-neutral-700">{example.question_context}</p>
+          </div>
+
+          {/* Solution steps - progressive reveal */}
+          <div>
+            <h4 className="font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+              <FontAwesomeIcon icon={faLightbulb} className="text-teal-500" />
+              Solution
+              <span className="text-sm font-normal text-neutral-500">
+                ({revealedSteps}/{totalSteps} steps shown)
+              </span>
+            </h4>
+
+            <div className="space-y-3">
+              {example.steps?.slice(0, revealedSteps).map((step, i) => (
+                <div
+                  key={step.step_id}
+                  className="flex gap-3 p-3 bg-teal-50 rounded-lg animate-fadeIn"
+                >
+                  <div className="flex-shrink-0 w-8 h-8 bg-teal-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                    {i + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-teal-900">{step.content}</p>
+                    {step.marks > 0 && (
+                      <span className="inline-block mt-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                        {step.marks} mark{step.marks > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Reveal next step button */}
+              {!allStepsRevealed && (
+                <button
+                  type="button"
+                  onClick={handleRevealNext}
+                  className="w-full py-3 border-2 border-dashed border-teal-300 text-teal-600 font-medium rounded-lg hover:bg-teal-50 transition"
+                >
+                  Show next step →
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Final answer - only show after all steps */}
+          {showAnswer && example.final_answer && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 animate-fadeIn">
+              <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+                <FontAwesomeIcon icon={faCheckCircle} className="text-green-600" />
+                Final Answer
+              </h4>
+              <p className="text-green-800 font-medium text-lg">{example.final_answer}</p>
+            </div>
+          )}
+
+          {/* Show answer button if all steps revealed but answer not shown */}
+          {allStepsRevealed && !showAnswer && (
+            <button
+              type="button"
+              onClick={() => setShowAnswer(true)}
+              className="w-full py-3 bg-green-100 text-green-700 font-medium rounded-lg hover:bg-green-200 transition"
+            >
+              Show final answer
+            </button>
+          )}
+
+          {/* Common mistake - toggle */}
+          {example.common_mistake && showAnswer && (
+            <div>
+              {!showMistake ? (
+                <button
+                  type="button"
+                  onClick={() => setShowMistake(true)}
+                  className="text-sm text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                >
+                  <FontAwesomeIcon icon={faExclamationTriangle} />
+                  Show common mistake to avoid
+                </button>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 animate-fadeIn">
+                  <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
+                    <FontAwesomeIcon icon={faExclamationTriangle} className="text-amber-600" />
+                    Common Mistake
+                  </h4>
+                  <p className="text-amber-800 text-sm">{example.common_mistake}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            handleReset();
+            onPrevious();
+          }}
+          className="flex items-center gap-2 px-4 py-2 text-neutral-600 hover:bg-neutral-100 rounded-xl transition"
+        >
+          <FontAwesomeIcon icon={faArrowLeft} />
+          Previous
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            handleReset();
+            onNext();
+          }}
+          disabled={!showAnswer}
+          className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50 disabled:hover:bg-primary-600"
+        >
+          {isLastExample ? "Continue" : "Next Example"}
+          <FontAwesomeIcon icon={faArrowRight} />
+        </button>
+      </div>
+
+      {!showAnswer && (
+        <p className="text-center text-sm text-neutral-400">
+          Reveal all steps and the answer to continue
+        </p>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Complete Screen Component
+// =============================================================================
+
+function CompleteScreen({
+  slideCount,
+  exampleCount,
+  onContinue,
+  saving,
+}: {
+  slideCount: number;
+  exampleCount: number;
+  onContinue: () => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-8 text-center">
+      <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+        <span className="text-4xl">🧠</span>
+      </div>
+
+      <h2 className="text-2xl font-bold text-neutral-900 mb-3">
+        Brilliant! You've learned the key ideas! 🌟
+      </h2>
+
+      <p className="text-neutral-600 mb-6">
+        You've worked through{" "}
+        {slideCount > 0 && `${slideCount} explanation${slideCount > 1 ? "s" : ""}`}
+        {slideCount > 0 && exampleCount > 0 && " and "}
+        {exampleCount > 0 && `${exampleCount} worked example${exampleCount > 1 ? "s" : ""}`}.
+      </p>
+
+      <p className="text-neutral-500 mb-8">
+        Now it's time to put what you've learned into practice!
+      </p>
+
+      <button
+        type="button"
+        onClick={onContinue}
+        disabled={saving}
+        className="px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition text-lg disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
+      >
+        Let's practice!
+        <FontAwesomeIcon icon={faArrowRight} />
+      </button>
+    </div>
+  );
+}
+
+// =============================================================================
+// Main ReinforceStep Component
 // =============================================================================
 
 export default function ReinforceStep({
@@ -309,58 +475,102 @@ export default function ReinforceStep({
   saving,
   onPatch,
   onNext,
-  onExit,
 }: ReinforceStepProps) {
-  // Extract slides from payload
-  const slides: LearningSlide[] = payload?.reinforce?.slides ?? [];
-  const totalSlides = payload?.reinforce?.total_slides ?? slides.length;
+  // Extract content from payload
+  const slides: TeachingSlide[] = payload?.reinforce?.slides ?? [];
+  const workedExamples: WorkedExample[] = payload?.reinforce?.worked_examples ?? [];
+
+  const totalSlides = slides.length;
+  const totalExamples = workedExamples.length;
+  const hasContent = totalSlides > 0 || totalExamples > 0;
 
   // State
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [viewedSlides, setViewedSlides] = useState<Set<number>>(new Set([0]));
+  const [slidesComplete, setSlidesComplete] = useState(false);
+  const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+  const [examplesComplete, setExamplesComplete] = useState(false);
 
-  // Derived
-  const currentSlide = slides[currentSlideIndex] ?? null;
-  const isFirstSlide = currentSlideIndex === 0;
-  const isLastSlide = currentSlideIndex >= slides.length - 1;
-  const progressPercent = ((overview.step_index) / overview.total_steps) * 100;
+  // Determine current phase
+  const inSlidesPhase = hasStarted && !slidesComplete && totalSlides > 0;
+  const inExamplesPhase = hasStarted && slidesComplete && !examplesComplete && totalExamples > 0;
+  const isComplete = hasStarted && (slidesComplete || totalSlides === 0) && (examplesComplete || totalExamples === 0);
 
   // Handlers
-  function handlePrevious() {
-    if (!isFirstSlide) {
+  const handleStart = useCallback(() => {
+    setHasStarted(true);
+    // If no slides, skip to examples or complete
+    if (totalSlides === 0) {
+      setSlidesComplete(true);
+      if (totalExamples === 0) {
+        setExamplesComplete(true);
+      }
+    }
+  }, [totalSlides, totalExamples]);
+
+  const handleSlideNext = useCallback(() => {
+    if (currentSlideIndex < totalSlides - 1) {
+      setCurrentSlideIndex((prev) => prev + 1);
+    } else {
+      setSlidesComplete(true);
+      if (totalExamples === 0) {
+        setExamplesComplete(true);
+      }
+    }
+  }, [currentSlideIndex, totalSlides, totalExamples]);
+
+  const handleSlidePrevious = useCallback(() => {
+    if (currentSlideIndex > 0) {
       setCurrentSlideIndex((prev) => prev - 1);
     }
-  }
+  }, [currentSlideIndex]);
 
-  function handleNext() {
-    if (!isLastSlide) {
-      const nextIndex = currentSlideIndex + 1;
-      setCurrentSlideIndex(nextIndex);
-      setViewedSlides((prev) => new Set([...prev, nextIndex]));
+  const handleExampleNext = useCallback(() => {
+    if (currentExampleIndex < totalExamples - 1) {
+      setCurrentExampleIndex((prev) => prev + 1);
+    } else {
+      setExamplesComplete(true);
     }
-  }
+  }, [currentExampleIndex, totalExamples]);
 
-  async function handleFinishSlides() {
-    // Save completion data
-    await onPatch({
-      reinforce: {
-        slides_viewed: viewedSlides.size,
-        total_slides: totalSlides,
-        completed_at: new Date().toISOString(),
-      },
-    });
-    await onNext();
-  }
+  const handleExamplePrevious = useCallback(() => {
+    if (currentExampleIndex > 0) {
+      setCurrentExampleIndex((prev) => prev - 1);
+    } else if (totalSlides > 0) {
+      // Go back to slides
+      setSlidesComplete(false);
+      setCurrentSlideIndex(totalSlides - 1);
+    }
+  }, [currentExampleIndex, totalSlides]);
 
-  // Empty state
-  if (slides.length === 0) {
+  const handleContinue = useCallback(() => {
+    // Save summary
+    const summary = {
+      slides_viewed: totalSlides,
+      examples_viewed: totalExamples,
+      completed_at: new Date().toISOString(),
+    };
+    onPatch(summary);
+    onNext();
+  }, [totalSlides, totalExamples, onPatch, onNext]);
+
+  // ==========================================================================
+  // Render: No content fallback
+  // ==========================================================================
+  if (!hasContent) {
     return (
       <div className="bg-white rounded-2xl shadow-card p-8 text-center">
-        <p className="text-neutral-600 mb-4">No learning content available for this topic.</p>
+        <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <FontAwesomeIcon icon={faBookOpen} className="text-neutral-400 text-2xl" />
+        </div>
+        <h2 className="text-xl font-bold text-neutral-900 mb-2">Let's skip ahead!</h2>
+        <p className="text-neutral-600 mb-6">
+          We don't have teaching content ready for this topic yet. Let's go straight to practice!
+        </p>
         <button
           type="button"
           onClick={onNext}
-          className="px-8 py-3 rounded-xl bg-primary-600 text-white font-semibold hover:bg-primary-700 transition"
+          className="px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition"
         >
           Continue to Practice
         </button>
@@ -368,132 +578,68 @@ export default function ReinforceStep({
     );
   }
 
-  return (
-    <div className="space-y-8">
-      {/* ================================================================== */}
-      {/* Session Progress Section */}
-      {/* ================================================================== */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium text-neutral-600">Session Progress</span>
-          <span className="text-sm font-bold text-primary-900">
-            {overview.step_index} / {overview.total_steps} steps
-          </span>
-        </div>
-        <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-primary-600 h-full rounded-full transition-all duration-500"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-        {/* Step indicators */}
-        <div className="flex items-center justify-between mt-2">
-          {["Preview", "Recall", "Core Teaching", "Practice", "Summary", "Reflection", "Complete"].map(
-            (stepName, idx) => {
-              const stepNum = idx + 1;
-              let dotColor = "bg-neutral-300";
-              let textColor = "text-neutral-400";
+  // ==========================================================================
+  // Render: Intro screen
+  // ==========================================================================
+  if (!hasStarted) {
+    return (
+      <IntroScreen
+        topicName={overview.topic_name}
+        slideCount={totalSlides}
+        exampleCount={totalExamples}
+        onStart={handleStart}
+      />
+    );
+  }
 
-              if (stepNum < overview.step_index) {
-                dotColor = "bg-accent-green";
-                textColor = "text-neutral-500";
-              } else if (stepNum === overview.step_index) {
-                dotColor = "bg-primary-600";
-                textColor = "text-primary-900 font-semibold";
-              }
+  // ==========================================================================
+  // Render: Slides phase
+  // ==========================================================================
+  if (inSlidesPhase) {
+    const currentSlide = slides[currentSlideIndex];
+    return (
+      <TeachingSlideCard
+        slide={currentSlide}
+        currentIndex={currentSlideIndex}
+        totalSlides={totalSlides}
+        onPrevious={handleSlidePrevious}
+        onNext={handleSlideNext}
+        isLastSlide={currentSlideIndex === totalSlides - 1 && totalExamples === 0}
+      />
+    );
+  }
 
-              return (
-                <div key={stepName} className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 ${dotColor} rounded-full`} />
-                  <span className={`text-xs ${textColor}`}>{stepName}</span>
-                </div>
-              );
-            }
-          )}
-        </div>
-      </section>
+  // ==========================================================================
+  // Render: Worked examples phase
+  // ==========================================================================
+  if (inExamplesPhase) {
+    const currentExample = workedExamples[currentExampleIndex];
+    return (
+      <WorkedExampleCard
+        example={currentExample}
+        currentIndex={currentExampleIndex}
+        totalExamples={totalExamples}
+        onPrevious={handleExamplePrevious}
+        onNext={handleExampleNext}
+        isLastExample={currentExampleIndex === totalExamples - 1}
+      />
+    );
+  }
 
-      {/* ================================================================== */}
-      {/* Learning Slide Container */}
-      {/* ================================================================== */}
-      <section className="mb-8">
-        <div className="bg-white rounded-2xl shadow-card overflow-hidden">
-          <div className="p-12">
-            {currentSlide?.isMisconception ? (
-              <MisconceptionSlide slide={currentSlide} />
-            ) : currentSlide ? (
-              <StandardSlide slide={currentSlide} />
-            ) : null}
-          </div>
-        </div>
+  // ==========================================================================
+  // Render: Complete screen
+  // ==========================================================================
+  if (isComplete) {
+    return (
+      <CompleteScreen
+        slideCount={totalSlides}
+        exampleCount={totalExamples}
+        onContinue={handleContinue}
+        saving={saving}
+      />
+    );
+  }
 
-        {/* Slide Navigation */}
-        <div className="flex items-center justify-between mt-6">
-          <button
-            type="button"
-            onClick={handlePrevious}
-            disabled={isFirstSlide}
-            className="flex items-center space-x-2 px-6 py-3 bg-white border-2 border-neutral-200 rounded-xl font-semibold text-neutral-700 hover:bg-neutral-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <FontAwesomeIcon icon={faArrowLeft} />
-            <span>Previous</span>
-          </button>
-
-          {/* Dot indicators */}
-          <div className="flex items-center space-x-2">
-            {slides.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setCurrentSlideIndex(idx);
-                  setViewedSlides((prev) => new Set([...prev, idx]));
-                }}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  idx === currentSlideIndex ? "bg-primary-600" : "bg-neutral-300"
-                }`}
-                aria-label={`Go to slide ${idx + 1}`}
-              />
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={isLastSlide ? handleFinishSlides : handleNext}
-            disabled={saving}
-            className="flex items-center space-x-2 px-6 py-3 bg-primary-600 rounded-xl font-semibold text-white hover:bg-primary-700 transition disabled:opacity-50"
-          >
-            <span>{isLastSlide ? "Finish" : "Next"}</span>
-            <FontAwesomeIcon icon={isLastSlide ? faCheck : faArrowRight} />
-          </button>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* StudyBuddy Suggestion Section */}
-      {/* ================================================================== */}
-      <section className="mb-8">
-        <div className="bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-2xl p-6">
-          <div className="flex items-start space-x-4">
-            <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <FontAwesomeIcon icon={faRobot} className="text-white text-xl" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-primary-900 mb-2">Need help understanding?</h3>
-              <p className="text-neutral-700 mb-4">
-                StudyBuddy can explain this concept in a different way or answer any questions you have.
-              </p>
-              <button
-                type="button"
-                className="flex items-center space-x-2 px-4 py-2 bg-white border-2 border-primary-200 rounded-xl font-semibold text-primary-700 hover:bg-primary-50 transition"
-              >
-                <FontAwesomeIcon icon={faCommentDots} />
-                <span>Explain differently</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
+  // Fallback (should not reach)
+  return null;
 }
