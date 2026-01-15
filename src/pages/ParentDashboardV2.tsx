@@ -1,15 +1,14 @@
 // src/pages/parent/ParentDashboardV2.tsx
 // Parent Dashboard v2 - Multi-child family dashboard (FEAT-009)
 
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { getParentDashboard } from '@/services/parent/parentDashboardService';
-import { HeroStatusBanner } from '@/components/parent/dashboard/HeroStatusBanner';
-import { ChildHealthCardGrid } from '@/components/parent/dashboard/ChildHealthCardGrid';
-import type { ParentDashboardData } from '@/types/parent/parentDashboardTypes';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import { getParentDashboard } from "../../services/parent/parentDashboardService";
+import { HeroStatusBanner } from "../../components/parent/dashboard/HeroStatusBanner";
+import { ChildHealthCardGrid } from "../../components/parent/dashboard/ChildHealthCardGrid";
+import type { ParentDashboardData } from "../../types/parent/parentDashboardTypes";
 
-// Loading skeleton for the hero section
 function HeroSkeleton() {
   return (
     <div className="bg-gradient-to-br from-primary-50 via-primary-100/50 to-neutral-0 rounded-2xl shadow-card p-8 border border-primary-200/30 animate-pulse mb-10">
@@ -24,7 +23,6 @@ function HeroSkeleton() {
   );
 }
 
-// Loading skeleton for child cards
 function ChildCardsSkeleton() {
   return (
     <div className="mb-10">
@@ -53,7 +51,6 @@ function ChildCardsSkeleton() {
   );
 }
 
-// Error state component
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="bg-accent-red/5 border border-accent-red/20 rounded-2xl p-8 text-center">
@@ -80,7 +77,6 @@ export function ParentDashboardV2() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch dashboard data
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -89,8 +85,8 @@ export function ParentDashboardV2() {
       const dashboardData = await getParentDashboard();
       setData(dashboardData);
     } catch (err) {
-      console.error('Failed to load dashboard:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      console.error("Failed to load dashboard:", err);
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
@@ -102,18 +98,16 @@ export function ParentDashboardV2() {
     }
   }, [user]);
 
-  // Navigation handlers
   const handleViewTodaySessions = () => {
-    // Navigate to first child's session or schedule page
     if (data?.children?.[0]?.child_id) {
       navigate(`/parent/child/${data.children[0].child_id}/today`);
     } else {
-      navigate('/parent/schedule');
+      navigate("/parent/schedule");
     }
   };
 
   const handleViewInsights = () => {
-    navigate('/parent/insights');
+    navigate("/parent/insights");
   };
 
   const handleGoToToday = (childId: string) => {
@@ -124,7 +118,6 @@ export function ParentDashboardV2() {
     navigate(`/parent/insights?child=${childId}`);
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -134,7 +127,6 @@ export function ParentDashboardV2() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -143,7 +135,6 @@ export function ParentDashboardV2() {
     );
   }
 
-  // No data state (shouldn't happen but safety check)
   if (!data) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -154,7 +145,6 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
-      {/* Hero Status Banner */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
@@ -162,22 +152,11 @@ export function ParentDashboardV2() {
         onViewInsights={handleViewInsights}
       />
 
-      {/* Child Health Cards */}
       <ChildHealthCardGrid
         children={data.children}
         onGoToToday={handleGoToToday}
         onViewInsights={handleViewChildInsights}
       />
-
-      {/* Phase 3 components will be added here:
-          - WeeklyFocusStrip
-          - ComingUpCard + HelpfulNudgesCard
-          - SupportTipCard + ProgressMomentsCard
-          - QuickActionsSection
-          - FamilyOverviewCard
-          - WeeklyRhythmChart
-          - ResourcesSection
-      */}
     </main>
   );
 }
