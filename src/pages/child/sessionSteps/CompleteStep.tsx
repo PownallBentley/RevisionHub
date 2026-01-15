@@ -171,7 +171,7 @@ function CelebrationBanner({
   gamification: GamificationResult;
 }) {
   return (
-    <div className="bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 rounded-2xl shadow-card p-8 text-center border border-green-200">
+    <div className="bg-gradient-to-br from-purple-50 via-primary-50 to-indigo-50 rounded-2xl shadow-card p-8 text-center border border-primary-200">
       <div className="text-6xl mb-4">🎉</div>
       <h2 className="text-3xl font-bold text-neutral-900 mb-2">
         You did it, {childName}!
