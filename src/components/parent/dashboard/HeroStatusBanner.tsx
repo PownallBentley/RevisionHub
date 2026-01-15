@@ -34,13 +34,18 @@ const statusContent: Record<StatusIndicator, {
   },
 };
 
+interface ExtendedHeroStatusBannerProps extends HeroStatusBannerProps {
+  onAddChild: () => void;
+}
+
 export function HeroStatusBanner({ 
   weekSummary, 
   comingUpCount,
   onViewTodaySessions, 
   onViewInsights,
   reminders,
-}: HeroStatusBannerProps) {
+  onAddChild,
+}: ExtendedHeroStatusBannerProps) {
   const status = weekSummary.family_status || "on_track";
   const content = statusContent[status];
   const nudgeCount = reminders.length;
@@ -134,19 +139,30 @@ export function HeroStatusBanner({
           </button>
         </div>
         
-        {/* CTAs - consistent button styling (rounded-xl to match NBA buttons) */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* CTAs Row - with Add Child on right */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button 
+              onClick={onViewTodaySessions}
+              className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors shadow-soft"
+            >
+              View today's sessions
+            </button>
+            <button 
+              onClick={onViewInsights}
+              className="px-6 py-3 bg-neutral-0 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors border border-primary-200"
+            >
+              Check progress details
+            </button>
+          </div>
+          
+          {/* Add Child Button - bottom right */}
           <button 
-            onClick={onViewTodaySessions}
-            className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors shadow-soft"
+            onClick={onAddChild}
+            className="px-5 py-3 bg-neutral-0 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors border border-primary-200 flex items-center gap-2"
           >
-            View today's sessions
-          </button>
-          <button 
-            onClick={onViewInsights}
-            className="px-6 py-3 bg-neutral-0 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors border border-primary-200"
-          >
-            Check progress details
+            <i className="fa-solid fa-user-plus"></i>
+            Add Child
           </button>
         </div>
       </div>
