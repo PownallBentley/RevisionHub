@@ -5,6 +5,11 @@ import React from "react";
 import type { ComingUpCardProps } from "../../../types/parent/parentDashboardTypes";
 
 export function ComingUpCard({ sessions, onViewFullSchedule }: ComingUpCardProps) {
+  const handleViewAll = () => {
+    onViewFullSchedule();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
   if (sessions.length === 0) {
     return (
       <div className="bg-neutral-0 rounded-2xl shadow-card p-6 border border-neutral-200/50">
@@ -26,7 +31,7 @@ export function ComingUpCard({ sessions, onViewFullSchedule }: ComingUpCardProps
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-primary-900">Coming Up</h3>
         <button
-          onClick={onViewFullSchedule}
+          onClick={handleViewAll}
           className="text-sm font-medium text-primary-600 hover:text-primary-700"
         >
           View all
