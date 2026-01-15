@@ -7,7 +7,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/SignUp";
 import ParentOnboardingPage from "./pages/parent/ParentOnboardingPage";
-import ParentDashboard from "./pages/ParentDashboard";
+import ParentDashboard from "./pages/ParentDashboardV2";
 import SubjectProgress from "./pages/parent/SubjectProgress";
 import Timetable from "./pages/parent/Timetable";
 import Account from "./pages/Account";
@@ -55,7 +55,7 @@ export default function App() {
 
           {/* Parent */}
           <Route path="/parent/onboarding" element={<ParentOnboardingPage />} />
-          <Route path="/parent" element={<ParentDashboard />} />
+          <Route path="/parent" element={<ParentDashboardV2 />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
           <Route path="/parent/settings" element={<ParentSettingsPage />} />
