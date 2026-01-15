@@ -1,44 +1,31 @@
-// src/components/parent/dashboard/QuickActionsSection.tsx
-// Quick action buttons for Parent Dashboard v2 (FEAT-009)
+// src/components/parent/dashboard/ResourcesSection.tsx
+// Help and resources links for Parent Dashboard v2 (FEAT-009)
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-interface QuickAction {
-  label: string;
-  icon: string;
-  path: string;
-  description: string;
-}
-
-const actions: QuickAction[] = [
+const resources = [
   {
-    label: "View Schedule",
-    icon: "fa-calendar",
-    path: "/parent/timetable",
-    description: "See all planned sessions",
+    title: "Getting Started Guide",
+    description: "How to set up effective revision schedules",
+    icon: "fa-book",
+    path: "/help/getting-started",
   },
   {
-    label: "Add Subject",
-    icon: "fa-plus",
-    path: "/parent/subjects",
-    description: "Add or manage subjects",
+    title: "Supporting Your Child",
+    description: "Tips for parents during exam season",
+    icon: "fa-heart",
+    path: "/help/parent-guide",
   },
   {
-    label: "Progress Report",
-    icon: "fa-chart-bar",
-    path: "/parent/insights",
-    description: "Detailed analytics",
-  },
-  {
-    label: "Settings",
-    icon: "fa-cog",
-    path: "/parent/settings",
-    description: "Preferences & account",
+    title: "Understanding Progress",
+    description: "What the metrics mean and how to use them",
+    icon: "fa-chart-line",
+    path: "/help/progress-guide",
   },
 ];
 
-export function QuickActionsSection() {
+export function ResourcesSection() {
   const navigate = useNavigate();
 
   const handleNavigate = (path: string) => {
@@ -48,19 +35,23 @@ export function QuickActionsSection() {
 
   return (
     <section className="mb-10">
-      <h3 className="text-lg font-bold text-primary-900 mb-4">Quick Actions</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {actions.map((action) => (
+      <h3 className="text-lg font-bold text-primary-900 mb-4">Resources & Help</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {resources.map((resource) => (
           <button
-            key={action.path}
-            onClick={() => handleNavigate(action.path)}
-            className="bg-neutral-0 rounded-xl p-4 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group"
+            key={resource.path}
+            onClick={() => handleNavigate(resource.path)}
+            className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 group text-left"
           >
-            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-primary-200 transition-colors">
-              <i className={`fa-solid ${action.icon} text-primary-600`}></i>
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-primary-200 transition-colors">
+                <i className={`fa-solid ${resource.icon} text-primary-600`}></i>
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-primary-900 mb-1">{resource.title}</div>
+                <div className="text-xs text-neutral-500">{resource.description}</div>
+              </div>
             </div>
-            <div className="text-sm font-semibold text-primary-900">{action.label}</div>
-            <div className="text-xs text-neutral-500 mt-0.5">{action.description}</div>
           </button>
         ))}
       </div>
@@ -68,4 +59,4 @@ export function QuickActionsSection() {
   );
 }
 
-export default QuickActionsSection;
+export default ResourcesSection;
