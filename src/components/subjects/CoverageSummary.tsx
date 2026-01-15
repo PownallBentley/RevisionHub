@@ -1,4 +1,5 @@
 // src/components/subjects/CoverageSummary.tsx
+// Updated to show SESSION ALLOCATION distribution instead of topic distribution
 
 import type { SubjectProgress } from "../../types/subjectProgress";
 
@@ -62,27 +63,24 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
     return null;
   }
 
-  // Calculate data for pie chart based on SESSION ALLOCATION
-  // Use topics_covered_total + topics_remaining as proxy for total sessions planned per subject
-  const subjectData = subjects.map((subject) => {
-    // Total topics for this subject = covered + remaining
-    const totalTopics = subject.topics_covered_total + subject.topics_remaining;
-    return {
-      subject_name: subject.subject_name,
-      color: subject.subject_color || "#5B2CFF",
-      totalTopics: totalTopics,
-    };
-  });
+  // Calculate data for pie chart based on SESSION ALLOCATION (not topics)
+  // sessions_total = all sessions for this subject in the revision plan
+  const subjectData = subjects.map((subject) => ({
+    subject_name: subject.subject_name,
+    color: subject.subject_color || "#5B2CFF",
+    // Use sessions_total for distribution (with fallback for pre-update data)
+    sessionCount: subject.sessions_total ?? (subject.topics_covered_total + subject.topics_remaining),
+  }));
 
   // Calculate grand total across all subjects
-  const grandTotal = subjectData.reduce((sum, s) => sum + s.totalTopics, 0);
+  const grandTotal = subjectData.reduce((sum, s) => sum + s.sessionCount, 0);
 
-  // If no topics at all, show empty state
+  // If no sessions at all, show empty state
   if (grandTotal === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-soft p-6">
         <h3 className="text-lg font-semibold mb-4" style={{ color: "#1F2330" }}>
-          Coverage Distribution
+          Session Distribution
         </h3>
         <p className="text-sm text-center py-8" style={{ color: "#6C7280" }}>
           No session data available
@@ -99,7 +97,7 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
   let currentAngle = 0;
   const slices = subjectData.map((subject) => {
     // Calculate percentage of total (session allocation share)
-    const percentage = grandTotal > 0 ? (subject.totalTopics / grandTotal) * 100 : 0;
+    const percentage = grandTotal > 0 ? (subject.sessionCount / grandTotal) * 100 : 0;
     const angle = (percentage / 100) * 360;
     const startAngle = currentAngle;
     const endAngle = currentAngle + Math.max(angle, 0.1); // Minimum angle to avoid rendering issues
@@ -109,7 +107,7 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
       subject_name: subject.subject_name,
       color: subject.color,
       percentage: Math.round(percentage * 10) / 10,
-      value: subject.totalTopics,
+      value: subject.sessionCount,
       startAngle,
       endAngle,
       path: angle > 0 ? describeArc(cx, cy, radius, startAngle, endAngle) : "",
@@ -120,7 +118,7 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
   return (
     <div className="bg-white rounded-2xl shadow-soft p-6">
       <h3 className="text-lg font-semibold mb-4" style={{ color: "#1F2330" }}>
-        Coverage Distribution
+        Session Distribution
       </h3>
 
       {/* SVG Pie Chart */}
@@ -142,7 +140,7 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
                 strokeWidth="2"
                 className="transition-opacity hover:opacity-80 cursor-pointer"
               >
-                <title>{slice.subject_name}: {slice.percentage}%</title>
+                <title>{slice.subject_name}: {slice.value} sessions ({slice.percentage}%)</title>
               </path>
             )
           ))}
@@ -179,7 +177,7 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
                   opacity="0.9"
                   style={{ pointerEvents: "none" }}
                 >
-                  {slice.percentage.toFixed(1)}%
+                  {slice.value} sessions
                 </text>
               </g>
             );
@@ -199,13 +197,20 @@ export default function CoverageSummary({ subjects }: CoverageSummaryProps) {
               <span 
                 className="text-xs truncate" 
                 style={{ color: "#6C7280" }}
-                title={`${slice.subject_name}: ${slice.percentage}%`}
+                title={`${slice.subject_name}: ${slice.value} sessions (${slice.percentage}%)`}
               >
-                {slice.subject_name}
+                {slice.subject_name} ({slice.value})
               </span>
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Total sessions summary */}
+      <div className="mt-3 pt-3 border-t text-center" style={{ borderColor: "#F6F7FB" }}>
+        <span className="text-sm" style={{ color: "#6C7280" }}>
+          Total: <span className="font-medium" style={{ color: "#1F2330" }}>{grandTotal} sessions</span> planned
+        </span>
       </div>
     </div>
   );
