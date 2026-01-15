@@ -1,18 +1,20 @@
 // src/services/mnemonics/mnemonicApi.ts
 // =============================================================================
-// Mnemonic Generation API Service (Webhook transport + RPC-first request tracking)
+// Mnemonic Generation API Service
+// - RPC-first request tracking (rpc_create_mnemonic_request)
+// - Server-side webhook transport via Supabase Edge Function (mnemonic-webhook-proxy)
 // =============================================================================
 
 import { supabase } from "../../lib/supabase";
 
 export type MnemonicStyle = "hip-hop" | "pop" | "rock";
 
-// Payload we send to n8n
+// Payload we send to n8n (and through the edge proxy)
 type MnemonicRequest = {
-  // End-to-end traceability (must be echoed back in n8n completion RPC)
+  // Traceability
   request_id: string;
 
-  // Topic linkage (production requirement)
+  // Topic linkage
   topic_id: string;
   topic_name: string;
 
@@ -21,12 +23,14 @@ type MnemonicRequest = {
   level: string;
   exam_board: string | null;
 
-  topic: string; // human prompt text used by generator (often same as topic_name)
+  // Prompt text
+  topic: string;
   subtopic: string | null;
 
   mnemonic_type: string;
   style: MnemonicStyle;
   style_reference: string;
+
   callback_url: string | null;
 };
 
@@ -55,17 +59,10 @@ const STYLE_REFERENCES: Record<MnemonicStyle, string> = {
   rock: "indie rock, guitar-driven, energetic",
 };
 
-// ✅ Updated to your actual published webhook URLs
-const WEBHOOK_URLS = {
-  test: "https://pownallpublishing.app.n8n.cloud/webhook-test/c224383d-9780-422a-afa2-960d655d5b9d",
-  production: "https://pownallpublishing.app.n8n.cloud/webhook/c224383d-9780-422a-afa2-960d655d5b9d",
-};
-
-export const WEBHOOK_MODE: "test" | "production" = "production";
-
 /**
- * Transport call to n8n.
- * IMPORTANT: payload includes request_id + topic_id + topic_name
+ * Transport call to n8n (via Supabase Edge Function proxy).
+ * IMPORTANT: This is server-side from the browser’s point of view,
+ * so there is no CORS problem and no public n8n webhook URL in client code.
  */
 export async function requestMnemonic(args: {
   requestId: string;
@@ -75,14 +72,12 @@ export async function requestMnemonic(args: {
   subjectName: string;
   level?: string | null;
 
-  topicText: string; // prompt text for generator (can be same as topicName)
+  topicText: string;
   style: MnemonicStyle;
 
   examBoard?: string | null;
   callbackUrl?: string | null;
 }): Promise<MnemonicResponse> {
-  const webhookUrl = WEBHOOK_URLS[WEBHOOK_MODE];
-
   const payload: MnemonicRequest = {
     request_id: args.requestId,
 
@@ -103,24 +98,22 @@ export async function requestMnemonic(args: {
     callback_url: args.callbackUrl ?? null,
   };
 
-  console.log("[mnemonicApi] Requesting mnemonic:", { webhookUrl, payload });
+  console.log("[mnemonicApi] Requesting mnemonic via edge proxy:", payload);
 
   try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    const { data, error } = await supabase.functions.invoke("mnemonic-webhook-proxy", {
+      body: payload,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[mnemonicApi] Webhook error:", response.status, errorText);
-      throw new Error(`Webhook returned ${response.status}: ${errorText}`);
+    if (error) {
+      console.error("[mnemonicApi] Proxy invoke error:", error);
+      throw new Error(error.message);
     }
 
-    const data: MnemonicResponse = await response.json();
-    console.log("[mnemonicApi] Webhook response:", data);
-    return data;
+    // invoke() returns parsed JSON in data
+    const response = data as MnemonicResponse;
+    console.log("[mnemonicApi] Proxy response:", response);
+    return response;
   } catch (error) {
     console.error("[mnemonicApi] Request failed:", error);
     return {
@@ -133,25 +126,18 @@ export async function requestMnemonic(args: {
 
 /**
  * RPC-first: create mnemonic_requests row on the server (child resolved from auth),
- * then call n8n with request_id + topic linkage.
- *
- * NOTE:
- * - n8n is responsible for calling rpc_mark_mnemonic_request_completed (stage 5).
- * - We keep a minimal fallback update here ONLY if n8n isn't updated yet.
+ * then call the proxy with request_id + topic linkage.
  */
 export async function requestMnemonicTracked(args: {
-  // REQUIRED now
   topicId: string;
   topicName: string;
 
-  // Existing caller inputs
   originalPrompt: string;
   subjectName: string;
   topicText: string;
   style: MnemonicStyle;
   callbackUrl?: string | null;
 
-  // Optional enrichment
   parsedTopic?: string | null;
   parsedStyle?: string | null;
   parsedType?: string | null;
@@ -180,7 +166,7 @@ export async function requestMnemonicTracked(args: {
   if (createErr) throw createErr;
   if (!requestId) throw new Error("rpc_create_mnemonic_request returned no id");
 
-  // 2) Call n8n with request_id + topic linkage
+  // 2) Call n8n via proxy with request_id + topic linkage
   const response = await requestMnemonic({
     requestId: String(requestId),
     topicId: args.topicId,
@@ -193,7 +179,7 @@ export async function requestMnemonicTracked(args: {
     callbackUrl: args.callbackUrl ?? null,
   });
 
-  // 3) TEMP fallback only (until n8n stage 5 is definitely live)
+  // 3) TEMP fallback only (until n8n stage 5 is 100% confirmed)
   if (!args.disableClientFallbackTracking) {
     const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
 
@@ -279,7 +265,7 @@ export function transformToMnemonicData(
   return {
     mnemonicId: response.mnemonic?.id ?? response.mnemonic_id ?? null,
     style,
-    styleReference: STYLE_REFERENCES[style],
+    styleReference: response.mnemonic?.style || STYLE_REFERENCES[style],
     lyrics: response.mnemonic?.lyrics || "",
     audioUrl: response.mnemonic?.audio_url || null,
     durationSeconds:
@@ -294,5 +280,4 @@ export default {
   requestMnemonic,
   requestMnemonicTracked,
   transformToMnemonicData,
-  WEBHOOK_MODE,
 };
