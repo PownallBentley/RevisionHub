@@ -16,6 +16,7 @@ import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 import InsightsDashboard from './pages/parent/InsightsDashboard';
+import ParentSettingsPage from './pages/parent/ParentSettingsPage';
 
 function HomeGate() {
   const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
