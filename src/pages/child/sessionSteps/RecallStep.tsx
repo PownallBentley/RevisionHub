@@ -1,5 +1,6 @@
 // src/pages/child/sessionSteps/RecallStep.tsx
 // UPDATED: January 2026 - Flashcard-based recall with flip animation
+// Child-friendly language throughout
 
 import { useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -9,6 +10,7 @@ import {
   faShuffle,
   faArrowRight,
   faQuestionCircle,
+  faLightbulb,
 } from "@fortawesome/free-solid-svg-icons";
 
 // =============================================================================
@@ -85,7 +87,7 @@ function FlashcardViewer({
           style={{ backfaceVisibility: "hidden" }}
         >
           <div className="flex items-center justify-between text-sm text-neutral-400 mb-4">
-            <span>Front</span>
+            <span>Question</span>
             <span className="text-primary-600 flex items-center gap-1">
               {topicName}
             </span>
@@ -98,7 +100,7 @@ function FlashcardViewer({
           </div>
 
           <p className="text-center text-sm text-neutral-400 mt-4">
-            Tap to reveal answer
+            Tap to see the answer
           </p>
         </div>
 
@@ -111,7 +113,7 @@ function FlashcardViewer({
           }}
         >
           <div className="flex items-center justify-between text-sm text-neutral-400 mb-4">
-            <span>Back</span>
+            <span>Answer</span>
             <span className="text-primary-600 flex items-center gap-1">
               {topicName}
             </span>
@@ -124,6 +126,54 @@ function FlashcardViewer({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Intro Screen Component
+// =============================================================================
+
+function IntroScreen({
+  childName,
+  topicName,
+  totalCards,
+  onStart,
+}: {
+  childName: string;
+  topicName: string;
+  totalCards: number;
+  onStart: () => void;
+}) {
+  // Get first name only
+  const firstName = childName?.split(" ")[0] || "there";
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-8 text-center">
+      <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <FontAwesomeIcon icon={faLightbulb} className="text-primary-600 text-3xl" />
+      </div>
+
+      <h2 className="text-2xl font-bold text-neutral-900 mb-3">
+        Hey {firstName}! 👋
+      </h2>
+
+      <p className="text-lg text-neutral-600 mb-2">
+        Before we start, let's have some fun and see what you already know about{" "}
+        <span className="font-semibold text-primary-600">{topicName}</span>!
+      </p>
+
+      <p className="text-neutral-500 mb-8">
+        {totalCards} quick questions – no pressure, just do your best!
+      </p>
+
+      <button
+        type="button"
+        onClick={onStart}
+        className="px-8 py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition text-lg"
+      >
+        Let's go! 🚀
+      </button>
     </div>
   );
 }
@@ -144,6 +194,7 @@ export default function RecallStep({
   const cards: Flashcard[] = payload?.recall?.cards ?? [];
 
   // State
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [ratings, setRatings] = useState<Map<string, CardRating>>(new Map());
@@ -158,6 +209,10 @@ export default function RecallStep({
   const hasCards = totalCards > 0;
 
   // Handlers
+  const handleStart = useCallback(() => {
+    setHasStarted(true);
+  }, []);
+
   const handleFlip = useCallback(() => {
     setIsFlipped((prev) => !prev);
   }, []);
@@ -246,9 +301,9 @@ export default function RecallStep({
         <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <FontAwesomeIcon icon={faQuestionCircle} className="text-neutral-400 text-2xl" />
         </div>
-        <h2 className="text-xl font-bold text-neutral-900 mb-2">No flashcards available</h2>
+        <h2 className="text-xl font-bold text-neutral-900 mb-2">Let's skip ahead!</h2>
         <p className="text-neutral-600 mb-6">
-          There are no flashcards for this topic yet. Let's continue to the next step.
+          We don't have any warm-up questions for this topic yet. Let's jump straight in!
         </p>
         <button
           type="button"
@@ -262,11 +317,43 @@ export default function RecallStep({
   }
 
   // ==========================================================================
+  // Render: Intro screen (before starting)
+  // ==========================================================================
+  if (!hasStarted) {
+    return (
+      <IntroScreen
+        childName={overview.child_name}
+        topicName={overview.topic_name}
+        totalCards={totalCards}
+        onStart={handleStart}
+      />
+    );
+  }
+
+  // ==========================================================================
   // Render: Complete state
   // ==========================================================================
   if (isComplete) {
     const finalKnownCount = Array.from(ratings.values()).filter((r) => r === "known").length;
     const finalLearningCount = Array.from(ratings.values()).filter((r) => r === "learning").length;
+
+    // Determine message based on results
+    let headlineMessage = "";
+    let supportMessage = "";
+
+    if (finalKnownCount === totalCards) {
+      headlineMessage = "Amazing! You knew them all! 🌟";
+      supportMessage = "You're already a pro at this topic. Let's build on what you know!";
+    } else if (finalKnownCount > finalLearningCount) {
+      headlineMessage = "Great job! You know loads already! 💪";
+      supportMessage = "Now let's focus on the bits you're still learning.";
+    } else if (finalKnownCount > 0) {
+      headlineMessage = "Nice work! Good effort! 👍";
+      supportMessage = "Don't worry about the ones you didn't know yet – that's what we're here for!";
+    } else {
+      headlineMessage = "Thanks for trying! 🙌";
+      supportMessage = "This is all new to you, and that's totally fine. Let's learn it together!";
+    }
 
     return (
       <div className="bg-white rounded-2xl shadow-card p-8">
@@ -274,33 +361,20 @@ export default function RecallStep({
           <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🎉</span>
           </div>
-          <h2 className="text-2xl font-bold text-neutral-900 mb-2">Great recall!</h2>
-          <p className="text-neutral-600">
-            You've reviewed all {totalCards} flashcards for {overview.topic_name}
-          </p>
+          <h2 className="text-2xl font-bold text-neutral-900 mb-2">{headlineMessage}</h2>
+          <p className="text-neutral-600">{supportMessage}</p>
         </div>
 
         {/* Results summary */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="bg-green-50 rounded-xl p-4 text-center">
             <p className="text-3xl font-bold text-green-600">{finalKnownCount}</p>
-            <p className="text-sm text-neutral-600 mt-1">Cards you know</p>
+            <p className="text-sm text-neutral-600 mt-1">Already knew</p>
           </div>
           <div className="bg-orange-50 rounded-xl p-4 text-center">
             <p className="text-3xl font-bold text-orange-500">{finalLearningCount}</p>
-            <p className="text-sm text-neutral-600 mt-1">Still learning</p>
+            <p className="text-sm text-neutral-600 mt-1">To learn</p>
           </div>
-        </div>
-
-        {/* Encouragement based on results */}
-        <div className="bg-neutral-50 rounded-xl p-4 mb-8">
-          <p className="text-neutral-700 text-center">
-            {finalKnownCount === totalCards
-              ? "Amazing! You knew all the cards! 🌟"
-              : finalKnownCount > finalLearningCount
-              ? "Great progress! Keep it up! 💪"
-              : "Good effort! The more you practice, the more you'll remember. 📚"}
-          </p>
         </div>
 
         <button
@@ -309,7 +383,7 @@ export default function RecallStep({
           disabled={saving}
           className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          Continue to Core Teaching
+          Continue
           <FontAwesomeIcon icon={faArrowRight} />
         </button>
       </div>
@@ -329,7 +403,7 @@ export default function RecallStep({
             <span className="w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {learningCount}
             </span>
-            <span className="text-orange-500 font-medium text-sm">Still learning</span>
+            <span className="text-orange-500 font-medium text-sm">To learn</span>
           </div>
 
           {/* Card position */}
@@ -339,7 +413,7 @@ export default function RecallStep({
 
           {/* Know counter */}
           <div className="flex items-center gap-2">
-            <span className="text-green-600 font-medium text-sm">Know</span>
+            <span className="text-green-600 font-medium text-sm">Got it</span>
             <span className="w-6 h-6 bg-green-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {knownCount}
             </span>
@@ -411,7 +485,7 @@ export default function RecallStep({
           type="button"
           className="text-primary-600 hover:text-primary-700"
         >
-          Stuck? <span className="underline">Help with this card</span>
+          Stuck? <span className="underline">Get a hint</span>
         </button>
 
         <div className="flex items-center gap-4">
