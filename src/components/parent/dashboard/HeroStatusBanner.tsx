@@ -1,37 +1,49 @@
 // src/components/parent/dashboard/HeroStatusBanner.tsx
-// Hero status banner with nudges as 4th stat card for Parent Dashboard v2 (FEAT-009)
+// Hero status banner for Parent Dashboard v2 (FEAT-009)
+// Updated: FEAT-010 - Solid badge colors, keep_an_eye status, centralized styling
 
 import React from "react";
 import type { HeroStatusBannerProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
 
+// UPDATED: Solid badge colors, added keep_an_eye
 const statusContent: Record<StatusIndicator, {
   headline: string;
   description: string;
   badgeText: string;
-  badgeBg: string;
-  badgeTextColor: string;
+  icon: string;
 }> = {
   on_track: {
     headline: "Everything's on track this week",
     description: "Your children are keeping a steady revision rhythm. Sessions are happening consistently, and engagement is strong across all subjects.",
     badgeText: "On Track",
-    badgeBg: "bg-accent-green/10",
-    badgeTextColor: "text-accent-green",
+    icon: "circle-check",
+  },
+  keep_an_eye: {
+    headline: "Worth keeping an eye on",
+    description: "Activity has slowed slightly. Nothing to worry about yet, but worth monitoring over the next few days.",
+    badgeText: "Keep an Eye",
+    icon: "eye",
   },
   needs_attention: {
     headline: "Some sessions need a little boost",
     description: "A few sessions were missed this week. A gentle check-in with your children could help get things back on track.",
     badgeText: "Needs Attention",
-    badgeBg: "bg-accent-amber/10",
-    badgeTextColor: "text-accent-amber",
+    icon: "hand-holding-heart",
   },
   getting_started: {
     headline: "Great start to the revision journey",
     description: "Your family is just getting started with RevisionHub. The first sessions are always the hardest — you're doing great!",
     badgeText: "Getting Started",
-    badgeBg: "bg-primary-100",
-    badgeTextColor: "text-primary-600",
+    icon: "rocket",
   },
+};
+
+// UPDATED: Solid background colors with white text
+const STATUS_COLORS: Record<StatusIndicator, string> = {
+  on_track: '#1EC592',
+  keep_an_eye: '#5B8DEF',
+  needs_attention: '#E69B2C',
+  getting_started: '#7C3AED',
 };
 
 interface ExtendedHeroStatusBannerProps extends HeroStatusBannerProps {
@@ -46,8 +58,9 @@ export function HeroStatusBanner({
   reminders,
   onAddChild,
 }: ExtendedHeroStatusBannerProps) {
-  const status = weekSummary.family_status || "on_track";
-  const content = statusContent[status];
+  const status = (weekSummary.family_status || "on_track") as StatusIndicator;
+  const content = statusContent[status] || statusContent.on_track;
+  const badgeColor = STATUS_COLORS[status] || STATUS_COLORS.on_track;
   const nudgeCount = reminders.length;
   
   // Get first nudge message for preview
@@ -62,8 +75,12 @@ export function HeroStatusBanner({
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <h2 className="text-3xl font-bold text-primary-900">{content.headline}</h2>
-              <span className={`inline-flex items-center gap-2 px-4 py-1.5 ${content.badgeBg} ${content.badgeTextColor} rounded-full text-sm font-semibold`}>
-                <i className="fa-solid fa-circle-check"></i>
+              {/* UPDATED: Solid background badge with inline style */}
+              <span 
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold text-white"
+                style={{ backgroundColor: badgeColor }}
+              >
+                <i className={`fa-solid fa-${content.icon}`}></i>
                 {content.badgeText}
               </span>
             </div>
@@ -125,8 +142,8 @@ export function HeroStatusBanner({
           {/* Helpful Nudges - 4th card */}
           <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
             <div className="flex items-center justify-between mb-3">
-              <div className={`w-12 h-12 ${nudgeCount > 0 ? 'bg-accent-amber/10' : 'bg-accent-green/10'} rounded-xl flex items-center justify-center group-hover:${nudgeCount > 0 ? 'bg-accent-amber/20' : 'bg-accent-green/20'} transition-colors`}>
-                <i className={`fa-solid ${nudgeCount > 0 ? 'fa-lightbulb text-accent-amber' : 'fa-check text-accent-green'} text-xl`}></i>
+              <div className={`w-12 h-12 ${nudgeCount > 0 ? 'bg-amber-100' : 'bg-green-100'} rounded-xl flex items-center justify-center transition-colors`}>
+                <i className={`fa-solid ${nudgeCount > 0 ? 'fa-lightbulb text-[#E69B2C]' : 'fa-check text-[#1EC592]'} text-xl`}></i>
               </div>
               <i className="fa-solid fa-arrow-right text-neutral-300 group-hover:text-primary-600 transition-colors"></i>
             </div>
