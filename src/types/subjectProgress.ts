@@ -1,4 +1,5 @@
 // src/types/subjectProgress.ts
+// Updated to include sessions_completed and sessions_total for pie chart
 
 export interface ChildOption {
   child_id: string;
@@ -46,6 +47,9 @@ export interface SubjectProgress {
   topics_covered_total: number;
   topics_remaining: number;
   completion_percentage: number;
+  // NEW: Session counts for distribution chart
+  sessions_completed: number;
+  sessions_total: number;
   recently_covered: TopicCovered[];
   coming_up: TopicComingUp[];
 }
