@@ -147,10 +147,10 @@ const getStatusColors = (status: string) => {
       };
     case 'needs_attention':
       return {
-        bg: 'bg-amber-50',
-        border: 'border-amber-200',
-        icon: 'text-accent-amber bg-amber-100',
-        text: 'text-amber-800',
+        bg: 'bg-[#FFB547]/10',
+        border: 'border-[#FFB547]/30',
+        icon: 'text-white bg-[#FFB547]',
+        text: 'text-amber-900',
       };
     case 'getting_started':
       return {
@@ -190,7 +190,13 @@ function StatusExplainerItem({ explainer }: { explainer: StatusExplainer }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-semibold text-primary-900">{explainer.child_name}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${colors.icon}`}>
+            <span 
+              className={`text-xs px-2 py-0.5 rounded-full text-white font-medium ${
+                explainer.status_indicator === 'needs_attention' ? 'bg-[#FFB547]' : 
+                explainer.status_indicator === 'keep_an_eye' ? 'bg-[#5B8DEF]' : 
+                explainer.status_indicator === 'getting_started' ? 'bg-[#7C3AED]' : 'bg-[#1EC592]'
+              }`}
+            >
               {explainer.status_indicator === 'needs_attention' ? 'Needs Attention' : 
                explainer.status_indicator === 'keep_an_eye' ? 'Keep an Eye' : 
                explainer.status_indicator === 'getting_started' ? 'Getting Started' : 'On Track'}
