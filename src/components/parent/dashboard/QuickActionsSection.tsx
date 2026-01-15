@@ -15,7 +15,7 @@ const actions: QuickAction[] = [
   {
     label: "View Schedule",
     icon: "fa-calendar",
-    path: "/parent/schedule",
+    path: "/parent/timetable",
     description: "See all planned sessions",
   },
   {
@@ -41,6 +41,11 @@ const actions: QuickAction[] = [
 export function QuickActionsSection() {
   const navigate = useNavigate();
 
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
   return (
     <section className="mb-10">
       <h3 className="text-lg font-bold text-primary-900 mb-4">Quick Actions</h3>
@@ -48,7 +53,7 @@ export function QuickActionsSection() {
         {actions.map((action) => (
           <button
             key={action.path}
-            onClick={() => navigate(action.path)}
+            onClick={() => handleNavigate(action.path)}
             className="bg-neutral-0 rounded-xl p-4 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group"
           >
             <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-primary-200 transition-colors">
