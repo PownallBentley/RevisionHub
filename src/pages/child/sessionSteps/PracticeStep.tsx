@@ -16,6 +16,7 @@ import {
   faQuestionCircle,
   faPlus,
   faChevronRight,
+  faPlay,
 } from "@fortawesome/free-solid-svg-icons";
 
 // =============================================================================
@@ -310,6 +311,28 @@ function QuestionCard({
               >
                 Check my answer
               </button>
+
+              {/* Stuck? Helper row */}
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  disabled
+                  className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1.5 opacity-50 cursor-not-allowed"
+                  title="Coming soon"
+                >
+                  <FontAwesomeIcon icon={faQuestionCircle} />
+                  <span>Stuck? View related notes</span>
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="text-neutral-500 hover:text-neutral-700 font-medium flex items-center gap-1.5 opacity-50 cursor-not-allowed"
+                  title="Coming soon"
+                >
+                  <FontAwesomeIcon icon={faPlay} />
+                  <span>Watch solution</span>
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -455,6 +478,28 @@ function QuestionCard({
                 </ul>
               </div>
             )}
+
+            {/* Helper links row */}
+            <div className="flex items-center justify-between text-sm pt-2 border-t border-neutral-200">
+              <button
+                type="button"
+                disabled
+                className="text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1.5 opacity-50 cursor-not-allowed"
+                title="Coming soon"
+              >
+                <FontAwesomeIcon icon={faQuestionCircle} />
+                <span>View related notes</span>
+              </button>
+              <button
+                type="button"
+                disabled
+                className="px-4 py-2 bg-neutral-100 text-neutral-500 rounded-lg font-medium flex items-center gap-2 opacity-50 cursor-not-allowed"
+                title="Coming soon"
+              >
+                <FontAwesomeIcon icon={faPlay} />
+                <span>Watch Solution</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
