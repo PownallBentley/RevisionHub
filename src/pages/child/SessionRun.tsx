@@ -488,10 +488,16 @@ export default function SessionRun() {
     revision_session_id: revisionSessionId ?? sessionData.revision_session_id,
   };
 
-  const stepPayload = {
-    ...sessionData.generated_payload,
-    [currentStepKey]: currentStepData?.answer_summary ?? {},
-  };
+  console.log("[DEBUG] sessionData.generated_payload:", sessionData.generated_payload);
+console.log("[DEBUG] currentStepKey:", currentStepKey);
+
+const stepPayload = {
+  ...sessionData.generated_payload,
+  [currentStepKey]: currentStepData?.answer_summary ?? {},
+};
+
+console.log("[DEBUG] stepPayload:", stepPayload);
+
 
   const stepsRemaining = STEP_ORDER.length - currentStepIndex + 1;
   const timePerStep = Math.ceil(
