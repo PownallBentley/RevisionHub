@@ -1,22 +1,21 @@
 // src/pages/child/sessionSteps/PracticeStep.tsx
 // UPDATED: January 2026 - Practice questions with difficulty selector
 // Includes Smart Mark AI button (UI only - functionality coming later)
+// V2: Clearer post-submission flow, "do more" option
 
 import { useState, useCallback, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowRight,
-  faCheck,
-  faTimes,
-  faFlag,
   faLightbulb,
   faExclamationTriangle,
   faCheckCircle,
   faStar,
   faRobot,
   faPencil,
-  faEye,
   faQuestionCircle,
+  faPlus,
+  faChevronRight,
 } from "@fortawesome/free-solid-svg-icons";
 
 // =============================================================================
@@ -53,7 +52,6 @@ type QuestionAnswer = {
   questionId: string;
   userAnswer: string;
   selfAssessment: SelfAssessment;
-  viewedAnswer: boolean;
 };
 
 type DifficultyLevel = "easy" | "medium" | "hard" | "all";
@@ -165,7 +163,7 @@ function IntroScreen({
       </p>
 
       <p className="text-neutral-500 mb-8">
-        {totalQuestions} question{totalQuestions !== 1 ? "s" : ""} – take your time and do your best!
+        {totalQuestions} question{totalQuestions !== 1 ? "s" : ""} ready – you can always do more if you want!
       </p>
 
       <button
@@ -193,10 +191,10 @@ function QuestionCard({
   onSubmit,
   selfAssessment,
   onSelfAssess,
-  showAnswer,
-  onShowAnswer,
   onNext,
   isLastQuestion,
+  onSkipToFinish,
+  remainingQuestions,
 }: {
   question: PracticeQuestion;
   questionNumber: number;
@@ -207,10 +205,10 @@ function QuestionCard({
   onSubmit: () => void;
   selfAssessment: SelfAssessment;
   onSelfAssess: (assessment: SelfAssessment) => void;
-  showAnswer: boolean;
-  onShowAnswer: () => void;
   onNext: () => void;
   isLastQuestion: boolean;
+  onSkipToFinish: () => void;
+  remainingQuestions: number;
 }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
@@ -227,6 +225,9 @@ function QuestionCard({
 
   const difficultyLabel = question.difficulty === 1 ? "Easy" : question.difficulty === 3 ? "Hard" : "Medium";
   const difficultyColor = question.difficulty === 1 ? "bg-green-100 text-green-700" : question.difficulty === 3 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700";
+
+  // Has the answer been revealed (after self-assessment)
+  const showAnswer = selfAssessment !== null;
 
   return (
     <div className="space-y-4">
@@ -322,105 +323,91 @@ function QuestionCard({
                 </p>
               </div>
 
-              {/* Self-assessment */}
+              {/* Self-assessment - this reveals the answer */}
               {!selfAssessment && (
-                <div className="mb-4">
-                  <p className="text-sm text-neutral-600 mb-3 text-center">How did you do?</p>
-                  <div className="flex gap-2 justify-center">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <p className="text-blue-900 font-medium mb-4 text-center">
+                    How do you think you did? Select to see the answer:
+                  </p>
+                  <div className="flex gap-3 justify-center">
                     <button
                       type="button"
                       onClick={() => onSelfAssess("got_it")}
-                      className="flex-1 max-w-[120px] py-3 px-4 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl transition flex flex-col items-center gap-1"
+                      className="flex-1 max-w-[140px] py-4 px-4 bg-white hover:bg-green-50 border-2 border-green-200 hover:border-green-400 text-green-700 rounded-xl transition flex flex-col items-center gap-2 shadow-sm"
                     >
-                      <FontAwesomeIcon icon={faCheck} />
-                      <span className="text-sm font-medium">Got it!</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onSelfAssess("not_quite")}
-                      className="flex-1 max-w-[120px] py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl transition flex flex-col items-center gap-1"
-                    >
-                      <FontAwesomeIcon icon={faTimes} />
-                      <span className="text-sm font-medium">Not quite</span>
+                      <span className="text-2xl">😊</span>
+                      <span className="text-sm font-semibold">Nailed it!</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => onSelfAssess("unsure")}
-                      className="flex-1 max-w-[120px] py-3 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl transition flex flex-col items-center gap-1"
+                      className="flex-1 max-w-[140px] py-4 px-4 bg-white hover:bg-amber-50 border-2 border-amber-200 hover:border-amber-400 text-amber-700 rounded-xl transition flex flex-col items-center gap-2 shadow-sm"
                     >
-                      <FontAwesomeIcon icon={faFlag} />
-                      <span className="text-sm font-medium">Not sure</span>
+                      <span className="text-2xl">🤔</span>
+                      <span className="text-sm font-semibold">Not sure</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelfAssess("not_quite")}
+                      className="flex-1 max-w-[140px] py-4 px-4 bg-white hover:bg-red-50 border-2 border-red-200 hover:border-red-400 text-red-700 rounded-xl transition flex flex-col items-center gap-2 shadow-sm"
+                    >
+                      <span className="text-2xl">😅</span>
+                      <span className="text-sm font-semibold">Missed it</span>
                     </button>
                   </div>
                 </div>
               )}
-
-              {/* Self-assessment result badge */}
-              {selfAssessment && (
-                <div className={`mb-4 p-3 rounded-xl text-center ${
-                  selfAssessment === "got_it" ? "bg-green-50 text-green-700" :
-                  selfAssessment === "not_quite" ? "bg-red-50 text-red-700" :
-                  "bg-amber-50 text-amber-700"
-                }`}>
-                  <FontAwesomeIcon 
-                    icon={selfAssessment === "got_it" ? faCheck : selfAssessment === "not_quite" ? faTimes : faFlag} 
-                    className="mr-2"
-                  />
-                  {selfAssessment === "got_it" ? "You got it!" : 
-                   selfAssessment === "not_quite" ? "Keep practising!" : 
-                   "Let's check the answer"}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex gap-2">
-                {/* Smart Mark button - disabled/coming soon */}
-                <div className="relative group">
-                  <button
-                    type="button"
-                    disabled
-                    className="py-3 px-4 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-400 font-medium rounded-xl flex items-center gap-2 cursor-not-allowed opacity-60"
-                  >
-                    <FontAwesomeIcon icon={faRobot} />
-                    <span>Smart Mark</span>
-                    <FontAwesomeIcon icon={faStar} className="text-xs" />
-                  </button>
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-neutral-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
-                    Coming soon! ✨
-                  </div>
-                </div>
-
-                {/* View answer button */}
-                {!showAnswer && (
-                  <button
-                    type="button"
-                    onClick={onShowAnswer}
-                    className="flex-1 py-3 px-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium rounded-xl flex items-center justify-center gap-2 transition"
-                  >
-                    <FontAwesomeIcon icon={faEye} />
-                    View answer
-                  </button>
-                )}
-              </div>
             </>
           )}
         </div>
 
-        {/* Answer reveal section */}
+        {/* Answer reveal section - shown after self-assessment */}
         {showAnswer && (
           <div className="border-t border-neutral-200 p-6 bg-neutral-50 space-y-4">
+            {/* Self-assessment result badge */}
+            <div className={`p-3 rounded-xl text-center ${
+              selfAssessment === "got_it" ? "bg-green-100 text-green-800" :
+              selfAssessment === "not_quite" ? "bg-red-100 text-red-800" :
+              "bg-amber-100 text-amber-800"
+            }`}>
+              <span className="text-lg mr-2">
+                {selfAssessment === "got_it" ? "😊" : selfAssessment === "not_quite" ? "😅" : "🤔"}
+              </span>
+              <span className="font-medium">
+                {selfAssessment === "got_it" ? "You said: Nailed it!" : 
+                 selfAssessment === "not_quite" ? "You said: Missed it" : 
+                 "You said: Not sure"}
+              </span>
+            </div>
+
             {/* Correct answer */}
             <div className="bg-green-50 border border-green-200 rounded-xl p-4">
               <h4 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
                 <FontAwesomeIcon icon={faCheckCircle} className="text-green-600" />
                 Correct Answer
               </h4>
-              <p className="text-green-800 font-medium">
+              <p className="text-green-800 font-medium text-lg">
                 {question.questionType === "multiple_choice" && question.correct_option_id
                   ? question.options?.find(o => o.id === question.correct_option_id)?.label
                   : question.correct_value}
               </p>
+            </div>
+
+            {/* Smart Mark button - disabled/coming soon */}
+            <div className="relative group inline-block">
+              <button
+                type="button"
+                disabled
+                className="py-2.5 px-4 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-400 font-medium rounded-xl flex items-center gap-2 cursor-not-allowed opacity-60 text-sm"
+              >
+                <FontAwesomeIcon icon={faRobot} />
+                <span>Smart Mark my answer</span>
+                <FontAwesomeIcon icon={faStar} className="text-xs" />
+              </button>
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-neutral-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+                Coming soon! ✨
+              </div>
             </div>
 
             {/* Mark scheme */}
@@ -433,7 +420,7 @@ function QuestionCard({
                 <ul className="space-y-2">
                   {question.mark_scheme.map((item, i) => (
                     <li key={i} className="flex gap-2 text-blue-800">
-                      <span className="font-mono text-sm bg-blue-100 px-2 py-0.5 rounded font-bold">
+                      <span className="font-mono text-sm bg-blue-100 px-2 py-0.5 rounded font-bold flex-shrink-0">
                         {item.code}
                       </span>
                       <span>{item.criterion}</span>
@@ -472,16 +459,29 @@ function QuestionCard({
         )}
       </div>
 
-      {/* Next button - only show after answer is revealed */}
+      {/* Navigation buttons - only show after answer is revealed */}
       {showAnswer && (
-        <button
-          type="button"
-          onClick={onNext}
-          className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition flex items-center justify-center gap-2"
-        >
-          {isLastQuestion ? "Finish practice" : "Next question"}
-          <FontAwesomeIcon icon={faArrowRight} />
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={onNext}
+            className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition flex items-center justify-center gap-2"
+          >
+            {isLastQuestion ? "Finish practice" : "Next question"}
+            <FontAwesomeIcon icon={faArrowRight} />
+          </button>
+
+          {/* Option to finish early if more questions remain */}
+          {!isLastQuestion && remainingQuestions > 1 && (
+            <button
+              type="button"
+              onClick={onSkipToFinish}
+              className="w-full py-3 text-neutral-500 hover:text-neutral-700 font-medium transition text-sm"
+            >
+              Finish practice early ({remainingQuestions - 1} questions left)
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -494,11 +494,17 @@ function QuestionCard({
 function CompleteScreen({
   answers,
   totalQuestions,
+  questionsAttempted,
+  hasMoreQuestions,
+  onDoMore,
   onContinue,
   saving,
 }: {
   answers: QuestionAnswer[];
   totalQuestions: number;
+  questionsAttempted: number;
+  hasMoreQuestions: boolean;
+  onDoMore: () => void;
   onContinue: () => void;
   saving: boolean;
 }) {
@@ -508,41 +514,73 @@ function CompleteScreen({
 
   // Determine encouragement message
   let message = "";
-  if (gotItCount === totalQuestions) {
-    message = "Perfect score! You really know this stuff! 🌟";
+  let emoji = "🏆";
+  if (gotItCount === questionsAttempted && questionsAttempted > 0) {
+    message = "Perfect! You nailed every question! 🌟";
+    emoji = "🌟";
   } else if (gotItCount > notQuiteCount + unsureCount) {
     message = "Great work! You're getting the hang of this! 💪";
+    emoji = "💪";
   } else if (gotItCount > 0) {
     message = "Good effort! Keep practising and you'll get there! 📚";
-  } else {
+    emoji = "👍";
+  } else if (questionsAttempted > 0) {
     message = "Practice makes perfect! Every attempt helps you learn. 🎯";
+    emoji = "🎯";
+  } else {
+    message = "Ready when you are!";
+    emoji = "🎯";
   }
+
+  const remainingQuestions = totalQuestions - questionsAttempted;
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-8">
       <div className="text-center mb-8">
         <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
-          <span className="text-4xl">🏆</span>
+          <span className="text-4xl">{emoji}</span>
         </div>
         <h2 className="text-2xl font-bold text-neutral-900 mb-2">Practice complete!</h2>
         <p className="text-neutral-600">{message}</p>
       </div>
 
       {/* Results summary */}
-      <div className="grid grid-cols-3 gap-3 mb-8">
-        <div className="bg-green-50 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-green-600">{gotItCount}</p>
-          <p className="text-xs text-neutral-600 mt-1">Got it!</p>
+      {questionsAttempted > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-green-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-green-600">{gotItCount}</p>
+            <p className="text-xs text-neutral-600 mt-1">Nailed it!</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-amber-600">{unsureCount}</p>
+            <p className="text-xs text-neutral-600 mt-1">Not sure</p>
+          </div>
+          <div className="bg-red-50 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-red-600">{notQuiteCount}</p>
+            <p className="text-xs text-neutral-600 mt-1">Missed it</p>
+          </div>
         </div>
-        <div className="bg-amber-50 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-amber-600">{unsureCount}</p>
-          <p className="text-xs text-neutral-600 mt-1">Unsure</p>
+      )}
+
+      {/* Do more questions option */}
+      {hasMoreQuestions && remainingQuestions > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-blue-900">Want more practice?</p>
+              <p className="text-sm text-blue-700">{remainingQuestions} more question{remainingQuestions !== 1 ? "s" : ""} available</p>
+            </div>
+            <button
+              type="button"
+              onClick={onDoMore}
+              className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+            >
+              <FontAwesomeIcon icon={faPlus} />
+              Do more
+            </button>
+          </div>
         </div>
-        <div className="bg-red-50 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-red-600">{notQuiteCount}</p>
-          <p className="text-xs text-neutral-600 mt-1">Not quite</p>
-        </div>
-      </div>
+      )}
 
       <button
         type="button"
@@ -551,7 +589,7 @@ function CompleteScreen({
         className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
       >
         Continue
-        <FontAwesomeIcon icon={faArrowRight} />
+        <FontAwesomeIcon icon={faChevronRight} />
       </button>
     </div>
   );
@@ -575,10 +613,10 @@ export default function PracticeStep({
   const [hasStarted, setHasStarted] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>("medium");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [questionsToShow, setQuestionsToShow] = useState(2); // Start with 2 questions
   const [answers, setAnswers] = useState<Map<string, QuestionAnswer>>(new Map());
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
 
   // Count questions by difficulty
@@ -592,14 +630,11 @@ export default function PracticeStep({
     return counts;
   }, [allQuestions]);
 
-  // Filter questions by selected difficulty (if questions have difficulty property)
-  // For now, show all questions since our seed data may not have difficulty
+  // Filter questions by selected difficulty
   const filteredQuestions = useMemo(() => {
-    // If questions don't have difficulty, show all
     const hasDifficulty = allQuestions.some(q => q.difficulty !== undefined);
     if (!hasDifficulty) return allQuestions;
 
-    // Filter by selected difficulty
     return allQuestions.filter(q => {
       if (selectedDifficulty === "all") return true;
       if (selectedDifficulty === "easy") return q.difficulty === 1;
@@ -608,9 +643,16 @@ export default function PracticeStep({
     });
   }, [allQuestions, selectedDifficulty]);
 
-  const currentQuestion = filteredQuestions[currentQuestionIndex];
-  const totalQuestions = filteredQuestions.length;
-  const hasQuestions = totalQuestions > 0;
+  // Questions to show in current session (limited by questionsToShow)
+  const activeQuestions = useMemo(() => {
+    return filteredQuestions.slice(0, questionsToShow);
+  }, [filteredQuestions, questionsToShow]);
+
+  const currentQuestion = activeQuestions[currentQuestionIndex];
+  const totalActiveQuestions = activeQuestions.length;
+  const hasQuestions = filteredQuestions.length > 0;
+  const hasMoreQuestions = filteredQuestions.length > questionsToShow;
+  const remainingInSession = totalActiveQuestions - currentQuestionIndex;
 
   // Handlers
   const handleStart = useCallback(() => {
@@ -630,44 +672,42 @@ export default function PracticeStep({
         questionId: currentQuestion.id,
         userAnswer: currentAnswer,
         selfAssessment: assessment,
-        viewedAnswer: showAnswer,
       });
       return newMap;
     });
-  }, [currentQuestion, currentAnswer, showAnswer]);
-
-  const handleShowAnswer = useCallback(() => {
-    setShowAnswer(true);
-
-    // Update answer record to mark as viewed
-    if (currentQuestion) {
-      setAnswers(prev => {
-        const newMap = new Map(prev);
-        const existing = newMap.get(currentQuestion.id);
-        if (existing) {
-          newMap.set(currentQuestion.id, { ...existing, viewedAnswer: true });
-        }
-        return newMap;
-      });
-    }
-  }, [currentQuestion]);
+  }, [currentQuestion, currentAnswer]);
 
   const handleNextQuestion = useCallback(() => {
-    if (currentQuestionIndex < totalQuestions - 1) {
+    if (currentQuestionIndex < totalActiveQuestions - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setCurrentAnswer("");
       setIsSubmitted(false);
-      setShowAnswer(false);
     } else {
       setIsComplete(true);
     }
-  }, [currentQuestionIndex, totalQuestions]);
+  }, [currentQuestionIndex, totalActiveQuestions]);
+
+  const handleSkipToFinish = useCallback(() => {
+    setIsComplete(true);
+  }, []);
+
+  const handleDoMore = useCallback(() => {
+    // Add more questions to the session
+    const newCount = Math.min(questionsToShow + 2, filteredQuestions.length);
+    setQuestionsToShow(newCount);
+    setIsComplete(false);
+    // Continue from where we left off
+    setCurrentQuestionIndex(totalActiveQuestions);
+    setCurrentAnswer("");
+    setIsSubmitted(false);
+  }, [questionsToShow, filteredQuestions.length, totalActiveQuestions]);
 
   const handleContinue = useCallback(() => {
     // Save summary
     const answerArray = Array.from(answers.values());
     const summary = {
-      total_questions: totalQuestions,
+      total_questions_available: filteredQuestions.length,
+      questions_attempted: answerArray.length,
       got_it_count: answerArray.filter(a => a.selfAssessment === "got_it").length,
       not_quite_count: answerArray.filter(a => a.selfAssessment === "not_quite").length,
       unsure_count: answerArray.filter(a => a.selfAssessment === "unsure").length,
@@ -677,7 +717,7 @@ export default function PracticeStep({
     };
     onPatch(summary);
     onNext();
-  }, [answers, totalQuestions, selectedDifficulty, onPatch, onNext]);
+  }, [answers, filteredQuestions.length, selectedDifficulty, onPatch, onNext]);
 
   // ==========================================================================
   // Render: No questions fallback
@@ -710,7 +750,7 @@ export default function PracticeStep({
     return (
       <IntroScreen
         topicName={overview.topic_name}
-        totalQuestions={allQuestions.length}
+        totalQuestions={filteredQuestions.length}
         onStart={handleStart}
       />
     );
@@ -723,7 +763,10 @@ export default function PracticeStep({
     return (
       <CompleteScreen
         answers={Array.from(answers.values())}
-        totalQuestions={totalQuestions}
+        totalQuestions={filteredQuestions.length}
+        questionsAttempted={answers.size}
+        hasMoreQuestions={hasMoreQuestions || (filteredQuestions.length > answers.size)}
+        onDoMore={handleDoMore}
         onContinue={handleContinue}
         saving={saving}
       />
@@ -737,7 +780,7 @@ export default function PracticeStep({
 
   return (
     <div className="space-y-6">
-      {/* Difficulty selector - only show if questions have difficulty */}
+      {/* Difficulty selector - only show at start */}
       {allQuestions.some(q => q.difficulty !== undefined) && currentQuestionIndex === 0 && !isSubmitted && (
         <DifficultySelector
           selected={selectedDifficulty}
@@ -751,17 +794,17 @@ export default function PracticeStep({
         <QuestionCard
           question={currentQuestion}
           questionNumber={currentQuestionIndex + 1}
-          totalQuestions={totalQuestions}
+          totalQuestions={totalActiveQuestions}
           userAnswer={currentAnswer}
           onAnswerChange={setCurrentAnswer}
           isSubmitted={isSubmitted}
           onSubmit={handleSubmit}
           selfAssessment={currentAnswerRecord?.selfAssessment ?? null}
           onSelfAssess={handleSelfAssess}
-          showAnswer={showAnswer}
-          onShowAnswer={handleShowAnswer}
           onNext={handleNextQuestion}
-          isLastQuestion={currentQuestionIndex === totalQuestions - 1}
+          isLastQuestion={currentQuestionIndex === totalActiveQuestions - 1}
+          onSkipToFinish={handleSkipToFinish}
+          remainingQuestions={remainingInSession}
         />
       )}
     </div>
