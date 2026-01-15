@@ -15,6 +15,7 @@ import SessionRun from "./pages/child/SessionRun";
 import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 import DevRpcTest from "./pages/child/DevRpcTest";
+import InsightsReport from './pages/parent/InsightsReport';
 
 
 function HomeGate() {
@@ -62,8 +63,7 @@ export default function App() {
           <Route path="/parent" element={<ParentDashboard />} />
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
-        
-<Route path="/child/dev/rpc" element={<DevRpcTest />} />
+        <Route path="/parent/insights/report" element={<InsightsReport />} />
 
           {/* Shared */}
           <Route path="/account" element={<Account />} />
