@@ -70,12 +70,10 @@ function FlashcardViewer({
   topicName: string;
 }) {
   return (
-    <div className="perspective-1000 w-full" style={{ minHeight: "320px" }}>
+    <div className="w-full" style={{ perspective: "1000px", minHeight: "320px" }}>
       <div
         onClick={onFlip}
-        className={`relative w-full h-80 cursor-pointer transition-transform duration-500 transform-style-3d ${
-          isFlipped ? "rotate-y-180" : ""
-        }`}
+        className="relative w-full h-80 cursor-pointer transition-transform duration-500"
         style={{
           transformStyle: "preserve-3d",
           transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
@@ -83,21 +81,14 @@ function FlashcardViewer({
       >
         {/* Front of card */}
         <div
-          className="absolute inset-0 w-full h-full backface-hidden rounded-2xl bg-white shadow-lg border border-neutral-200 p-6 flex flex-col"
+          className="absolute inset-0 w-full h-full rounded-2xl bg-white shadow-lg border border-neutral-200 p-6 flex flex-col"
           style={{ backfaceVisibility: "hidden" }}
         >
           <div className="flex items-center justify-between text-sm text-neutral-400 mb-4">
             <span>Front</span>
-            
-              href="#"
-              className="text-primary-600 hover:text-primary-700 flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <span className="text-primary-600 flex items-center gap-1">
               {topicName}
-              <span className="w-4 h-4 bg-primary-600 text-white rounded text-xs flex items-center justify-center">
-                📘
-              </span>
-            </a>
+            </span>
           </div>
 
           <div className="flex-1 flex items-center justify-center">
@@ -113,7 +104,7 @@ function FlashcardViewer({
 
         {/* Back of card */}
         <div
-          className="absolute inset-0 w-full h-full backface-hidden rounded-2xl bg-slate-100 shadow-lg border border-neutral-200 p-6 flex flex-col"
+          className="absolute inset-0 w-full h-full rounded-2xl bg-slate-100 shadow-lg border border-neutral-200 p-6 flex flex-col"
           style={{
             backfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
@@ -121,16 +112,9 @@ function FlashcardViewer({
         >
           <div className="flex items-center justify-between text-sm text-neutral-400 mb-4">
             <span>Back</span>
-            
-              href="#"
-              className="text-primary-600 hover:text-primary-700 flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <span className="text-primary-600 flex items-center gap-1">
               {topicName}
-              <span className="w-4 h-4 bg-primary-600 text-white rounded text-xs flex items-center justify-center">
-                📘
-              </span>
-            </a>
+            </span>
           </div>
 
           <div className="flex-1 flex items-center justify-center">
@@ -183,7 +167,8 @@ export default function RecallStep({
       if (!currentCard) return;
 
       // Update local state
-      setRatings((prev) => new Map(prev).set(currentCard.id, rating));
+      const newRatings = new Map(ratings).set(currentCard.id, rating);
+      setRatings(newRatings);
       setHistory((prev) => [...prev, { cardId: currentCard.id, rating }]);
 
       // Call parent to persist
@@ -201,20 +186,22 @@ export default function RecallStep({
         // All cards done
         setIsComplete(true);
 
+        // Calculate final counts
+        const finalKnownCount = Array.from(newRatings.values()).filter((r) => r === "known").length;
+        const finalLearningCount = Array.from(newRatings.values()).filter((r) => r === "learning").length;
+
         // Save summary to step
         const summary = {
           total_cards: totalCards,
-          known_count: rating === "known" ? knownCount + 1 : knownCount,
-          learning_count: rating === "learning" ? learningCount + 1 : learningCount,
-          card_ratings: Object.fromEntries(
-            new Map(ratings).set(currentCard.id, rating)
-          ),
+          known_count: finalKnownCount,
+          learning_count: finalLearningCount,
+          card_ratings: Object.fromEntries(newRatings),
           completed_at: new Date().toISOString(),
         };
         onPatch(summary);
       }
     },
-    [currentCard, currentIndex, totalCards, knownCount, learningCount, ratings, onPatch, onUpdateFlashcardProgress]
+    [currentCard, currentIndex, totalCards, ratings, onPatch, onUpdateFlashcardProgress]
   );
 
   const handleUndo = useCallback(() => {
@@ -242,9 +229,6 @@ export default function RecallStep({
   }, [history, cards]);
 
   const handleShuffle = useCallback(() => {
-    // Only shuffle unrated cards from current position
-    // For simplicity, just reset to start with shuffled order
-    // In production, you'd want a more sophisticated shuffle
     setCurrentIndex(0);
     setIsFlipped(false);
   }, []);
@@ -287,7 +271,7 @@ export default function RecallStep({
     return (
       <div className="bg-white rounded-2xl shadow-card p-8">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-accent-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🎉</span>
           </div>
           <h2 className="text-2xl font-bold text-neutral-900 mb-2">Great recall!</h2>
@@ -298,12 +282,12 @@ export default function RecallStep({
 
         {/* Results summary */}
         <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-accent-green/10 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-accent-green">{finalKnownCount}</p>
+          <div className="bg-green-50 rounded-xl p-4 text-center">
+            <p className="text-3xl font-bold text-green-600">{finalKnownCount}</p>
             <p className="text-sm text-neutral-600 mt-1">Cards you know</p>
           </div>
-          <div className="bg-accent-orange/10 rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-accent-orange">{finalLearningCount}</p>
+          <div className="bg-orange-50 rounded-xl p-4 text-center">
+            <p className="text-3xl font-bold text-orange-500">{finalLearningCount}</p>
             <p className="text-sm text-neutral-600 mt-1">Still learning</p>
           </div>
         </div>
@@ -342,10 +326,10 @@ export default function RecallStep({
         <div className="flex items-center justify-between">
           {/* Still learning counter */}
           <div className="flex items-center gap-2">
-            <span className="w-6 h-6 bg-accent-orange text-white text-xs font-bold rounded-full flex items-center justify-center">
+            <span className="w-6 h-6 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {learningCount}
             </span>
-            <span className="text-accent-orange font-medium text-sm">Still learning</span>
+            <span className="text-orange-500 font-medium text-sm">Still learning</span>
           </div>
 
           {/* Card position */}
@@ -355,8 +339,8 @@ export default function RecallStep({
 
           {/* Know counter */}
           <div className="flex items-center gap-2">
-            <span className="text-accent-green font-medium text-sm">Know</span>
-            <span className="w-6 h-6 bg-accent-green text-white text-xs font-bold rounded-full flex items-center justify-center">
+            <span className="text-green-600 font-medium text-sm">Know</span>
+            <span className="w-6 h-6 bg-green-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
               {knownCount}
             </span>
           </div>
@@ -366,7 +350,7 @@ export default function RecallStep({
         <div className="mt-3 w-full bg-neutral-200 rounded-full h-1">
           <div
             className="bg-primary-600 h-full rounded-full transition-all duration-300"
-            style={{ width: `${((currentIndex) / totalCards) * 100}%` }}
+            style={{ width: `${(currentIndex / totalCards) * 100}%` }}
           />
         </div>
       </div>
@@ -401,7 +385,7 @@ export default function RecallStep({
               type="button"
               onClick={() => handleRate("learning")}
               disabled={saving}
-              className="w-14 h-14 rounded-full bg-accent-orange/10 hover:bg-accent-orange/20 flex items-center justify-center text-2xl transition"
+              className="w-14 h-14 rounded-full bg-orange-50 hover:bg-orange-100 flex items-center justify-center text-2xl transition"
               title="Still learning"
             >
               🤔
@@ -412,7 +396,7 @@ export default function RecallStep({
               type="button"
               onClick={() => handleRate("known")}
               disabled={saving}
-              className="w-14 h-14 rounded-full bg-accent-green/10 hover:bg-accent-green/20 flex items-center justify-center text-2xl transition"
+              className="w-14 h-14 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center text-2xl transition"
               title="I know this!"
             >
               😃
@@ -423,24 +407,26 @@ export default function RecallStep({
 
       {/* Help and controls footer */}
       <div className="flex items-center justify-between text-sm">
-        
-          href="#"
-          className="text-primary-600 hover:text-primary-700 flex items-center gap-1"
+        <button
+          type="button"
+          className="text-primary-600 hover:text-primary-700"
         >
           Stuck? <span className="underline">Help with this card</span>
-        </a>
+        </button>
 
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={handleShuffle}
-            className="text-neutral-400 hover:text-neutral-600 flex items-center gap-1"
+            className="text-neutral-400 hover:text-neutral-600"
+            title="Shuffle"
           >
             <FontAwesomeIcon icon={faShuffle} />
           </button>
           <button
             type="button"
             className="text-neutral-400 hover:text-neutral-600 flex items-center gap-1"
+            title="Full screen"
           >
             <FontAwesomeIcon icon={faExpand} />
             <span>Full screen</span>
