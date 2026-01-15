@@ -44,6 +44,12 @@ import {
   endMnemonicPlay,
 } from "../../../services/mnemonics/mnemonicActivityService";
 
+import {
+  requestMnemonicTracked,
+  transformToMnemonicData,
+  MnemonicStyle as ApiMnemonicStyle,
+} from "../../../services/mnemonics/mnemonicApi";
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -493,6 +499,7 @@ function MnemonicPlayer({
 
   return (
     <div className="p-6 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border border-primary-200">
+      {/* (player UI unchanged) */}
       <audio
         ref={audioRef}
         src={resolvedAudioUrl ?? undefined}
@@ -647,6 +654,23 @@ export default function SummaryStep({
   async function handleGenerateMnemonic() {
     if (!selectedStyle) return;
 
+    const topicId = overview.topic_id;
+    const topicName = overview.topic_name;
+
+    if (!topicId) {
+      console.error("[SummaryStep] Missing overview.topic_id (required for tracked mnemonic request)");
+      setMnemonic({
+        mnemonicId: null,
+        style: selectedStyle,
+        styleReference: "",
+        lyrics: "",
+        audioUrl: null,
+        durationSeconds: null,
+        status: "failed",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setMnemonic({
       mnemonicId: null,
@@ -659,6 +683,7 @@ export default function SummaryStep({
     });
 
     try {
+      // If SessionRun provides a handler, use it.
       if (onRequestMnemonic) {
         const result = await onRequestMnemonic(selectedStyle);
         setMnemonic(result);
@@ -673,32 +698,44 @@ export default function SummaryStep({
         return;
       }
 
-      // Dev-only fallback
-      if (import.meta.env.DEV) {
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        const mockMnemonic: MnemonicData = {
-          mnemonicId: "00000000-0000-0000-0000-000000000000",
-          style: selectedStyle,
-          styleReference: MNEMONIC_STYLES.find((s) => s.id === selectedStyle)?.styleReference || "",
-          lyrics: generateMockLyrics(overview.topic_name, selectedStyle),
-          audioUrl: null,
-          durationSeconds: 45,
-          status: "ready",
-        };
+      // Otherwise call the tracked flow directly (end-to-end from Summary).
+      const originalPrompt = `${overview.subject_name} | ${topicName} | style=${selectedStyle} | step=summary`;
 
-        setMnemonic(mockMnemonic);
+      const { response } = await requestMnemonicTracked({
+        topicId,
+        topicName,
+        originalPrompt,
+        subjectName: overview.subject_name.toLowerCase(),
+        topicText: topicName,
+        style: selectedStyle as ApiMnemonicStyle,
+        level: "gcse",
+        examBoard: null,
+        callbackUrl: null,
+        // Once you’re confident n8n stage 5 always runs, set this true.
+        disableClientFallbackTracking: false,
+      });
 
-        await onPatch({
-          summary: {
-            ...summary,
-            selectedStyle,
-            mnemonic: mockMnemonic,
-          },
-        });
-        return;
-      }
+      const transformed = transformToMnemonicData(response, selectedStyle as ApiMnemonicStyle);
 
-      throw new Error("onRequestMnemonic is not configured");
+      const result: MnemonicData = {
+        mnemonicId: transformed.mnemonicId,
+        style: transformed.style as MnemonicStyle,
+        styleReference: transformed.styleReference,
+        lyrics: transformed.lyrics,
+        audioUrl: transformed.audioUrl,
+        durationSeconds: transformed.durationSeconds,
+        status: transformed.status,
+      };
+
+      setMnemonic(result);
+
+      await onPatch({
+        summary: {
+          ...summary,
+          selectedStyle,
+          mnemonic: result,
+        },
+      });
     } catch (error) {
       console.error("[SummaryStep] Mnemonic generation failed:", error);
       setMnemonic({
