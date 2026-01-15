@@ -491,7 +491,7 @@ export default function SessionRun() {
   console.log("[DEBUG] sessionData.generated_payload:", sessionData.generated_payload);
 console.log("[DEBUG] currentStepKey:", currentStepKey);
 
-cconst stepPayload = {
+const stepPayload = {
   ...sessionData.generated_payload,
   answers: currentStepData?.answer_summary ?? {},
 };
