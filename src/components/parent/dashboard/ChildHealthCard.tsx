@@ -4,6 +4,8 @@
 
 import React from "react";
 import type { ChildHealthCardProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
+import { STATUS_COLORS, getStatusBadgeStyle, getStatusContent } from '../../styles/statusStyles';
+
 
 // UPDATED: Extended to include keep_an_eye
 type ExtendedStatusIndicator = StatusIndicator | 'keep_an_eye';
