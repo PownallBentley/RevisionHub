@@ -1,6 +1,7 @@
 // src/components/layout/AppHeader.tsx
 // Shows ParentNav for parents, ChildNav for children
 // Shows avatar image when available, otherwise initials
+// Updated 15 Jan 2026: Settings link now goes to /parent/settings
 
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -112,7 +113,7 @@ export default function AppHeader() {
             <div>
               <div className="text-base font-semibold leading-tight">RevisionHub</div>
               <div className="text-xs text-gray-500">
-                {isChild ? "Your revision" : "Parent-led revision"}
+                {isChild ? "Your revision" : "Plan revision"}
               </div>
             </div>
           </Link>
@@ -183,7 +184,7 @@ export default function AppHeader() {
                     type="button"
                     onClick={() => {
                       setDropdownOpen(false);
-                      navigate("/settings");
+                      navigate("/parent/settings");
                     }}
                     className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                   >
