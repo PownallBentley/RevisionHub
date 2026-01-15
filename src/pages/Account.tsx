@@ -1,25 +1,24 @@
 // src/pages/Account.tsx
+// Refactored: Profile & Avatar only. Settings moved to /parent/settings
+// 15 January 2026
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faUser,
   faMapMarkerAlt,
-  faBell,
-  faLock,
-  faTrash,
   faSpinner,
   faCheck,
   faExclamationTriangle,
   faPen,
   faTimes,
+  faCog,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { PageLayout } from "../components/layout";
 import { supabase } from "../lib/supabase";
 import AvatarUpload from "../components/account/AvatarUpload";
-import AnalyticsSharingCard from "../components/account/AnalyticsSharingCard";
 
 interface ProfileData {
   full_name: string;
@@ -31,17 +30,6 @@ interface ProfileData {
   city: string | null;
   postcode: string | null;
   timezone: string;
-  notification_settings: {
-    weekly_summary: boolean;
-    session_reminders: boolean;
-    achievement_alerts: boolean;
-    insights_available: boolean;
-  };
-  analytics_sharing: {
-    enabled: boolean;
-    scope: "town" | "county" | "national";
-    children: Array<{ child_id: string; child_name: string; enabled: boolean }>;
-  };
 }
 
 interface ChildProfileData {
@@ -49,10 +37,6 @@ interface ChildProfileData {
   preferred_name: string | null;
   email: string | null;
   avatar_url: string | null;
-  notification_settings: {
-    session_reminders: boolean;
-    achievement_alerts: boolean;
-  };
 }
 
 export default function Account() {
@@ -68,28 +52,12 @@ export default function Account() {
   // Per-section editing state
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
-  const [editingNotifications, setEditingNotifications] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
-  const [savingNotifications, setSavingNotifications] = useState(false);
-  const [savingAnalytics, setSavingAnalytics] = useState(false);
 
   // Backup state for cancel
   const [profileBackup, setProfileBackup] = useState<Partial<ProfileData> | null>(null);
   const [addressBackup, setAddressBackup] = useState<Partial<ProfileData> | null>(null);
-  const [notificationsBackup, setNotificationsBackup] = useState<any>(null);
-
-  // Password change state
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-
-  // Delete account state
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // Redirect if not logged in
   useEffect(() => {
@@ -113,16 +81,11 @@ export default function Account() {
         if (isParent) {
           const { data: profileData, error: profileError } = await supabase
             .from("profiles")
-            .select("*")
+            .select("full_name, email, phone, avatar_url, address_line1, address_line2, city, postcode, timezone")
             .eq("id", user.id)
             .single();
 
           if (profileError) throw profileError;
-
-          const { data: childrenData } = await supabase
-            .from("children")
-            .select("id, first_name")
-            .eq("parent_id", user.id);
 
           setParentData({
             full_name: profileData.full_name || "",
@@ -134,26 +97,11 @@ export default function Account() {
             city: profileData.city || null,
             postcode: profileData.postcode || null,
             timezone: profileData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-            notification_settings: profileData.notification_settings || {
-              weekly_summary: true,
-              session_reminders: true,
-              achievement_alerts: true,
-              insights_available: true,
-            },
-            analytics_sharing: profileData.analytics_sharing || {
-              enabled: false,
-              scope: "county",
-              children: (childrenData || []).map((c) => ({
-                child_id: c.id,
-                child_name: c.first_name,
-                enabled: true,
-              })),
-            },
           });
         } else if (isChild) {
           const { data: childProfileData, error: childError } = await supabase
             .from("children")
-            .select("*")
+            .select("id, first_name, preferred_name, email, avatar_url")
             .eq("auth_user_id", user.id)
             .single();
 
@@ -165,10 +113,6 @@ export default function Account() {
             preferred_name: childProfileData.preferred_name || null,
             email: childProfileData.email || null,
             avatar_url: childProfileData.avatar_url || null,
-            notification_settings: childProfileData.notification_settings || {
-              session_reminders: true,
-              achievement_alerts: true,
-            },
           });
         }
       } catch (err: any) {
@@ -253,69 +197,6 @@ export default function Account() {
     }
   };
 
-  // Save notifications section
-  const saveNotificationsSection = async () => {
-    setSavingNotifications(true);
-    setError(null);
-
-    try {
-      if (isParent && parentData) {
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .update({
-            notification_settings: parentData.notification_settings,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user!.id);
-
-        if (updateError) throw updateError;
-      } else if (childData && childId) {
-        const { error: updateError } = await supabase
-          .from("children")
-          .update({
-            notification_settings: childData.notification_settings,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", childId);
-
-        if (updateError) throw updateError;
-      }
-
-      setEditingNotifications(false);
-      setNotificationsBackup(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to save notifications");
-    } finally {
-      setSavingNotifications(false);
-    }
-  };
-
-  // Save analytics sharing
-  const saveAnalyticsSharing = async (settings: ProfileData["analytics_sharing"]) => {
-    if (!parentData) return;
-    
-    setSavingAnalytics(true);
-    setError(null);
-
-    try {
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({
-          analytics_sharing: settings,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user!.id);
-
-      if (updateError) throw updateError;
-
-      setParentData({ ...parentData, analytics_sharing: settings });
-    } catch (err: any) {
-      setError(err.message || "Failed to save analytics settings");
-    } finally {
-      setSavingAnalytics(false);
-    }
-  };
-
   // Handle avatar change - refresh header
   const handleAvatarChange = async (newUrl: string | null) => {
     if (isParent && parentData) {
@@ -323,44 +204,7 @@ export default function Account() {
     } else if (childData) {
       setChildData({ ...childData, avatar_url: newUrl });
     }
-    // Refresh auth context to update header avatar
     await refresh();
-  };
-
-  // Change password
-  const handlePasswordChange = async () => {
-    setPasswordError(null);
-    setPasswordSuccess(false);
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters");
-      return;
-    }
-
-    setSavingPassword(true);
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (error) throw error;
-
-      setPasswordSuccess(true);
-      setShowPasswordForm(false);
-      setNewPassword("");
-      setConfirmPassword("");
-      setTimeout(() => setPasswordSuccess(false), 3000);
-    } catch (err: any) {
-      setPasswordError(err.message || "Failed to change password");
-    } finally {
-      setSavingPassword(false);
-    }
   };
 
   // Cancel editing helpers
@@ -378,18 +222,6 @@ export default function Account() {
     }
     setEditingAddress(false);
     setAddressBackup(null);
-  };
-
-  const cancelNotificationsEdit = () => {
-    if (notificationsBackup) {
-      if (isParent && parentData) {
-        setParentData({ ...parentData, notification_settings: notificationsBackup });
-      } else if (childData) {
-        setChildData({ ...childData, notification_settings: notificationsBackup });
-      }
-    }
-    setEditingNotifications(false);
-    setNotificationsBackup(null);
   };
 
   // Start editing helpers
@@ -411,15 +243,6 @@ export default function Account() {
       });
     }
     setEditingAddress(true);
-  };
-
-  const startNotificationsEdit = () => {
-    if (isParent && parentData) {
-      setNotificationsBackup({ ...parentData.notification_settings });
-    } else if (childData) {
-      setNotificationsBackup({ ...childData.notification_settings });
-    }
-    setEditingNotifications(true);
   };
 
   // Loading state
@@ -446,13 +269,22 @@ export default function Account() {
     <PageLayout>
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2 text-primary-600">
-            My Account
-          </h1>
-          <p className="text-neutral-500">
-            Manage your profile and preferences
-          </p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold mb-2 text-primary-600">My Account</h1>
+            <p className="text-neutral-500">Manage your profile information</p>
+          </div>
+          
+          {/* Settings link for parents */}
+          {isParent && (
+            <Link
+              to="/parent/settings"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors"
+            >
+              <FontAwesomeIcon icon={faCog} />
+              <span className="font-medium">Settings</span>
+            </Link>
+          )}
         </div>
 
         {/* Error banner */}
@@ -606,211 +438,28 @@ export default function Account() {
               </SectionCard>
             )}
 
-            {/* Analytics Sharing (Parents only) */}
-            {isParent && parentData && (
-              <AnalyticsSharingCard
-                settings={parentData.analytics_sharing}
-                onSettingsChange={saveAnalyticsSharing}
-                saving={savingAnalytics}
-              />
+            {/* Link to Settings for parents */}
+            {isParent && (
+              <div className="bg-neutral-50 rounded-2xl p-6 border border-neutral-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-neutral-700">
+                      Looking for notifications, security, or analytics?
+                    </h3>
+                    <p className="text-sm text-neutral-500 mt-1">
+                      These settings have moved to a dedicated page
+                    </p>
+                  </div>
+                  <Link
+                    to="/parent/settings"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors"
+                  >
+                    <FontAwesomeIcon icon={faCog} />
+                    Go to Settings
+                  </Link>
+                </div>
+              </div>
             )}
-
-            {/* Notifications Section */}
-            <SectionCard
-              icon={faBell}
-              title="Notifications"
-              editing={editingNotifications}
-              saving={savingNotifications}
-              onEdit={startNotificationsEdit}
-              onSave={saveNotificationsSection}
-              onCancel={cancelNotificationsEdit}
-            >
-              <div className="space-y-3">
-                {isParent && parentData && (
-                  <>
-                    <NotificationToggle
-                      label="Weekly summary email"
-                      description="Get a summary of your children's progress each Monday"
-                      enabled={parentData.notification_settings.weekly_summary}
-                      onChange={(enabled) => setParentData({
-                        ...parentData,
-                        notification_settings: { ...parentData.notification_settings, weekly_summary: enabled },
-                      })}
-                      disabled={!editingNotifications}
-                    />
-                    <NotificationToggle
-                      label="Session reminders"
-                      description="Reminders when sessions are due"
-                      enabled={parentData.notification_settings.session_reminders}
-                      onChange={(enabled) => setParentData({
-                        ...parentData,
-                        notification_settings: { ...parentData.notification_settings, session_reminders: enabled },
-                      })}
-                      disabled={!editingNotifications}
-                    />
-                    <NotificationToggle
-                      label="Achievement alerts"
-                      description="Celebrate when your children earn achievements"
-                      enabled={parentData.notification_settings.achievement_alerts}
-                      onChange={(enabled) => setParentData({
-                        ...parentData,
-                        notification_settings: { ...parentData.notification_settings, achievement_alerts: enabled },
-                      })}
-                      disabled={!editingNotifications}
-                    />
-                    <NotificationToggle
-                      label="Insights available"
-                      description="Get notified when new peer insights are ready"
-                      enabled={parentData.notification_settings.insights_available}
-                      onChange={(enabled) => setParentData({
-                        ...parentData,
-                        notification_settings: { ...parentData.notification_settings, insights_available: enabled },
-                      })}
-                      disabled={!editingNotifications || !parentData.analytics_sharing.enabled}
-                      dimmed={!parentData.analytics_sharing.enabled}
-                    />
-                  </>
-                )}
-
-                {isChild && childData && (
-                  <>
-                    <NotificationToggle
-                      label="Session reminders"
-                      description="Get reminded when you have sessions scheduled"
-                      enabled={childData.notification_settings.session_reminders}
-                      onChange={(enabled) => setChildData({
-                        ...childData,
-                        notification_settings: { ...childData.notification_settings, session_reminders: enabled },
-                      })}
-                      disabled={!editingNotifications}
-                    />
-                    <NotificationToggle
-                      label="Achievement alerts"
-                      description="Celebrate when you earn new achievements"
-                      enabled={childData.notification_settings.achievement_alerts}
-                      onChange={(enabled) => setChildData({
-                        ...childData,
-                        notification_settings: { ...childData.notification_settings, achievement_alerts: enabled },
-                      })}
-                      disabled={!editingNotifications}
-                    />
-                  </>
-                )}
-              </div>
-            </SectionCard>
-
-            {/* Security Section */}
-            <div className="bg-white rounded-2xl shadow-card p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <FontAwesomeIcon icon={faLock} className="text-primary-600" />
-                <h2 className="text-lg font-semibold text-neutral-700">Security</h2>
-              </div>
-
-              {passwordSuccess && (
-                <div className="mb-4 p-3 rounded-xl flex items-center gap-2 bg-green-100">
-                  <FontAwesomeIcon icon={faCheck} className="text-accent-green" />
-                  <p className="text-sm text-green-800">Password changed successfully</p>
-                </div>
-              )}
-
-              {!showPasswordForm ? (
-                <button
-                  onClick={() => setShowPasswordForm(true)}
-                  className="text-sm font-medium text-primary-600 hover:underline"
-                >
-                  Change password
-                </button>
-              ) : (
-                <div className="space-y-4">
-                  <FormField
-                    label="New password"
-                    type="password"
-                    value={newPassword}
-                    onChange={setNewPassword}
-                  />
-                  <FormField
-                    label="Confirm new password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={setConfirmPassword}
-                  />
-                  {passwordError && (
-                    <p className="text-sm text-accent-red">{passwordError}</p>
-                  )}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setShowPasswordForm(false);
-                        setNewPassword("");
-                        setConfirmPassword("");
-                        setPasswordError(null);
-                      }}
-                      className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handlePasswordChange}
-                      disabled={savingPassword}
-                      className="px-4 py-2 rounded-xl bg-primary-600 text-white font-medium flex items-center gap-2 hover:bg-primary-700 transition-colors"
-                    >
-                      {savingPassword && <FontAwesomeIcon icon={faSpinner} className="animate-spin" />}
-                      Update password
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Danger Zone */}
-            <div className="rounded-2xl p-6 border-2 border-accent-red bg-red-50">
-              <div className="flex items-center gap-3 mb-4">
-                <FontAwesomeIcon icon={faTrash} className="text-accent-red" />
-                <h2 className="text-lg font-semibold text-accent-red">Danger Zone</h2>
-              </div>
-
-              <p className="text-sm text-neutral-600 mb-4">
-                Once you delete your account, there is no going back. All your data will be permanently removed.
-              </p>
-
-              {!showDeleteConfirm ? (
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="px-4 py-2 rounded-xl border-2 border-accent-red text-accent-red font-medium hover:bg-red-100 transition-colors"
-                >
-                  Delete my account
-                </button>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm font-medium text-accent-red">
-                    Type "DELETE" to confirm:
-                  </p>
-                  <input
-                    type="text"
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-accent-red focus:outline-none"
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setShowDeleteConfirm(false);
-                        setDeleteConfirmText("");
-                      }}
-                      className="px-4 py-2 rounded-xl border border-neutral-200 text-neutral-700 font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      disabled={deleteConfirmText !== "DELETE"}
-                      className="px-4 py-2 rounded-xl bg-accent-red text-white font-medium disabled:opacity-50"
-                    >
-                      Permanently delete account
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </main>
@@ -920,47 +569,6 @@ function FormField({
       {hint && (
         <p className="text-xs mt-1 text-neutral-500">{hint}</p>
       )}
-    </div>
-  );
-}
-
-// Notification toggle component
-function NotificationToggle({
-  label,
-  description,
-  enabled,
-  onChange,
-  disabled = false,
-  dimmed = false,
-}: {
-  label: string;
-  description: string;
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-  disabled?: boolean;
-  dimmed?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between p-4 rounded-xl bg-neutral-50 transition-colors ${dimmed ? "opacity-50" : ""}`}
-    >
-      <div>
-        <p className="text-sm font-medium text-neutral-700">{label}</p>
-        <p className="text-xs text-neutral-500">{description}</p>
-      </div>
-      <button
-        onClick={() => !disabled && onChange(!enabled)}
-        disabled={disabled}
-        className={`relative w-11 h-6 rounded-full transition-colors ${disabled && !dimmed ? "cursor-not-allowed" : ""} ${
-          enabled ? "bg-accent-green" : "bg-neutral-200"
-        }`}
-      >
-        <div
-          className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-            enabled ? "translate-x-5" : "translate-x-0.5"
-          }`}
-        />
-      </button>
     </div>
   );
 }
