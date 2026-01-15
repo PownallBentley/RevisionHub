@@ -143,6 +143,11 @@ export function ParentDashboardV2() {
     navigateWithScroll("/parent/insights");
   };
 
+  const handleAddChild = () => {
+    // Navigate to onboarding page to add a new child
+    navigateWithScroll("/parent/onboarding?mode=add-child");
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -173,13 +178,14 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
-      {/* Hero Status Banner (includes nudges as 4th card) */}
+      {/* Hero Status Banner (includes nudges as 4th card + Add Child button) */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
         onViewTodaySessions={handleViewTodaySessions}
         onViewInsights={handleViewInsights}
         reminders={data.gentle_reminders}
+        onAddChild={handleAddChild}
       />
 
       {/* Child Health Cards */}
