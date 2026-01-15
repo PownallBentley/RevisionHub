@@ -51,7 +51,7 @@ function ChildCardsSkeleton() {
               ))}
             </div>
             <div className="bg-neutral-100 rounded-xl p-4 h-16 mb-5"></div>
-            <div className="bg-neutral-200 rounded-pill h-12"></div>
+            <div className="bg-neutral-200 rounded-xl h-12"></div>
           </div>
         ))}
       </div>
@@ -69,7 +69,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       <p className="text-neutral-600 mb-4">{message}</p>
       <button 
         onClick={onRetry}
-        className="px-6 py-3 bg-primary-600 text-white rounded-pill font-semibold hover:bg-primary-700 transition-colors"
+        className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-colors"
       >
         Try again
       </button>
@@ -108,11 +108,9 @@ export function ParentDashboardV2() {
 
   // Navigation handlers
   const handleViewTodaySessions = () => {
-    if (data?.children?.[0]?.child_id) {
-      navigate(`/parent/child/${data.children[0].child_id}/today`);
-    } else {
-      navigate("/parent/schedule");
-    }
+    // Navigate to timetable with today's date
+    const today = new Date().toISOString().split('T')[0];
+    navigate(`/parent/timetable?date=${today}`);
   };
 
   const handleViewInsights = () => {
@@ -120,7 +118,8 @@ export function ParentDashboardV2() {
   };
 
   const handleGoToToday = (childId: string) => {
-    navigate(`/parent/child/${childId}/today`);
+    const today = new Date().toISOString().split('T')[0];
+    navigate(`/parent/timetable?date=${today}&child=${childId}`);
   };
 
   const handleViewChildInsights = (childId: string) => {
@@ -128,7 +127,7 @@ export function ParentDashboardV2() {
   };
 
   const handleViewFullSchedule = () => {
-    navigate("/parent/schedule");
+    navigate("/parent/timetable");
   };
 
   const handleSeeWhy = () => {
@@ -169,7 +168,7 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
-      {/* Hero Status Banner (now includes nudges) */}
+      {/* Hero Status Banner (includes nudges) */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
