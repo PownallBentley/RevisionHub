@@ -1,207 +1,233 @@
-// src/types/parent/insightsDashboardTypes.ts
-// FEAT-008: Advanced Insights Dashboard Types
+// src/types/parent/parentDashboardTypes.ts
+// Types for Parent Dashboard v2 (FEAT-009)
 
-export type DateRangeType = 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'lifetime';
+// ============================================================================
+// Status Types
+// ============================================================================
 
-export interface DateRange {
-  type: DateRangeType;
-  start_date: string;
-  end_date: string;
-}
+export type StatusIndicator = 'on_track' | 'needs_attention' | 'getting_started';
 
-// Widget configuration
-export interface WidgetConfig {
-  id: string;
-  enabled: boolean;
-  order: number;
-}
+export type MomentType = 
+  | 'achievement' 
+  | 'sessions_milestone' 
+  | 'streak_milestone' 
+  | 'getting_started'
+  | 'focus_mode';
 
-export type WidgetId = 
-  | 'hero-story'
-  | 'progress-plan'
-  | 'confidence-trend'
-  | 'focus-impact'
-  | 'momentum'
-  | 'building-confidence'
-  | 'needs-attention'
-  | 'subject-balance'
-  | 'confidence-heatmap'
-  | 'tutor-advice';
+// ============================================================================
+// Child Types
+// ============================================================================
 
-// Summary (Hero Card)
-export interface InsightsSummary {
-  date_range: DateRange;
-  sessions: {
-    planned: number;
-    completed: number;
-    skipped: number;
-    completion_rate: number;
-  };
-  confidence: {
-    avg_pre: number | null;
-    avg_post: number | null;
-    avg_change: number | null;
-    avg_change_percent: number | null;
-  };
-  focus_mode: {
-    sessions_with_focus: number;
-    total_sessions: number;
-    usage_rate: number;
-  };
-  streak: {
-    current: number;
-    longest: number;
-    last_completed: string | null;
-  };
-}
-
-// Weekly Progress (Progress vs Plan)
-export interface DayProgress {
-  date: string;
-  day_name: string;
-  day_of_week: number;
-  planned: number;
-  completed: number;
-}
-
-export interface WeeklyProgress {
-  by_day: DayProgress[];
-  best_day: {
-    date: string;
-    day_name: string;
-    completed: number;
-  } | null;
-  worst_day: {
-    date: string;
-    day_name: string;
-    missed: number;
-  } | null;
-}
-
-// Focus Mode Comparison
-export interface FocusModeStats {
-  session_count: number;
-  completed_count: number;
-  completion_rate: number;
-  avg_confidence_change: number | null;
-  avg_confidence_change_percent: number | null;
-}
-
-export interface FocusModeComparison {
-  focus_on: FocusModeStats;
-  focus_off: FocusModeStats;
-}
-
-// Subject Balance
-export interface SubjectStat {
+export interface ChildSubject {
   subject_id: string;
   subject_name: string;
-  session_count: number;
-  total_minutes: number;
-  percentage: number;
+  color: string;
+  icon: string;
 }
 
-export interface SubjectBalance {
-  subjects: SubjectStat[];
-  total_sessions: number;
-  total_minutes: number;
-}
-
-// Confidence Heatmap
-export interface HeatmapSession {
-  session_date: string;
-  session_index: number;
-  post_confidence: number | null;
-  confidence_label: string | null;
-}
-
-export interface HeatmapTopic {
-  topic_id: string;
+export interface NextFocus {
+  subject_name: string;
   topic_name: string;
-  sessions: HeatmapSession[];
-}
-
-export interface ConfidenceHeatmap {
-  topics: HeatmapTopic[];
-}
-
-// Confidence Trend
-export interface TrendSession {
-  session_index: number;
   session_date: string;
-  pre_confidence: number | null;
-  post_confidence: number | null;
+}
+
+export interface ChildSummary {
+  child_id: string;
+  child_name: string;
+  first_name: string;
+  last_name: string;
+  year_group: number;
+  exam_type: string;
+  subjects: ChildSubject[];
+  mocks_flag: boolean;
+  mocks_message: string | null;
+  next_focus: NextFocus | null;
+  week_sessions_completed: number;
+  week_sessions_total: number;
+  week_topics_covered: number;
+  prev_week_sessions_completed: number;
+  auth_user_id: string | null;
+  invitation_code: string | null;
+  // v1.3 fields
+  avatar_url: string | null;
+  current_streak: number;
+  longest_streak: number;
+  status_indicator: StatusIndicator;
+  status_label: string;
+  insight_message: string;
+  insight_sub_message: string;
+  insight_icon: string;
+  next_session_time: string | null;
+}
+
+// ============================================================================
+// Week Summary Types
+// ============================================================================
+
+export interface WeekSummary {
+  sessions_completed: number;
+  sessions_total: number;
+  sessions_previous_week: number;
+  sessions_difference: number;
+  topics_covered: number;
+  subjects_active: number;
+  total_minutes: number;
+  average_session_minutes: number;
+  days_active: number;
+  // v1.3 fields
+  family_status: StatusIndicator;
+  family_status_label: string;
+}
+
+// ============================================================================
+// Daily Pattern Types
+// ============================================================================
+
+export interface DailyPattern {
+  day_of_week: string;
+  day_name_short: string;
+  day_index: number;
+  sessions_completed: number;
+  sessions_total: number;
+  total_minutes: number;
+  is_rest_day: boolean;
+}
+
+// ============================================================================
+// Reminder Types
+// ============================================================================
+
+export type ReminderType = 
+  | 'mocks_coming_up' 
+  | 'topic_to_revisit' 
+  | 'building_momentum' 
+  | 'subject_neglected';
+
+export interface GentleReminder {
+  type: ReminderType;
+  priority: number;
+  child_id: string;
+  child_name: string;
+  message: string;
+  subject_id: string | null;
+  subject_name: string | null;
+  topic_id: string | null;
   topic_name: string | null;
 }
 
-export interface ConfidenceTrend {
-  sessions: TrendSession[];
-  largest_lift: {
-    topic_name: string;
-    change_percent: number;
-  } | null;
-  most_fragile: {
-    topic_name: string;
-    variance: number;
-  } | null;
-}
+// ============================================================================
+// Coming Up Types
+// ============================================================================
 
-// Top/Bottom Topics (from existing RPC)
-export interface TopicInsight {
-  topic_id: string;
-  topic_name: string;
+export interface ComingUpSession {
+  planned_session_id: string;
+  child_id: string;
+  child_name: string;
+  child_avatar_url: string | null;
+  subject_id: string;
   subject_name: string;
-  session_count: number;
-  avg_post_confidence: number;
-  confidence_change: number;
+  subject_color: string;
+  subject_icon: string;
+  topic_name: string;
+  session_date: string;
+  session_duration_minutes: number;
+  is_today: boolean;
+  is_tomorrow: boolean;
+  day_label: string;
 }
 
-export interface TopicsInsights {
-  improving_topics: TopicInsight[];
-  struggling_topics: TopicInsight[];
-  by_subject: {
-    subject_id: string;
-    subject_name: string;
-    session_count: number;
-    avg_pre_confidence: number;
-    avg_post_confidence: number;
-    trend: 'improving' | 'stable' | 'declining';
-  }[];
+// ============================================================================
+// Subject Coverage Types
+// ============================================================================
+
+export interface SubjectCoverage {
+  child_id: string;
+  child_name: string;
+  subject_id: string;
+  subject_name: string;
+  subject_color: string;
+  subject_icon: string;
+  sessions_completed: number;
+  topics_covered: number;
 }
 
-// Complete Insights Response
-export interface AllInsightsData {
-  summary: InsightsSummary;
-  weekly_progress: WeeklyProgress;
-  focus_comparison: FocusModeComparison;
-  subject_balance: SubjectBalance;
-  confidence_trend: ConfidenceTrend;
-  confidence_heatmap: ConfidenceHeatmap;
-  top_topics: TopicsInsights;
+// ============================================================================
+// Progress Moments Types (v1.3)
+// ============================================================================
+
+export interface ProgressMoment {
+  child_id: string;
+  child_name: string;
+  avatar_url: string | null;
+  moment_type: MomentType;
+  message: string;
+  sub_message: string;
+  icon: string;
 }
 
-// AI Tutor Advice
-export interface TutorAdvice {
-  weekly_story: string;
-  focus_points: string[];
-  watch_out_for: string[];
-  try_saying: {
-    instead_of: string;
-    try_this: string;
-  };
-  step_in_signals: string[];
-  step_back_signals: string[];
-  next_best_action: {
-    title: string;
-    description: string;
-  };
+// ============================================================================
+// Main Dashboard Response
+// ============================================================================
+
+export interface ParentDashboardData {
+  children: ChildSummary[];
+  week_summary: WeekSummary;
+  daily_pattern: DailyPattern[];
+  gentle_reminders: GentleReminder[];
+  coming_up_next: ComingUpSession[];
+  subject_coverage: SubjectCoverage[];
+  progress_moments: ProgressMoment[];
 }
 
-// Widget Props
-export interface WidgetProps {
-  childId: string;
-  childName: string;
-  dateRange: DateRangeType;
-  data: AllInsightsData | null;
-  loading: boolean;
+// ============================================================================
+// Component Props
+// ============================================================================
+
+export interface HeroStatusBannerProps {
+  weekSummary: WeekSummary;
+  comingUpCount: number;
+  onViewTodaySessions: () => void;
+  onViewInsights: () => void;
+  reminders: GentleReminder[];
+}
+
+export interface ChildHealthCardProps {
+  child: ChildSummary;
+  onGoToToday: (childId: string) => void;
+  onViewInsights: (childId: string) => void;
+}
+
+export interface ChildHealthCardGridProps {
+  children: ChildSummary[];
+  onGoToToday: (childId: string) => void;
+  onViewInsights: (childId: string) => void;
+}
+
+export interface WeeklyFocusStripProps {
+  dailyPattern: DailyPattern[];
+  onSeeWhy: () => void;
+}
+
+export interface ComingUpCardProps {
+  sessions: ComingUpSession[];
+  onViewFullSchedule: () => void;
+}
+
+export interface HelpfulNudgesCardProps {
+  reminders: GentleReminder[];
+}
+
+export interface ProgressMomentsCardProps {
+  moments: ProgressMoment[];
+}
+
+export interface FamilyOverviewCardProps {
+  weekSummary: WeekSummary;
+  subjectCoverage: SubjectCoverage[];
+  childrenCount: number;
+}
+
+export interface WeeklyRhythmChartProps {
+  dailyPattern: DailyPattern[];
+  onViewDetailedBreakdown: () => void;
 }
