@@ -10,9 +10,9 @@ import {
   faLayerGroup,
   faCheckCircle,
   faExclamationCircle,
-  faChartLine,
   faArrowRight,
   faPlus,
+  faUserPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageLayout } from "../../components/layout";
@@ -216,12 +216,7 @@ export default function SubjectProgress() {
     <PageLayout>
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Hero Card - Dashboard Style */}
-        <section className="bg-gradient-to-br from-primary-50 to-white rounded-2xl shadow-card p-8 mb-8 relative overflow-hidden">
-          {/* Decorative background icon */}
-          <div className="absolute top-4 right-4 w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center opacity-60">
-            <FontAwesomeIcon icon={faChartLine} className="text-2xl text-primary-600" />
-          </div>
-
+        <section className="bg-gradient-to-br from-primary-50 to-white rounded-2xl shadow-card p-8 mb-8">
           {/* Header with title and child selector */}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
             <div className="flex-1">
@@ -339,16 +334,16 @@ export default function SubjectProgress() {
               Back to Dashboard
             </button>
             <button
-              onClick={() => navigate("/parent/schedule")}
+              onClick={() => navigate("/parent/timetable")}
               className="px-6 py-3 bg-white text-primary-600 font-medium rounded-full border-2 border-primary-200 hover:border-primary-300 transition-colors"
             >
               View Schedule
             </button>
 
-            {/* Add Subject Button - Right aligned */}
+            {/* Add Subject Button - Styled like Add Child */}
             <button
               onClick={handleAddSubject}
-              className="ml-auto flex items-center gap-2 px-4 py-2 text-primary-600 font-medium hover:text-primary-700 transition-colors"
+              className="ml-auto flex items-center gap-2 px-4 py-2 bg-white text-primary-600 font-medium rounded-full border border-neutral-200 hover:border-primary-300 transition-colors shadow-sm"
             >
               <FontAwesomeIcon icon={faPlus} className="text-sm" />
               Add Subject
