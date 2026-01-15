@@ -3,11 +3,20 @@
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import { getParentDashboard } from "../services/parent/parentDashboardService";
-import { HeroStatusBanner } from "../components/parent/dashboard/HeroStatusBanner";
-import { ChildHealthCardGrid } from "../components/parent/dashboard/ChildHealthCardGrid";
-import type { ParentDashboardData } from "../types/parent/parentDashboardTypes";
+import { useAuth } from "../../contexts/AuthContext";
+import { getParentDashboard } from "../../services/parent/parentDashboardService";
+import { HeroStatusBanner } from "../../components/parent/dashboard/HeroStatusBanner";
+import { ChildHealthCardGrid } from "../../components/parent/dashboard/ChildHealthCardGrid";
+import { WeeklyFocusStrip } from "../../components/parent/dashboard/WeeklyFocusStrip";
+import { ComingUpCard } from "../../components/parent/dashboard/ComingUpCard";
+import { HelpfulNudgesCard } from "../../components/parent/dashboard/HelpfulNudgesCard";
+import { ProgressMomentsCard } from "../../components/parent/dashboard/ProgressMomentsCard";
+import { SupportTipCard } from "../../components/parent/dashboard/SupportTipCard";
+import { QuickActionsSection } from "../../components/parent/dashboard/QuickActionsSection";
+import { FamilyOverviewCard } from "../../components/parent/dashboard/FamilyOverviewCard";
+import { WeeklyRhythmChart } from "../../components/parent/dashboard/WeeklyRhythmChart";
+import { ResourcesSection } from "../../components/parent/dashboard/ResourcesSection";
+import type { ParentDashboardData } from "../../types/parent/parentDashboardTypes";
 
 function HeroSkeleton() {
   return (
@@ -98,6 +107,7 @@ export function ParentDashboardV2() {
     }
   }, [user]);
 
+  // Navigation handlers
   const handleViewTodaySessions = () => {
     if (data?.children?.[0]?.child_id) {
       navigate(`/parent/child/${data.children[0].child_id}/today`);
@@ -118,6 +128,19 @@ export function ParentDashboardV2() {
     navigate(`/parent/insights?child=${childId}`);
   };
 
+  const handleViewFullSchedule = () => {
+    navigate("/parent/schedule");
+  };
+
+  const handleSeeWhy = () => {
+    navigate("/parent/insights");
+  };
+
+  const handleViewDetailedBreakdown = () => {
+    navigate("/parent/insights");
+  };
+
+  // Loading state
   if (loading) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -127,6 +150,7 @@ export function ParentDashboardV2() {
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -135,6 +159,7 @@ export function ParentDashboardV2() {
     );
   }
 
+  // No data state
   if (!data) {
     return (
       <div className="max-w-content mx-auto px-6 py-8">
@@ -145,6 +170,7 @@ export function ParentDashboardV2() {
 
   return (
     <main className="max-w-content mx-auto px-6 py-8">
+      {/* Hero Status Banner */}
       <HeroStatusBanner
         weekSummary={data.week_summary}
         comingUpCount={data.coming_up_next.length}
@@ -152,11 +178,57 @@ export function ParentDashboardV2() {
         onViewInsights={handleViewInsights}
       />
 
+      {/* Child Health Cards */}
       <ChildHealthCardGrid
         children={data.children}
         onGoToToday={handleGoToToday}
         onViewInsights={handleViewChildInsights}
       />
+
+      {/* Weekly Focus Strip */}
+      {data.daily_pattern.length > 0 && (
+        <WeeklyFocusStrip
+          dailyPattern={data.daily_pattern}
+          onSeeWhy={handleSeeWhy}
+        />
+      )}
+
+      {/* Two-column layout for cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        {/* Left column */}
+        <div className="space-y-6">
+          <ComingUpCard
+            sessions={data.coming_up_next}
+            onViewFullSchedule={handleViewFullSchedule}
+          />
+          <HelpfulNudgesCard reminders={data.gentle_reminders} />
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-6">
+          <ProgressMomentsCard moments={data.progress_moments} />
+          <SupportTipCard />
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <QuickActionsSection />
+
+      {/* Two-column layout for charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        <FamilyOverviewCard
+          weekSummary={data.week_summary}
+          subjectCoverage={data.subject_coverage}
+          childrenCount={data.children.length}
+        />
+        <WeeklyRhythmChart
+          dailyPattern={data.daily_pattern}
+          onViewDetailedBreakdown={handleViewDetailedBreakdown}
+        />
+      </div>
+
+      {/* Resources */}
+      <ResourcesSection />
     </main>
   );
 }
