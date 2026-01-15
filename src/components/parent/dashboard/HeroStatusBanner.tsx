@@ -1,8 +1,12 @@
 // src/components/parent/dashboard/HeroStatusBanner.tsx
-// Hero status banner for Parent Dashboard v2 (FEAT-009)
+// Hero status banner with integrated nudges for Parent Dashboard v2 (FEAT-009)
 
 import React from "react";
-import type { HeroStatusBannerProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
+import type { HeroStatusBannerProps, StatusIndicator, GentleReminder, ReminderType } from "../../../types/parent/parentDashboardTypes";
+
+interface ExtendedHeroStatusBannerProps extends HeroStatusBannerProps {
+  reminders: GentleReminder[];
+}
 
 const statusContent: Record<StatusIndicator, {
   headline: string;
@@ -34,12 +38,20 @@ const statusContent: Record<StatusIndicator, {
   },
 };
 
+const reminderConfig: Record<ReminderType, { icon: string; iconBg: string }> = {
+  mocks_coming_up: { icon: "fa-calendar-exclamation", iconBg: "bg-accent-amber" },
+  topic_to_revisit: { icon: "fa-rotate", iconBg: "bg-primary-500" },
+  building_momentum: { icon: "fa-seedling", iconBg: "bg-accent-green" },
+  subject_neglected: { icon: "fa-book-open", iconBg: "bg-neutral-400" },
+};
+
 export function HeroStatusBanner({ 
   weekSummary, 
   comingUpCount,
   onViewTodaySessions, 
-  onViewInsights 
-}: HeroStatusBannerProps) {
+  onViewInsights,
+  reminders,
+}: ExtendedHeroStatusBannerProps) {
   const status = weekSummary.family_status || "on_track";
   const content = statusContent[status];
   
@@ -66,6 +78,7 @@ export function HeroStatusBanner({
           </div>
         </div>
         
+        {/* Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <button className="bg-neutral-0 rounded-xl p-5 shadow-soft hover:shadow-card transition-all border border-neutral-200/50 text-left group">
             <div className="flex items-center justify-between mb-3">
@@ -106,7 +119,41 @@ export function HeroStatusBanner({
             <div className="text-sm text-neutral-500 font-medium">Active Coverage</div>
           </button>
         </div>
+
+        {/* Helpful Nudges - integrated */}
+        {reminders.length > 0 && (
+          <div className="bg-neutral-0/70 rounded-xl p-4 mb-6 border border-neutral-200/50">
+            <div className="flex items-center gap-2 mb-3">
+              <i className="fa-solid fa-lightbulb text-accent-amber text-sm"></i>
+              <span className="text-sm font-semibold text-primary-900">Helpful Nudges</span>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {reminders.slice(0, 3).map((reminder, index) => {
+                const config = reminderConfig[reminder.type] || {
+                  icon: "fa-circle-info",
+                  iconBg: "bg-neutral-400",
+                };
+
+                return (
+                  <div
+                    key={`${reminder.type}-${reminder.child_id}-${index}`}
+                    className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2"
+                  >
+                    <div
+                      className={`w-6 h-6 ${config.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}
+                    >
+                      <i className={`fa-solid ${config.icon} text-white text-xs`}></i>
+                    </div>
+                    <span className="text-sm text-primary-900">{reminder.message}</span>
+                    <span className="text-xs text-neutral-500">· {reminder.child_name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
+        {/* CTAs */}
         <div className="flex items-center gap-3 flex-wrap">
           <button 
             onClick={onViewTodaySessions}
