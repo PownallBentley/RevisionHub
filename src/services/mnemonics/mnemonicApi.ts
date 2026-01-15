@@ -20,11 +20,14 @@ type MnemonicRequest = {
   subject: string;
   level: string;
   exam_board: string | null;
+
   topic: string; // human prompt text used by generator (often same as topic_name)
+  subtopic: string | null;
+
   mnemonic_type: string;
   style: MnemonicStyle;
   style_reference: string;
-  callback_url?: string;
+  callback_url: string | null;
 };
 
 // What we expect back from n8n
@@ -52,9 +55,10 @@ const STYLE_REFERENCES: Record<MnemonicStyle, string> = {
   rock: "indie rock, guitar-driven, energetic",
 };
 
+// ✅ Updated to your actual published webhook URLs
 const WEBHOOK_URLS = {
-  test: "https://pownallpublishing.app.n8n.cloud/webhook-test/generate-mnemonic",
-  production: "https://pownallpublishing.app.n8n.cloud/webhook/generate-mnemonic",
+  test: "https://pownallpublishing.app.n8n.cloud/webhook-test/c224383d-9780-422a-afa2-960d655d5b9d",
+  production: "https://pownallpublishing.app.n8n.cloud/webhook/c224383d-9780-422a-afa2-960d655d5b9d",
 };
 
 export const WEBHOOK_MODE: "test" | "production" = "production";
@@ -69,26 +73,34 @@ export async function requestMnemonic(args: {
   topicName: string;
 
   subjectName: string;
+  level?: string | null;
+
   topicText: string; // prompt text for generator (can be same as topicName)
   style: MnemonicStyle;
+
   examBoard?: string | null;
-  callbackUrl?: string;
+  callbackUrl?: string | null;
 }): Promise<MnemonicResponse> {
   const webhookUrl = WEBHOOK_URLS[WEBHOOK_MODE];
 
   const payload: MnemonicRequest = {
     request_id: args.requestId,
+
     topic_id: args.topicId,
     topic_name: args.topicName,
 
     subject: args.subjectName,
-    level: "gcse",
+    level: (args.level ?? "gcse") as string,
     exam_board: args.examBoard ?? null,
+
     topic: args.topicText,
+    subtopic: null,
+
     mnemonic_type: "educational",
     style: args.style,
     style_reference: STYLE_REFERENCES[args.style],
-    callback_url: args.callbackUrl,
+
+    callback_url: args.callbackUrl ?? null,
   };
 
   console.log("[mnemonicApi] Requesting mnemonic:", { webhookUrl, payload });
@@ -124,8 +136,7 @@ export async function requestMnemonic(args: {
  * then call n8n with request_id + topic linkage.
  *
  * NOTE:
- * - This function does NOT do direct table writes for tracking.
- * - n8n will be responsible for calling rpc_mark_mnemonic_request_completed (stage 5).
+ * - n8n is responsible for calling rpc_mark_mnemonic_request_completed (stage 5).
  * - We keep a minimal fallback update here ONLY if n8n isn't updated yet.
  */
 export async function requestMnemonicTracked(args: {
@@ -138,7 +149,7 @@ export async function requestMnemonicTracked(args: {
   subjectName: string;
   topicText: string;
   style: MnemonicStyle;
-  callbackUrl?: string;
+  callbackUrl?: string | null;
 
   // Optional enrichment
   parsedTopic?: string | null;
@@ -175,13 +186,14 @@ export async function requestMnemonicTracked(args: {
     topicId: args.topicId,
     topicName: args.topicName,
     subjectName: args.subjectName,
+    level: args.level ?? "gcse",
     topicText: args.topicText,
     style: args.style,
     examBoard: args.examBoard ?? null,
-    callbackUrl: args.callbackUrl,
+    callbackUrl: args.callbackUrl ?? null,
   });
 
-  // 3) TEMP fallback only (until n8n stage 5 is done)
+  // 3) TEMP fallback only (until n8n stage 5 is definitely live)
   if (!args.disableClientFallbackTracking) {
     const mnemonicId = response.mnemonic?.id ?? response.mnemonic_id ?? null;
 
@@ -267,7 +279,7 @@ export function transformToMnemonicData(
   return {
     mnemonicId: response.mnemonic?.id ?? response.mnemonic_id ?? null,
     style,
-    styleReference: response.mnemonic?.style || STYLE_REFERENCES[style],
+    styleReference: STYLE_REFERENCES[style],
     lyrics: response.mnemonic?.lyrics || "",
     audioUrl: response.mnemonic?.audio_url || null,
     durationSeconds:
