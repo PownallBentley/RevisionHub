@@ -17,6 +17,7 @@ import ChildSignUp from "./pages/child/ChildSignUp";
 import { useAuth } from "./contexts/AuthContext";
 import DevRpcTest from "./pages/child/DevRpcTest";
 import ParentSettingsPage from "./pages/parent/ParentSettingsPage";
+import InsightsDashboard from './pages/parent/InsightsDashboard';
 
 function HomeGate() {
   const { loading, user, isParent, isChild, isUnresolved, parentChildCount } = useAuth();
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="/parent/subjects" element={<SubjectProgress />} />
           <Route path="/parent/timetable" element={<Timetable />} />
           <Route path="/parent/settings" element={<ParentSettingsPage />} />
+          <Route path="/parent/insights" element={<InsightsDashboard />} />
 
           {/* Shared */}
           <Route path="/account" element={<Account />} />
