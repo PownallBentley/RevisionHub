@@ -1,37 +1,47 @@
 // src/components/parent/dashboard/ChildHealthCard.tsx
 // Individual child card for Parent Dashboard v2 (FEAT-009)
+// Updated: FEAT-010 - Solid badge colors, keep_an_eye status
 
 import React from "react";
 import type { ChildHealthCardProps, StatusIndicator } from "../../../types/parent/parentDashboardTypes";
 
-const statusStyles: Record<StatusIndicator, {
+// UPDATED: Extended to include keep_an_eye
+type ExtendedStatusIndicator = StatusIndicator | 'keep_an_eye';
+
+const statusStyles: Record<ExtendedStatusIndicator, {
   badgeBg: string;
   badgeText: string;
   insightBg: string;
   insightBorder: string;
 }> = {
   on_track: {
-    badgeBg: "bg-accent-green/10",
-    badgeText: "text-accent-green",
+    badgeBg: "bg-[#1EC592]",
+    badgeText: "text-white",
     insightBg: "bg-accent-green/5",
     insightBorder: "border-accent-green/20",
   },
+  keep_an_eye: {
+    badgeBg: "bg-[#5B8DEF]",
+    badgeText: "text-white",
+    insightBg: "bg-blue-50",
+    insightBorder: "border-blue-200",
+  },
   needs_attention: {
-    badgeBg: "bg-accent-amber/10",
-    badgeText: "text-accent-amber",
-    insightBg: "bg-accent-amber/5",
-    insightBorder: "border-accent-amber/20",
+    badgeBg: "bg-[#E69B2C]",
+    badgeText: "text-white",
+    insightBg: "bg-amber-50",
+    insightBorder: "border-amber-200",
   },
   getting_started: {
-    badgeBg: "bg-primary-100",
-    badgeText: "text-primary-600",
-    insightBg: "bg-primary-50",
-    insightBorder: "border-primary-200",
+    badgeBg: "bg-[#7C3AED]",
+    badgeText: "text-white",
+    insightBg: "bg-purple-50",
+    insightBorder: "border-purple-200",
   },
 };
 
 export function ChildHealthCard({ child, onGoToToday, onViewInsights }: ChildHealthCardProps) {
-  const style = statusStyles[child.status_indicator] || statusStyles.on_track;
+  const style = statusStyles[child.status_indicator as ExtendedStatusIndicator] || statusStyles.on_track;
   
   // Get initials for avatar fallback
   const initials = child.first_name.charAt(0) + (child.last_name?.charAt(0) || "");
@@ -76,6 +86,7 @@ export function ChildHealthCard({ child, onGoToToday, onViewInsights }: ChildHea
             </div>
           </div>
         </div>
+        {/* UPDATED: Solid background badges */}
         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${style.badgeBg} ${style.badgeText}`}>
           {child.status_label}
         </span>
