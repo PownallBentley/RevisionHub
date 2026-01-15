@@ -227,7 +227,7 @@ export default function SubjectProgress() {
                 {headlineContent.status === "attention" && (
                   <span 
                     className="px-3 py-1 text-sm font-medium rounded-full text-white"
-                    style={{ backgroundColor: "#FFB547" }}
+                    style={{ backgroundColor: "#E69B2C" }}
                   >
                     Needs Attention
                   </span>
