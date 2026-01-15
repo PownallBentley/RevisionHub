@@ -7,12 +7,17 @@ import type { WeeklyRhythmChartProps } from "../../../types/parent/parentDashboa
 export function WeeklyRhythmChart({ dailyPattern, onViewDetailedBreakdown }: WeeklyRhythmChartProps) {
   const maxSessions = Math.max(...dailyPattern.map((d) => d.sessions_total), 1);
 
+  const handleViewDetails = () => {
+    onViewDetailedBreakdown();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
   return (
     <div className="bg-neutral-0 rounded-2xl shadow-card p-6 border border-neutral-200/50">
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-lg font-bold text-primary-900">Weekly Rhythm</h3>
         <button
-          onClick={onViewDetailedBreakdown}
+          onClick={handleViewDetails}
           className="text-sm font-medium text-primary-600 hover:text-primary-700"
         >
           Details
