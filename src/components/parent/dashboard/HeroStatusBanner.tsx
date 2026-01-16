@@ -100,11 +100,6 @@ export function HeroStatusBanner({
               {content.description}
             </p>
           </div>
-          <div className="hidden lg:block">
-            <div className="w-24 h-24 bg-primary-500/10 rounded-full flex items-center justify-center">
-              <i className="fa-solid fa-chart-line text-primary-600 text-4xl"></i>
-            </div>
-          </div>
         </div>
         
         {/* Stat Cards - 4 columns */}
@@ -126,7 +121,7 @@ export function HeroStatusBanner({
           <div className="bg-neutral-0 rounded-xl p-5 shadow-soft border border-neutral-200/50">
             <div className="mb-3">
               <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                <i className="fa-solid fa-clock text-primary-600 text-xl"></i>
+                <i className="fa-solid fa-clock ext-primary-600 text-xl"></i>
               </div>
             </div>
             <div className="text-2xl font-bold text-primary-900 mb-1">
