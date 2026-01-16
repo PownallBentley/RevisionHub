@@ -1,4 +1,5 @@
 // src/pages/parent/SubjectProgress.tsx
+// Updated: FEAT-010 - Uses unified child status from rpc_get_subject_progress
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +11,8 @@ import {
   faLayerGroup,
   faCheckCircle,
   faExclamationCircle,
-  faArrowRight,
+  faEye,
+  faRocket,
   faPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../contexts/AuthContext";
@@ -26,6 +28,22 @@ import {
   QuickStats,
   RecentActivity,
 } from "../../components/subjects";
+
+// FEAT-010: Centralized status colors
+const STATUS_COLORS: Record<string, string> = {
+  on_track: '#1EC592',
+  keep_an_eye: '#5B8DEF',
+  needs_attention: '#E69B2C',
+  getting_started: '#7C3AED',
+};
+
+// FEAT-010: Status display content
+const STATUS_CONTENT: Record<string, { label: string; icon: typeof faCheckCircle }> = {
+  on_track: { label: 'On Track', icon: faCheckCircle },
+  keep_an_eye: { label: 'Keep an Eye', icon: faEye },
+  needs_attention: { label: 'Needs Attention', icon: faExclamationCircle },
+  getting_started: { label: 'Getting Started', icon: faRocket },
+};
 
 export default function SubjectProgress() {
   const navigate = useNavigate();
@@ -161,7 +179,14 @@ export default function SubjectProgress() {
     );
   }
 
-  // Calculate stats - USE ONLY RPC STATUS for consistency
+  // FEAT-010: Get UNIFIED status from RPC (matches dashboard)
+  const childStatus = (data.child as any).status_indicator || 'on_track';
+  const childStatusLabel = (data.child as any).status_label || STATUS_CONTENT[childStatus]?.label || 'On Track';
+  const childStatusDetail = (data.child as any).status_detail || '';
+  const statusColor = STATUS_COLORS[childStatus] || STATUS_COLORS.on_track;
+  const statusIcon = STATUS_CONTENT[childStatus]?.icon || faCheckCircle;
+
+  // Calculate subject-level stats (for display, NOT for status)
   const totalSubjects = data.subjects.length;
   const subjectsNeedingAttention = data.subjects.filter(
     (s) => s.status === "needs_attention"
@@ -169,7 +194,6 @@ export default function SubjectProgress() {
   const subjectsOnTrack = data.subjects.filter(
     (s) => s.status === "in_progress" || s.status === "completed"
   ).length;
-  const hasIssues = subjectsNeedingAttention.length > 0;
 
   const sessionsThisWeek = data.child.sessions_this_week || 0;
   const topicsCoveredThisWeek = data.child.topics_covered_this_week || 0;
@@ -186,27 +210,49 @@ export default function SubjectProgress() {
   // Calculate weeks until exams (placeholder - would come from revision_plans)
   const weeksUntilExams = 12;
 
-  // Determine headline and message based on status
+  // FEAT-010: Determine headline based on UNIFIED child status
   const getHeadlineContent = () => {
     if (totalSubjects === 0) {
       return {
         headline: "Let's get started",
         message: "Add subjects to begin tracking your child's revision progress.",
-        status: "neutral",
       };
     }
-    if (hasIssues) {
+    
+    // Use the status detail from RPC if available, otherwise generate message
+    if (childStatusDetail) {
       return {
-        headline: "Some subjects need attention",
-        message: `${subjectsNeedingAttention.length} subject${subjectsNeedingAttention.length > 1 ? "s" : ""} could use a little extra focus. Consider scheduling additional sessions.`,
-        status: "attention",
+        headline: childStatus === 'on_track' ? "All subjects on track" :
+                  childStatus === 'keep_an_eye' ? "Worth keeping an eye on" :
+                  childStatus === 'needs_attention' ? "Some sessions need attention" :
+                  "Great start to revision",
+        message: childStatusDetail,
       };
     }
-    return {
-      headline: "All subjects on track",
-      message: "Great progress! All subjects are being covered as planned.",
-      status: "good",
-    };
+
+    // Fallback messages
+    switch (childStatus) {
+      case 'needs_attention':
+        return {
+          headline: "Some sessions need attention",
+          message: "A gentle check-in could help get things back on track.",
+        };
+      case 'keep_an_eye':
+        return {
+          headline: "Worth keeping an eye on",
+          message: "Activity has slowed slightly. Nothing to worry about yet.",
+        };
+      case 'getting_started':
+        return {
+          headline: "Great start to revision",
+          message: "The first sessions are always the hardest — doing great!",
+        };
+      default:
+        return {
+          headline: "All subjects on track",
+          message: "Great progress! All subjects are being covered as planned.",
+        };
+    }
   };
 
   const headlineContent = getHeadlineContent();
@@ -219,25 +265,18 @@ export default function SubjectProgress() {
           {/* Header with title and child selector */}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <h1 className="text-2xl md:text-3xl font-bold text-primary-900">
                   {headlineContent.headline}
                 </h1>
-                {/* Status Badge - Solid style matching SubjectCard */}
-                {headlineContent.status === "attention" && (
+                {/* FEAT-010: Status Badge - Uses UNIFIED status from RPC */}
+                {totalSubjects > 0 && (
                   <span 
-                    className="px-3 py-1 text-sm font-medium rounded-full text-white"
-                    style={{ backgroundColor: "#E69B2C" }}
+                    className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium rounded-full text-white"
+                    style={{ backgroundColor: statusColor }}
                   >
-                    Needs Attention
-                  </span>
-                )}
-                {headlineContent.status === "good" && (
-                  <span 
-                    className="px-3 py-1 text-sm font-medium rounded-full text-white"
-                    style={{ backgroundColor: "#1EC592" }}
-                  >
-                    On Track
+                    <FontAwesomeIcon icon={statusIcon} className="text-xs" />
+                    {childStatusLabel}
                   </span>
                 )}
               </div>
@@ -269,15 +308,14 @@ export default function SubjectProgress() {
             </div>
           </div>
 
-          {/* Mini Stat Cards - Consistent structure */}
+          {/* Mini Stat Cards - Removed arrows */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {/* Total Subjects Card */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-              <div className="flex items-start justify-between mb-3">
+              <div className="mb-3">
                 <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
                   <FontAwesomeIcon icon={faBook} className="text-primary-600" />
                 </div>
-                <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
               <div className="text-2xl font-bold text-primary-900">
                 {totalSubjects} subject{totalSubjects !== 1 ? "s" : ""}
@@ -287,11 +325,10 @@ export default function SubjectProgress() {
 
             {/* Sessions This Week Card */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-              <div className="flex items-start justify-between mb-3">
+              <div className="mb-3">
                 <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faCalendarCheck} className="text-accent-green" />
+                  <FontAwesomeIcon icon={faCalendarCheck} className="text-[#1EC592]" />
                 </div>
-                <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
               <div className="text-2xl font-bold text-primary-900">
                 {sessionsThisWeek} session{sessionsThisWeek !== 1 ? "s" : ""}
@@ -301,11 +338,10 @@ export default function SubjectProgress() {
 
             {/* Topics Covered Card */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-              <div className="flex items-start justify-between mb-3">
+              <div className="mb-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                   <FontAwesomeIcon icon={faLayerGroup} className="text-blue-600" />
                 </div>
-                <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
               <div className="text-2xl font-bold text-primary-900">
                 {topicsCoveredThisWeek} topic{topicsCoveredThisWeek !== 1 ? "s" : ""}
@@ -313,21 +349,24 @@ export default function SubjectProgress() {
               <div className="text-sm text-neutral-500">Covered This Week</div>
             </div>
 
-            {/* Coverage Status Card */}
+            {/* Coverage Status Card - Uses subject-level data for this specific metric */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hasIssues ? "bg-amber-100" : "bg-green-100"}`}>
+              <div className="mb-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  subjectsNeedingAttention.length > 0 ? "bg-amber-100" : "bg-green-100"
+                }`}>
                   <FontAwesomeIcon
-                    icon={hasIssues ? faExclamationCircle : faCheckCircle}
-                    className={hasIssues ? "text-accent-amber" : "text-accent-green"}
+                    icon={subjectsNeedingAttention.length > 0 ? faExclamationCircle : faCheckCircle}
+                    className={subjectsNeedingAttention.length > 0 ? "text-[#E69B2C]" : "text-[#1EC592]"}
                   />
                 </div>
-                <FontAwesomeIcon icon={faArrowRight} className="text-neutral-300 text-sm" />
               </div>
               <div className="text-2xl font-bold text-primary-900">
-                {hasIssues ? `${subjectsNeedingAttention.length} need${subjectsNeedingAttention.length === 1 ? "s" : ""} focus` : "All good!"}
+                {subjectsNeedingAttention.length > 0 
+                  ? `${subjectsNeedingAttention.length} need${subjectsNeedingAttention.length === 1 ? "s" : ""} focus` 
+                  : "All good!"}
               </div>
-              <div className="text-sm text-neutral-500">Coverage Status</div>
+              <div className="text-sm text-neutral-500">Subject Coverage</div>
             </div>
           </div>
 
