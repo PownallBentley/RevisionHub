@@ -11,10 +11,10 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 // Types
-import type { RecallStepProps, Flashcard } from "@/types/child/recallStep";
+import type { RecallStepProps, Flashcard } from "../../../types/child/recallStep";
 
 // Hooks
-import { useRecallStep } from "@/hooks/child/recallStep";
+import { useRecallStep } from "../../../hooks/child/recallStep";
 
 // Components
 import {
@@ -23,7 +23,7 @@ import {
   CompleteScreen,
   ProgressHeader,
   RatingButtons,
-} from "@/components/child/recallStep";
+} from "../../../components/child/recallStep";
 
 // =============================================================================
 // No Cards Fallback Component
@@ -56,14 +56,7 @@ function NoCardsScreen({ onNext }: { onNext: () => void }) {
 
 function FooterControls({ onShuffle }: { onShuffle: () => void }) {
   return (
-    <div className="flex items-center justify-between text-sm">
-      <button
-        type="button"
-        className="text-primary-600 hover:text-primary-700"
-      >
-        Stuck? <span className="underline">Get a hint</span>
-      </button>
-
+    <div className="flex items-center justify-end text-sm">
       <div className="flex items-center gap-4">
         <button
           type="button"
