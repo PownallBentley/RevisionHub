@@ -2,7 +2,9 @@
 // REFACTORED: January 2026
 // Main orchestrator for session runner - delegates to hooks and components
 // BUG FIX: stepPayload no longer overwrites content data with answer_summary
+// FEAT-011: Added Study Buddy panel integration
 
+import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
 // Components
@@ -20,7 +22,9 @@ import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
 import SummaryStep from "./sessionSteps/SummaryStep";
 import CompleteStep from "./sessionSteps/CompleteStep";
-import { StudyBuddyPanel } from '../../components/child/studyBuddy/StudyBuddyPanel';
+
+// Study Buddy
+import { StudyBuddyPanel } from "../../components/child/studyBuddy/StudyBuddyPanel";
 
 // Hooks
 import { useSessionRun } from "../../hooks/child/useSessionRun";
@@ -38,6 +42,7 @@ import {
 // Types
 import { STEP_ORDER } from "../../types/child/sessionTypes";
 import type { StepKey, StepPayload, StepOverview } from "../../types/child/sessionTypes";
+import type { StepContext } from "../../types/child/studyBuddy/studyBuddyTypes";
 
 // =============================================================================
 // Main Component
@@ -114,6 +119,72 @@ export default function SessionRun() {
     ...sessionData.generated_payload,
     answers: currentStepData?.answer_summary ?? {},
   };
+
+  // ===========================================================================
+  // FEAT-011: Study Buddy Context
+  // ===========================================================================
+  // Build context for Study Buddy so it knows what the child is currently viewing
+
+  const studyBuddyContext: StepContext | undefined = useMemo(() => {
+    if (!currentStepKey || !sessionData) return undefined;
+
+    // Extract a content preview based on current step
+    let contentPreview = `${sessionData.subject_name} - ${sessionData.topic_name}`;
+    let contentType = currentStepKey;
+    let contentUnitId = "";
+
+    const payload = sessionData.generated_payload;
+
+    switch (currentStepKey) {
+      case "recall":
+        if (payload?.recall?.cards?.[0]) {
+          const card = payload.recall.cards[0];
+          contentPreview = card.question || card.front || contentPreview;
+          contentType = "flashcard";
+          contentUnitId = card.id || "";
+        }
+        break;
+
+      case "reinforce":
+        if (payload?.reinforce?.slides?.[0]) {
+          const slide = payload.reinforce.slides[0];
+          contentPreview = slide.title || slide.content?.substring(0, 200) || contentPreview;
+          contentType = "teaching_slide";
+          contentUnitId = slide.id || "";
+        } else if (payload?.reinforce?.worked_examples?.[0]) {
+          const example = payload.reinforce.worked_examples[0];
+          contentPreview = example.title || example.question || contentPreview;
+          contentType = "worked_example";
+          contentUnitId = example.id || "";
+        }
+        break;
+
+      case "practice":
+        if (payload?.practice?.questions?.[0]) {
+          const question = payload.practice.questions[0];
+          contentPreview = question.question_text || question.question || contentPreview;
+          contentType = "practice_question";
+          contentUnitId = question.id || "";
+        }
+        break;
+
+      case "summary":
+        contentPreview = `Summary of ${sessionData.topic_name}`;
+        contentType = "summary";
+        break;
+
+      default:
+        // preview, complete - use defaults
+        break;
+    }
+
+    return {
+      step_key: currentStepKey,
+      content_type: contentType,
+      content_unit_id: contentUnitId,
+      content_preview: contentPreview.substring(0, 300),
+    };
+  }, [currentStepKey, sessionData]);
 
   // ===========================================================================
   // Render Step
@@ -196,6 +267,9 @@ export default function SessionRun() {
   // Main Render
   // ===========================================================================
 
+  // Get the revision session ID (prefer the one from hook, fallback to sessionData)
+  const activeRevisionSessionId = revisionSessionId ?? sessionData.revision_session_id;
+
   return (
     <div className="min-h-screen bg-neutral-100">
       <SessionHeader
@@ -214,6 +288,14 @@ export default function SessionRun() {
       />
 
       <main className="max-w-4xl mx-auto px-4 py-6 pb-24">{renderStep()}</main>
+
+      {/* FEAT-011: Study Buddy Panel */}
+      {activeRevisionSessionId && (
+        <StudyBuddyPanel
+          revisionSessionId={activeRevisionSessionId}
+          stepContext={studyBuddyContext}
+        />
+      )}
     </div>
   );
 }
