@@ -1,6 +1,7 @@
 // src/pages/child/sessionSteps/PreviewStep.tsx
 // NEW: 6-Step Session Model - January 2026
 // Step 1: Pre-confidence capture + session overview
+// FEAT-008: Social media toggle for focus mode
 
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -21,6 +22,7 @@ import {
   faLandmark,
   faDna,
   faBook,
+  faMobileScreenButton,
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -44,6 +46,7 @@ type PreviewStepProps = {
   payload: {
     preview?: {
       preConfidence?: ConfidenceLevel;
+      socialMediaOff?: boolean;
     };
   };
   saving: boolean;
@@ -209,6 +212,9 @@ export default function PreviewStep({
   const [preConfidence, setPreConfidence] = useState<ConfidenceLevel | null>(
     preview.preConfidence ?? null
   );
+  const [socialMediaOff, setSocialMediaOff] = useState<boolean>(
+    preview.socialMediaOff ?? false
+  );
 
   // Derived
   const subjectIcon = getIconFromName(overview.subject_icon);
@@ -220,10 +226,15 @@ export default function PreviewStep({
     setPreConfidence(level);
   }
 
+  function handleSocialMediaToggle() {
+    setSocialMediaOff(!socialMediaOff);
+  }
+
   async function handleStart() {
     await onPatch({
       preview: {
         preConfidence,
+        socialMediaOff,
         started_at: new Date().toISOString(),
       },
     });
@@ -295,6 +306,56 @@ export default function PreviewStep({
             onSelect={handleConfidenceSelect}
             disabled={saving}
           />
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* Social Media Focus Mode Section */}
+      {/* ================================================================== */}
+      <section className="mb-6">
+        <div className="bg-white rounded-2xl shadow-card p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                socialMediaOff ? "bg-accent-green" : "bg-neutral-100"
+              }`}>
+                <FontAwesomeIcon 
+                  icon={faMobileScreenButton} 
+                  className={`text-xl ${socialMediaOff ? "text-white" : "text-neutral-400"}`} 
+                />
+              </div>
+              <div>
+                <h3 className="font-bold text-primary-900">Focus Mode</h3>
+                <p className="text-neutral-500 text-sm">
+                  I've logged out of social media apps
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSocialMediaToggle}
+              disabled={saving}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                socialMediaOff ? "bg-accent-green" : "bg-neutral-300"
+              } ${saving ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <span
+                className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                  socialMediaOff ? "translate-x-7" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {socialMediaOff && (
+            <div className="mt-4 p-3 bg-accent-green/10 rounded-lg flex items-center space-x-2">
+              <FontAwesomeIcon icon={faCheckCircle} className="text-accent-green" />
+              <span className="text-accent-green font-medium text-sm">
+                +5 bonus points for focused revision!
+              </span>
+            </div>
+          )}
         </div>
       </section>
 
