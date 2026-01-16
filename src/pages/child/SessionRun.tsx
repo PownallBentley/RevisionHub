@@ -70,62 +70,12 @@ export default function SessionRun() {
   } = useSessionRun({ plannedSessionId });
 
   // ===========================================================================
-  // Loading and Error States
-  // ===========================================================================
-
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadSession} />;
-  if (!sessionData)
-    return <ErrorState message="Session data not found" onRetry={loadSession} />;
-
-  // ===========================================================================
-  // Derived Values
-  // ===========================================================================
-
-  const subjectIcon = getSubjectIcon(sessionData.subject_icon);
-  const subjectColor = sessionData.subject_color || "#5B2CFF";
-  const currentStepData = sessionData.steps.find((s) => s.step_key === currentStepKey);
-
-  const timeRemainingMinutes = calculateTimeRemaining(
-    currentStepIndex,
-    STEP_ORDER.length,
-    sessionData.session_duration_minutes
-  );
-
-  // Build step overview (metadata for step components)
-  const stepOverview: StepOverview = {
-    subject_name: sessionData.subject_name,
-    subject_icon: sessionData.subject_icon,
-    subject_color: sessionData.subject_color,
-    topic_name: sessionData.topic_name,
-    topic_id: sessionData.topic_id,
-    session_duration_minutes: sessionData.session_duration_minutes,
-    step_key: currentStepKey,
-    step_index: currentStepIndex,
-    total_steps: STEP_ORDER.length,
-    child_name: sessionData.child_name,
-    child_id: sessionData.child_id,
-    revision_session_id: revisionSessionId ?? sessionData.revision_session_id,
-  };
-
-  // ===========================================================================
-  // BUG FIX: Build step payload WITHOUT overwriting content data
-  // ===========================================================================
-  // Previous bug: [currentStepKey]: currentStepData?.answer_summary ?? {}
-  // This was overwriting payload.recall with empty {}, destroying cards
-  //
-  // Fix: Add answers as a separate property, preserving all original content
-  const stepPayload: StepPayload = {
-    ...sessionData.generated_payload,
-    answers: currentStepData?.answer_summary ?? {},
-  };
-
-  // ===========================================================================
   // FEAT-011: Study Buddy Context
   // ===========================================================================
-  // Build context for Study Buddy so it knows what the child is currently viewing
-
+  // IMPORTANT: This hook must be BEFORE any early returns to maintain hook order
+  
   const studyBuddyContext: StepContext | undefined = useMemo(() => {
+    // Return undefined if no data yet - this is safe
     if (!currentStepKey || !sessionData) return undefined;
 
     // Extract a content preview based on current step
@@ -185,6 +135,57 @@ export default function SessionRun() {
       content_preview: contentPreview.substring(0, 300),
     };
   }, [currentStepKey, sessionData]);
+
+  // ===========================================================================
+  // Loading and Error States
+  // ===========================================================================
+
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={loadSession} />;
+  if (!sessionData)
+    return <ErrorState message="Session data not found" onRetry={loadSession} />;
+
+  // ===========================================================================
+  // Derived Values
+  // ===========================================================================
+
+  const subjectIcon = getSubjectIcon(sessionData.subject_icon);
+  const subjectColor = sessionData.subject_color || "#5B2CFF";
+  const currentStepData = sessionData.steps.find((s) => s.step_key === currentStepKey);
+
+  const timeRemainingMinutes = calculateTimeRemaining(
+    currentStepIndex,
+    STEP_ORDER.length,
+    sessionData.session_duration_minutes
+  );
+
+  // Build step overview (metadata for step components)
+  const stepOverview: StepOverview = {
+    subject_name: sessionData.subject_name,
+    subject_icon: sessionData.subject_icon,
+    subject_color: sessionData.subject_color,
+    topic_name: sessionData.topic_name,
+    topic_id: sessionData.topic_id,
+    session_duration_minutes: sessionData.session_duration_minutes,
+    step_key: currentStepKey,
+    step_index: currentStepIndex,
+    total_steps: STEP_ORDER.length,
+    child_name: sessionData.child_name,
+    child_id: sessionData.child_id,
+    revision_session_id: revisionSessionId ?? sessionData.revision_session_id,
+  };
+
+  // ===========================================================================
+  // BUG FIX: Build step payload WITHOUT overwriting content data
+  // ===========================================================================
+  // Previous bug: [currentStepKey]: currentStepData?.answer_summary ?? {}
+  // This was overwriting payload.recall with empty {}, destroying cards
+  //
+  // Fix: Add answers as a separate property, preserving all original content
+  const stepPayload: StepPayload = {
+    ...sessionData.generated_payload,
+    answers: currentStepData?.answer_summary ?? {},
+  };
 
   // ===========================================================================
   // Render Step
