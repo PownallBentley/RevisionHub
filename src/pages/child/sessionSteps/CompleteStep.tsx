@@ -4,6 +4,7 @@
 // Child-friendly language update
 //
 // PRESERVES: Audio recording, transcription workflow, reflection insert
+// FEAT-011 Phase 2: Added studyBuddyService.updateSummary on completion
 
 import { useState, useRef, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -35,6 +36,7 @@ import {
   IconDefinition,
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../../../lib/supabase";
+import { studyBuddyService } from "../../../services/child/studyBuddy/studyBuddyService";
 
 // =============================================================================
 // Types
@@ -596,6 +598,18 @@ export default function CompleteStep({
         completed_at: new Date().toISOString(),
       },
     });
+
+    // FEAT-011 Phase 2: Update Study Buddy summary on session completion
+    // This generates thread summaries and learning notes from any Study Buddy
+    // conversations that occurred during this session. Fire-and-forget pattern
+    // to avoid blocking the completion flow.
+    try {
+      await studyBuddyService.updateSummary(overview.revision_session_id, true);
+      console.log("[CompleteStep] Study Buddy summary update triggered");
+    } catch (error) {
+      // Non-blocking: log error but don't prevent session completion
+      console.error("[CompleteStep] Study Buddy summary update failed:", error);
+    }
 
     await onFinish();
   }
