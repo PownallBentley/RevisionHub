@@ -1,5 +1,6 @@
 // src/components/parent/insights/TopicWidgets.tsx
 // FEAT-008: Building Confidence + Needs Attention Widgets
+// Fixed: Defensive checks for null/undefined confidence values
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faStar, faHandHoldingHeart, faInfoCircle } from '@fortawesome/free-solid-svg-icons';
@@ -17,18 +18,31 @@ function TopicCard({ topic, variant }: { topic: TopicInsight; variant: 'strength
   const textColor = isStrength ? 'text-accent-green' : 'text-accent-amber';
   const borderColor = isStrength ? 'border-accent-green' : 'border-accent-amber';
   
+  // FIXED: Defensive check for null/undefined confidence
+  const rawConfidence = topic.avg_post_confidence;
+  const hasValidConfidence = rawConfidence !== null && rawConfidence !== undefined && !isNaN(rawConfidence);
+  
   // Convert to percentage (1-4 scale to 0-100)
-  const confidencePercent = Math.round((topic.avg_post_confidence / 4) * 100);
+  const confidencePercent = hasValidConfidence 
+    ? Math.round((rawConfidence / 4) * 100) 
+    : 0;
+  
+  // FIXED: Defensive check for session_count
+  const sessionCount = topic.session_count ?? 0;
   
   return (
     <div className={`p-3 ${bgColor} bg-opacity-5 rounded-lg border ${borderColor} border-opacity-20`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex-1 min-w-0">
           <h4 className="font-semibold text-sm text-neutral-900 truncate">{topic.topic_name}</h4>
-          <p className="text-xs text-neutral-600">{topic.subject_name} • {topic.session_count} sessions</p>
+          <p className="text-xs text-neutral-600">
+            {topic.subject_name} • {sessionCount} session{sessionCount !== 1 ? 's' : ''}
+          </p>
         </div>
         <div className="text-right ml-2">
-          <div className={`text-xl font-bold ${textColor}`}>{confidencePercent}%</div>
+          <div className={`text-xl font-bold ${textColor}`}>
+            {hasValidConfidence ? `${confidencePercent}%` : '—'}
+          </div>
         </div>
       </div>
       <div className="w-full bg-neutral-200 rounded-full h-1.5 mb-2">
@@ -37,12 +51,14 @@ function TopicCard({ topic, variant }: { topic: TopicInsight; variant: 'strength
           style={{ width: `${confidencePercent}%` }}
         />
       </div>
-      {!isStrength && topic.confidence_change !== undefined && (
+      {!isStrength && (
         <div className="text-xs text-neutral-600">
           <FontAwesomeIcon icon={faInfoCircle} className={textColor + ' mr-1'} />
-          {topic.confidence_change > 0 
+          {!hasValidConfidence 
+            ? 'No confidence data yet'
+            : topic.confidence_change !== undefined && topic.confidence_change > 0 
             ? 'Building slowly' 
-            : topic.confidence_change < 0 
+            : topic.confidence_change !== undefined && topic.confidence_change < 0 
             ? 'Confidence fluctuating' 
             : 'New topic, early stages'}
         </div>
@@ -65,10 +81,14 @@ export function BuildingConfidenceWidget({ topics, loading }: Omit<TopicListWidg
     );
   }
 
-  // Filter to top 3 topics with highest confidence
+  // Filter to top 3 topics with highest confidence (only those with valid data)
   const topTopics = [...topics]
-    .sort((a, b) => b.avg_post_confidence - a.avg_post_confidence)
+    .filter(t => t.avg_post_confidence !== null && t.avg_post_confidence !== undefined && !isNaN(t.avg_post_confidence))
+    .sort((a, b) => (b.avg_post_confidence ?? 0) - (a.avg_post_confidence ?? 0))
     .slice(0, 3);
+
+  // If no valid topics, show topics anyway but they'll display "—"
+  const displayTopics = topTopics.length > 0 ? topTopics : topics.slice(0, 3);
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-200">
@@ -85,8 +105,8 @@ export function BuildingConfidenceWidget({ topics, loading }: Omit<TopicListWidg
 
       {/* Topics */}
       <div className="space-y-3">
-        {topTopics.length > 0 ? (
-          topTopics.map(topic => (
+        {displayTopics.length > 0 ? (
+          displayTopics.map(topic => (
             <TopicCard key={topic.topic_id} topic={topic} variant="strengths" />
           ))
         ) : (
@@ -113,10 +133,16 @@ export function NeedsAttentionWidget({ topics, loading }: Omit<TopicListWidgetPr
     );
   }
 
-  // Filter to bottom 3 topics with lowest confidence
-  const strugglingTopics = [...topics]
-    .sort((a, b) => a.avg_post_confidence - b.avg_post_confidence)
+  // Filter to bottom 3 topics with lowest confidence (only those with valid data)
+  const validTopics = [...topics]
+    .filter(t => t.avg_post_confidence !== null && t.avg_post_confidence !== undefined && !isNaN(t.avg_post_confidence));
+  
+  const strugglingTopics = validTopics
+    .sort((a, b) => (a.avg_post_confidence ?? 0) - (b.avg_post_confidence ?? 0))
     .slice(0, 3);
+
+  // If no valid topics, show topics anyway but they'll display "—"
+  const displayTopics = strugglingTopics.length > 0 ? strugglingTopics : topics.slice(0, 3);
 
   return (
     <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-200">
@@ -133,8 +159,8 @@ export function NeedsAttentionWidget({ topics, loading }: Omit<TopicListWidgetPr
 
       {/* Topics */}
       <div className="space-y-3">
-        {strugglingTopics.length > 0 ? (
-          strugglingTopics.map(topic => (
+        {displayTopics.length > 0 ? (
+          displayTopics.map(topic => (
             <TopicCard key={topic.topic_id} topic={topic} variant="needs-attention" />
           ))
         ) : (
