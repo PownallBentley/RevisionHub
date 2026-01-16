@@ -193,6 +193,56 @@ function ConfidenceSelector({
   );
 }
 
+function FocusModeToggle({
+  isActive,
+  onToggle,
+  disabled,
+}: {
+  isActive: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      className={`w-full p-4 rounded-xl border-2 transition flex items-center space-x-4 ${
+        isActive
+          ? "bg-accent-green/10 border-accent-green"
+          : "bg-neutral-50 border-neutral-200 hover:border-primary-300"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      <div
+        className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+          isActive ? "bg-accent-green" : "bg-neutral-200"
+        }`}
+      >
+        <FontAwesomeIcon
+          icon={faMobileScreenButton}
+          className={`text-xl ${isActive ? "text-white" : "text-neutral-500"}`}
+        />
+      </div>
+
+      <div className="flex-1 text-left">
+        <p className="font-bold text-neutral-900 mb-0.5">Focus Mode</p>
+        <p className="text-neutral-600 text-sm">
+          I've logged out of social media apps, such as TikTok, Snapchat, Instagram...
+        </p>
+        {isActive && (
+          <p className="text-neutral-700 font-medium text-sm mt-2">
+            +5 bonus points for focused revision!
+          </p>
+        )}
+      </div>
+
+      {isActive && (
+        <FontAwesomeIcon icon={faCheckCircle} className="text-xl text-accent-green" />
+      )}
+    </button>
+  );
+}
+
 // =============================================================================
 // Main Component
 // =============================================================================
@@ -282,6 +332,19 @@ export default function PreviewStep({
       </section>
 
       {/* ================================================================== */}
+      {/* Focus Mode Section (BEFORE confidence) */}
+      {/* ================================================================== */}
+      <section className="mb-6">
+        <div className="bg-white rounded-2xl shadow-card p-6">
+          <FocusModeToggle
+            isActive={socialMediaOff}
+            onToggle={handleSocialMediaToggle}
+            disabled={saving}
+          />
+        </div>
+      </section>
+
+      {/* ================================================================== */}
       {/* Pre-Confidence Section */}
       {/* ================================================================== */}
       <section className="mb-6">
@@ -306,56 +369,6 @@ export default function PreviewStep({
             onSelect={handleConfidenceSelect}
             disabled={saving}
           />
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* Social Media Focus Mode Section */}
-      {/* ================================================================== */}
-      <section className="mb-6">
-        <div className="bg-white rounded-2xl shadow-card p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                socialMediaOff ? "bg-accent-green" : "bg-neutral-100"
-              }`}>
-                <FontAwesomeIcon 
-                  icon={faMobileScreenButton} 
-                  className={`text-xl ${socialMediaOff ? "text-white" : "text-neutral-400"}`} 
-                />
-              </div>
-              <div>
-                <h3 className="font-bold text-primary-900">Focus Mode</h3>
-                <p className="text-neutral-500 text-sm">
-                  I've logged out of social media apps
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSocialMediaToggle}
-              disabled={saving}
-              className={`relative w-14 h-8 rounded-full transition-colors ${
-                socialMediaOff ? "bg-accent-green" : "bg-neutral-300"
-              } ${saving ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <span
-                className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
-                  socialMediaOff ? "translate-x-7" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-
-          {socialMediaOff && (
-            <div className="mt-4 p-3 bg-accent-green/10 rounded-lg flex items-center space-x-2">
-              <FontAwesomeIcon icon={faCheckCircle} className="text-accent-green" />
-              <span className="text-accent-green font-medium text-sm">
-                +5 bonus points for focused revision!
-              </span>
-            </div>
-          )}
         </div>
       </section>
 
