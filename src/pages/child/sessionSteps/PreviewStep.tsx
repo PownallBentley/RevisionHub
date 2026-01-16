@@ -203,11 +203,9 @@ function FocusModeToggle({
   disabled: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <div
       onClick={onToggle}
-      disabled={disabled}
-      className={`w-full p-4 rounded-xl border-2 transition flex items-center space-x-4 ${
+      className={`w-full p-4 rounded-xl border-2 transition flex items-center space-x-4 cursor-pointer ${
         isActive
           ? "bg-accent-green/10 border-accent-green"
           : "bg-neutral-50 border-neutral-200 hover:border-primary-300"
@@ -236,10 +234,19 @@ function FocusModeToggle({
         )}
       </div>
 
-      {isActive && (
-        <FontAwesomeIcon icon={faCheckCircle} className="text-xl text-accent-green" />
-      )}
-    </button>
+      {/* Toggle Switch */}
+      <div
+        className={`relative w-14 h-8 rounded-full transition-colors flex-shrink-0 ${
+          isActive ? "bg-accent-green" : "bg-neutral-300"
+        }`}
+      >
+        <span
+          className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+            isActive ? "translate-x-7" : "translate-x-1"
+          }`}
+        />
+      </div>
+    </div>
   );
 }
 
