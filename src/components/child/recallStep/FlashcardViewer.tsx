@@ -2,15 +2,15 @@
 // Flip card component with 3D animation
 // FEAT-011: Added Study Buddy trigger
 
-import { StudyBuddyTrigger } from "../studyBuddy/StudyBuddyTrigger";
 import type { Flashcard } from "../../../types/child/recallStep";
+import { StudyBuddyTrigger } from "../studyBuddy/StudyBuddyTrigger";
 
 type FlashcardViewerProps = {
   card: Flashcard;
   isFlipped: boolean;
   onFlip: () => void;
   topicName: string;
-  onAskBuddy?: (question: string) => void;
+  showBuddyTrigger?: boolean;
 };
 
 export function FlashcardViewer({
@@ -18,17 +18,18 @@ export function FlashcardViewer({
   isFlipped,
   onFlip,
   topicName,
-  onAskBuddy,
+  showBuddyTrigger = true,
 }: FlashcardViewerProps) {
   
   const handleAskBuddy = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card flip
-    if (onAskBuddy) {
-      const question = isFlipped
-        ? `I don't understand this answer: "${card.back}"`
-        : `Can you help me with this question: "${card.front}"`;
-      onAskBuddy(question);
-    }
+    const question = isFlipped
+      ? `I don't understand this answer: "${card.back}"`
+      : `Can you help me with this question: "${card.front}"`;
+    
+    window.dispatchEvent(new CustomEvent('openStudyBuddy', {
+      detail: { prefillText: question }
+    }));
   };
 
   return (
@@ -61,7 +62,7 @@ export function FlashcardViewer({
             <p className="text-sm text-neutral-400">
               Tap to see the answer
             </p>
-            {onAskBuddy && (
+            {showBuddyTrigger && (
               <div onClick={handleAskBuddy}>
                 <StudyBuddyTrigger
                   onClick={() => {}}
@@ -93,7 +94,7 @@ export function FlashcardViewer({
             </p>
           </div>
           <div className="flex items-center justify-end mt-4">
-            {onAskBuddy && (
+            {showBuddyTrigger && (
               <div onClick={handleAskBuddy}>
                 <StudyBuddyTrigger
                   onClick={() => {}}
