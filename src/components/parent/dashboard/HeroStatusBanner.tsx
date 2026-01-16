@@ -125,7 +125,7 @@ export function HeroStatusBanner({
           {/* Coming Up */}
           <div className="bg-neutral-0 rounded-xl p-5 shadow-soft border border-neutral-200/50">
             <div className="mb-3">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                 <i className="fa-solid fa-clock text-[#1EC592] text-xl"></i>
               </div>
             </div>
