@@ -1,0 +1,125 @@
+// src/services/child/studyBuddy/studyBuddyService.ts
+
+import { supabase } from '@/lib/supabase';
+import type { 
+  SendTextRequest, 
+  SendTextResponse, 
+  GetThreadResponse,
+  StepContext 
+} from '@/types/child/studyBuddy/studyBuddyTypes';
+
+const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+export const studyBuddyService = {
+  /**
+   * Send a text message to Study Buddy and get AI response
+   */
+  async sendText(
+    revisionSessionId: string,
+    messageText: string,
+    stepContext?: StepContext
+  ): Promise<SendTextResponse> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const response = await fetch(`${EDGE_FUNCTION_URL}/studybuddy-send-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          revision_session_id: revisionSessionId,
+          message_text: messageText,
+          step_context: stepContext
+        } as SendTextRequest)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { 
+          success: false, 
+          error: data.error || `Request failed with status ${response.status}` 
+        };
+      }
+
+      return data as SendTextResponse;
+
+    } catch (error) {
+      console.error('studyBuddyService.sendText error:', error);
+      return { 
+        success: false, 
+        error: 'Failed to send message. Please try again.' 
+      };
+    }
+  },
+
+  /**
+   * Get existing thread for a session (if any)
+   */
+  async getThread(revisionSessionId: string): Promise<GetThreadResponse> {
+    try {
+      const { data, error } = await supabase
+        .rpc('rpc_studybuddy_get_thread', { 
+          p_revision_session_id: revisionSessionId 
+        });
+
+      if (error) {
+        console.error('getThread RPC error:', error);
+        return { 
+          success: false, 
+          thread_exists: false,
+          error: error.message 
+        };
+      }
+
+      return data as GetThreadResponse;
+
+    } catch (error) {
+      console.error('studyBuddyService.getThread error:', error);
+      return { 
+        success: false, 
+        thread_exists: false,
+        error: 'Failed to load conversation' 
+      };
+    }
+  },
+
+  /**
+   * Create a thread if one doesn't exist
+   */
+  async getOrCreateThread(revisionSessionId: string): Promise<{ 
+    success: boolean; 
+    thread_id?: string; 
+    error?: string 
+  }> {
+    try {
+      const { data, error } = await supabase
+        .rpc('rpc_studybuddy_get_or_create_thread', { 
+          p_revision_session_id: revisionSessionId 
+        });
+
+      if (error) {
+        console.error('getOrCreateThread RPC error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: data.success,
+        thread_id: data.thread_id,
+        error: data.error
+      };
+
+    } catch (error) {
+      console.error('studyBuddyService.getOrCreateThread error:', error);
+      return { success: false, error: 'Failed to create conversation' };
+    }
+  }
+};
+
+export default studyBuddyService;
