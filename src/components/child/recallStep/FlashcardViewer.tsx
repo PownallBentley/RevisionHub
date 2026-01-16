@@ -1,13 +1,16 @@
 // src/components/child/recallStep/FlashcardViewer.tsx
 // Flip card component with 3D animation
+// FEAT-011: Added Study Buddy trigger
 
-import type { Flashcard } from "@/types/child/recallStep";
+import { StudyBuddyTrigger } from "../../studyBuddy/StudyBuddyTrigger";
+import type { Flashcard } from "../../../types/child/recallStep";
 
 type FlashcardViewerProps = {
   card: Flashcard;
   isFlipped: boolean;
   onFlip: () => void;
   topicName: string;
+  onAskBuddy?: (question: string) => void;
 };
 
 export function FlashcardViewer({
@@ -15,7 +18,19 @@ export function FlashcardViewer({
   isFlipped,
   onFlip,
   topicName,
+  onAskBuddy,
 }: FlashcardViewerProps) {
+  
+  const handleAskBuddy = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card flip
+    if (onAskBuddy) {
+      const question = isFlipped
+        ? `I don't understand this answer: "${card.back}"`
+        : `Can you help me with this question: "${card.front}"`;
+      onAskBuddy(question);
+    }
+  };
+
   return (
     <div className="w-full" style={{ perspective: "1000px", minHeight: "320px" }}>
       <div
@@ -37,16 +52,25 @@ export function FlashcardViewer({
               {topicName}
             </span>
           </div>
-
           <div className="flex-1 flex items-center justify-center">
             <p className="text-xl text-neutral-900 text-center font-medium px-4">
               {card.front}
             </p>
           </div>
-
-          <p className="text-center text-sm text-neutral-400 mt-4">
-            Tap to see the answer
-          </p>
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-neutral-400">
+              Tap to see the answer
+            </p>
+            {onAskBuddy && (
+              <div onClick={handleAskBuddy}>
+                <StudyBuddyTrigger
+                  onClick={() => {}}
+                  promptText="I'm stuck"
+                  variant="inline"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Back of card */}
@@ -63,11 +87,21 @@ export function FlashcardViewer({
               {topicName}
             </span>
           </div>
-
           <div className="flex-1 flex items-center justify-center">
             <p className="text-lg text-neutral-800 text-center px-4">
               {card.back}
             </p>
+          </div>
+          <div className="flex items-center justify-end mt-4">
+            {onAskBuddy && (
+              <div onClick={handleAskBuddy}>
+                <StudyBuddyTrigger
+                  onClick={() => {}}
+                  promptText="Explain this"
+                  variant="inline"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
