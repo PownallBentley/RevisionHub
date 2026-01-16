@@ -2,7 +2,7 @@
 // Flip card component with 3D animation
 // FEAT-011: Added Study Buddy trigger
 
-import { StudyBuddyTrigger } from "../../studyBuddy/StudyBuddyTrigger";
+import { StudyBuddyTrigger } from "../studyBuddy/StudyBuddyTrigger";
 import type { Flashcard } from "../../../types/child/recallStep";
 
 type FlashcardViewerProps = {
