@@ -20,6 +20,7 @@ import ReinforceStep from "./sessionSteps/ReinforceStep";
 import PracticeStep from "./sessionSteps/PracticeStep";
 import SummaryStep from "./sessionSteps/SummaryStep";
 import CompleteStep from "./sessionSteps/CompleteStep";
+import { StudyBuddyPanel } from '../../components/child/studyBuddy/StudyBuddyPanel';
 
 // Hooks
 import { useSessionRun } from "../../hooks/child/useSessionRun";
