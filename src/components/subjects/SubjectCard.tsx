@@ -1,4 +1,5 @@
 // src/components/subjects/SubjectCard.tsx
+// Updated: FEAT-010 - Consistent status colors
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -46,51 +47,43 @@ function getSubjectIcon(icon: string) {
 
 // Convert hex color to rgba with alpha
 function hexToRgba(hex: string, alpha: number): string {
-  // Remove # if present
   const cleanHex = hex.replace("#", "");
-  
-  // Parse hex values
   const r = parseInt(cleanHex.substring(0, 2), 16);
   const g = parseInt(cleanHex.substring(2, 4), 16);
   const b = parseInt(cleanHex.substring(4, 6), 16);
-  
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Get status style based on status
+// FEAT-010: Consistent status colors
 function getStatusStyle(status: string) {
   switch (status) {
     case "in_progress":
       return {
         label: "On Track",
-        bgColor: "#1EC592", // accent-green
+        bgColor: "#1EC592",
       };
     case "needs_attention":
       return {
         label: "Needs Focus",
-        bgColor: "#FFB547", // accent-amber
+        bgColor: "#E69B2C", // Updated: darker amber for consistency
       };
     case "completed":
       return {
         label: "Completed",
-        bgColor: "#5B2CFF", // primary-600
+        bgColor: "#7C3AED", // Purple
       };
     default:
       return {
         label: "Not Started",
-        bgColor: "#A8AEBD", // neutral-400
+        bgColor: "#A8AEBD",
       };
   }
 }
 
 export default function SubjectCard({ subject }: SubjectCardProps) {
   const statusStyle = getStatusStyle(subject.status);
-
-  // Get recently covered topics (last 3)
   const recentlyCovered = subject.recently_covered?.slice(0, 3) || [];
   const comingUp = subject.coming_up?.slice(0, 3) || [];
-
-  // Use subject color or default to primary
   const subjectColor = subject.subject_color || "#5B2CFF";
 
   return (
@@ -98,7 +91,6 @@ export default function SubjectCard({ subject }: SubjectCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
-          {/* Icon with subject color background */}
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center"
             style={{ backgroundColor: hexToRgba(subjectColor, 0.1) }}
@@ -119,7 +111,7 @@ export default function SubjectCard({ subject }: SubjectCardProps) {
           </div>
         </div>
         
-        {/* Status badge */}
+        {/* Status badge - solid background with white text */}
         <span
           className="px-3 py-1 text-white text-sm rounded-full font-medium"
           style={{ backgroundColor: statusStyle.bgColor }}
