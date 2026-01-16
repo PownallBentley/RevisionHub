@@ -1,7 +1,8 @@
 // src/pages/parent/SubjectProgress.tsx
 // Updated: FEAT-010 - Uses unified child status from rpc_get_subject_progress
+// Updated: 2026-01-16 - Added Add Subject modal integration
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -28,6 +29,7 @@ import {
   QuickStats,
   RecentActivity,
 } from "../../components/subjects";
+import AddSubjectModal from "../../components/subjects/AddSubjectModal";
 
 // FEAT-010: Centralized status colors
 const STATUS_COLORS: Record<string, string> = {
@@ -54,6 +56,9 @@ export default function SubjectProgress() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add Subject Modal state
+  const [isAddSubjectModalOpen, setIsAddSubjectModalOpen] = useState(false);
 
   // Redirect if not logged in or is a child
   useEffect(() => {
@@ -88,41 +93,48 @@ export default function SubjectProgress() {
   }, [user]);
 
   // Load subject progress data
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!user || !selectedChildId) return;
 
-    async function loadData() {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      const { data: progressData, error: fetchError } = await fetchSubjectProgress(
-        user!.id,
-        selectedChildId!
-      );
+    const { data: progressData, error: fetchError } = await fetchSubjectProgress(
+      user.id,
+      selectedChildId
+    );
 
-      if (fetchError) {
-        setError(fetchError);
-        setData(null);
-      } else {
-        setData(progressData);
-      }
-
-      setLoading(false);
+    if (fetchError) {
+      setError(fetchError);
+      setData(null);
+    } else {
+      setData(progressData);
     }
 
-    loadData();
+    setLoading(false);
   }, [user, selectedChildId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Handle child change
   const handleChildChange = (childId: string) => {
     setSelectedChildId(childId);
   };
 
-  // Handle Add Subject click (placeholder for now)
+  // Handle Add Subject click
   const handleAddSubject = () => {
-    // TODO: Open subject selection modal
-    console.log("Add Subject clicked");
+    setIsAddSubjectModalOpen(true);
   };
+
+  // Handle Add Subject success - refresh data
+  const handleAddSubjectSuccess = () => {
+    loadData();
+  };
+
+  // Get existing subject IDs for the selected child
+  const existingSubjectIds = data?.subjects.map((s) => s.subject_id) || [];
 
   // Loading state
   if (authLoading || loading) {
@@ -256,6 +268,10 @@ export default function SubjectProgress() {
   };
 
   const headlineContent = getHeadlineContent();
+
+  // Get child name for modal
+  const selectedChild = children.find((c) => c.child_id === selectedChildId);
+  const childName = selectedChild?.child_name || data.child.child_name || "Your child";
 
   return (
     <PageLayout>
@@ -441,6 +457,18 @@ export default function SubjectProgress() {
           </div>
         </div>
       </main>
+
+      {/* Add Subject Modal */}
+      {selectedChildId && (
+        <AddSubjectModal
+          childId={selectedChildId}
+          childName={childName}
+          existingSubjectIds={existingSubjectIds}
+          isOpen={isAddSubjectModalOpen}
+          onClose={() => setIsAddSubjectModalOpen(false)}
+          onSuccess={handleAddSubjectSuccess}
+        />
+      )}
     </PageLayout>
   );
 }
