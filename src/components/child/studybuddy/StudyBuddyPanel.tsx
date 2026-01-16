@@ -1,6 +1,8 @@
 // src/components/child/studyBuddy/StudyBuddyPanel.tsx
+// FEAT-011: Study Buddy text chat panel
+// Listens for 'openStudyBuddy' custom events from trigger buttons
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faRobot, 
@@ -55,6 +57,26 @@ export const StudyBuddyPanel: React.FC<StudyBuddyPanelProps> = ({
       inputRef.current?.focus();
     }
   }, [panelState]);
+
+  // Listen for external trigger events (from "Ask Buddy" buttons)
+  useEffect(() => {
+    const handleOpenStudyBuddy = (event: CustomEvent<{ prefillText?: string }>) => {
+      setPanelState('expanded');
+      if (event.detail?.prefillText) {
+        setInputText(event.detail.prefillText);
+      }
+      // Focus input after a short delay to ensure panel is rendered
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    };
+
+    window.addEventListener('openStudyBuddy', handleOpenStudyBuddy as EventListener);
+    
+    return () => {
+      window.removeEventListener('openStudyBuddy', handleOpenStudyBuddy as EventListener);
+    };
+  }, []);
 
   const loadExistingThread = async () => {
     const result = await studyBuddyService.getThread(revisionSessionId);
